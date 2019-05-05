@@ -32,6 +32,8 @@ Input files are:
 
 First, the packages inferes protein neighbourhood of query sequences in the genome of query species at the given radius with `bedtools window -w radius`. Next, it retrieves orthologs of neighbouring proteins in the target genome and construct quasi-syntenic regions. In case orthologous protein in the target genome are placed within merge distance, then they will be merged. After there are no possibilities to merge, derived syntenic ranges can be flanked to some extent. This might be helpful in case protein neihbourhood of one query sequence contain only one protein. There might be more than one quasi-syntenic regions for one query sequence due to paralogues.
 
+Query sequences and quasi-syntenic regions are extracted from corresponding genomes with `bedtools getfasta` one fasta file per sequence with names following the pattern: chromosome:start-end(strand), where chromosome corresponds to fasta headers in genome files, start and end are integer genomic positions and strand is either "+", "-" or "." (without quotes).
+
 Then query sequences are aligned against their syntenic regions with BLAT. User can define tile size and minimal identity of sequences to report. BLAT was chosen for its convenient psl3 format of alignments, that provides exon-intron-like structure of aligned regions. Alignment of many sequences can take a lot of time so user can specify how many cores can be used for alignment process.
 
 Main output file is a `json` containing array of dictionary records, one query sequence per record. Each record contains information about query sequence,
@@ -39,14 +41,14 @@ protein neighbourhood, syntenic regions and found alignments. Intermediate files
 
 # Structure of the package
 All scripts produce json files.
-`get_neighbourhood.py` retrieves protein neighbourhood of query sequences in query genome based on supplied protein annotation in gtf|gff format.
-`extract_mapping.py` extracts orthodb mapping data from bulk file for one species.
-`chromsizes_fasta.py` gets chromosome sizes of given genome in fasta format and returns them in json format.
-`annotation2json.py`translates given genome annotation of target species into json format as a list of dictionaries.
-`map_synteny.py`maps protein neighbourhood to orthologs in the target species and compose syntenic ranges.
-`get_fasta.py` retrieves query and syntenic target sequences one per file from given query and target genomes.
-`grid_alignment.py`performs alignment of query sequences to target syntenies.
-`ortho2align.py` master script to ~~rule them all~~ run listed above scripts in sequential manner. All output files produced by the scripts have fixed names, so user can run each step separately as long as one follows naming conventions.
+* `get_neighbourhood.py` retrieves protein neighbourhood of query sequences in query genome based on supplied protein annotation in gtf|gff format.
+* `extract_mapping.py` extracts orthodb mapping data from bulk file for one species.
+* `chromsizes_fasta.py` gets chromosome sizes of given genome in fasta format and returns them in json format.
+* `annotation2json.py`translates given genome annotation of target species into json format as a list of dictionaries.
+* `map_synteny.py`maps protein neighbourhood to orthologs in the target species and compose syntenic ranges.
+* `get_fasta.py` retrieves query and syntenic target sequences one per file from given query and target genomes.
+* `grid_alignment.py`performs alignment of query sequences to target syntenies.
+* `ortho2align.py` master script to ~~rule them all~~ run listed above scripts in sequential manner. All output files produced by the scripts have fixed names, so user can run each step separately as long as one follows naming conventions.
 TODO: add image of data flow within scripts.
 
 # TODO
