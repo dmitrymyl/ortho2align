@@ -8,4 +8,5 @@ setup(name='ortho2align',
       author_email='dmitrymyl@gmail.com',
       license='MIT',
       packages=['ortho2align'],
+      entry_points={'console_scripts': ['ortho2align=ortho2align.cli_scripts:ortho2align']},
       zip_safe=False)
