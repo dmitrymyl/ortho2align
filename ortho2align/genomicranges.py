@@ -4,6 +4,7 @@ from pathlib import Path
 from subprocess import Popen, PIPE
 from io import TextIOWrapper
 from collections import namedtuple, defaultdict
+from multiprocessing.pool import Pool
 from sortedcontainers import SortedKeyList
 from .alignment_utils import Alignment
 
@@ -406,12 +407,27 @@ class GenomicRangesList(SortedKeyList):
             else:
                 raise ValueError(f"get_fasta mode {mode} not one of ['split', 'bulk'].")
 
-    def connection_mapping(self, mapping, connection):
+    def connection_mapping(self, other, mapping, connection):
         for key, value in mapping.items():
-            try:
-                self.name_mapping[key].connections[connection].append(value)
-            except KeyError:
-                continue
+            for code in value:
+                try:
+                    self_grange = self.name_mapping[key]
+                    other_grange = other.name_mapping[code]
+                    self_grange.connections[connection].append(other_grange)
+                except KeyError:
+                    continue
+
+    def align_with_connections(self, connection, cores=1):
+        if len(self) == 0:
+            raise EmptyGenomicRangesListError(self)
+        if connection not in self[0].connections.keys():
+            raise ValueError(f"Connection type {connection} "
+                             f"not in the list of available "
+                             f"connections: {self[0].connections.keys()}.")
+        with Pool(cores) as p:
+            alignments = p.map(lambda x: x.align_with_connections(connection),
+                               self)
+        return alignments
 
     @classmethod
     def parse_annotation(cls,
@@ -443,16 +459,11 @@ class GenomicRangesList(SortedKeyList):
         return GenomicRangesList(granges, genome=genome)
 
 
-def translate_orthodb_mapping(self, mapping, grangelist, taxid):
-    grange_mapping = defaultdict(list)
+def extract_taxid_mapping(mapping, taxid):
+    taxid_mapping = dict()
     for key, value in mapping.items():
         try:
-            map_ids = value[taxid]
-            for gene_id in map_ids:
-                try:
-                    grange_mapping[key].append(grangelist[gene_id])
-                except KeyError:
-                    continue
+            taxid_mapping[key] = value[taxid]
         except KeyError:
             continue
-    return grange_mapping
+    return taxid_mapping
