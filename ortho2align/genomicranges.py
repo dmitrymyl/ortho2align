@@ -10,10 +10,12 @@ from .alignment_utils import Alignment
 
 
 class GenomicException(Exception):
+    """Basic exception in genomicranges module."""
     pass
 
 
 class ChromosomeNotFoundError(GenomicException):
+    """Occurs when chromosome was not found in given genome."""
 
     def __init__(self, chrom, genome, list_of_chroms):
         self.chrom = chrom
@@ -25,6 +27,7 @@ class ChromosomeNotFoundError(GenomicException):
 
 
 class InconsistentChromosomesError(GenomicException):
+    """Occurs when two GenomicRange instances have different chromosomes."""
 
     def __init__(self, one_chrom, other_chrom):
         self.one_chrom = one_chrom
@@ -35,6 +38,7 @@ class InconsistentChromosomesError(GenomicException):
 
 
 class InconsistentGenomesError(GenomicException):
+    """Occurs when two GenomicRange instances have different genomes."""
 
     def __init__(self, one_genome, other_genome):
         self.one_genome = one_genome
@@ -45,6 +49,7 @@ class InconsistentGenomesError(GenomicException):
 
 
 class EmptyGenomicRangesListError(GenomicException):
+    """Occurs when GenomicRangesList is empty."""
 
     def __init__(self, range_list_instance):
         self.range_list = range_list_instance
@@ -52,6 +57,7 @@ class EmptyGenomicRangesListError(GenomicException):
 
 
 class GenomicCoordinatesError(GenomicException):
+    """Occurs when coordinates of GenomicRange instance are out of the chromosome."""
 
     def __init__(self, grange, chromosome):
         self.grange = grange
@@ -61,6 +67,7 @@ class GenomicCoordinatesError(GenomicException):
 
 
 class LocationNotSpecified(GenomicException):
+    """Occurs when location of sequence file is not specified, but is accessed."""
 
     def __init__(self, instance):
         self.instance = instance
@@ -69,6 +76,22 @@ class LocationNotSpecified(GenomicException):
 
 
 def fasta_reformatter(infile, outfile, total, linewidth=60):
+    """Reformats fasta file.
+
+    Allows one to reformat existing sequence in
+    fasta format to the specified linewidth.
+
+    Args:
+        infile (fileobj): input fasta file with cursor set
+            at the start of sequence fragment.
+        outfile (fileobj): output fasta file.
+        total (int): number of symbols to read.
+        linewidth (int): linewidth of new sequence
+            (default: 60).
+
+    Returns:
+        None
+    """
     read_counter = 0
     line_break = False
     while read_counter < total:
@@ -87,9 +110,44 @@ def fasta_reformatter(infile, outfile, total, linewidth=60):
 
 
 class GenomicRange:
+    """Represents one genomic range.
+
+    Attributes:
+        chrom
+        start
+        end
+        strand
+        _sequence_file_loc
+        sequence_header
+        name
+        relations
+    """
+
     def __init__(self, chrom, start, end, strand='.', name=None,
                  genome=None, sequence_file_loc=None,
                  synteny=None, neighbours=None, **kwargs):
+        """Initializes GenomicRange instance.
+
+        Args:
+            chrom (str): name of chromosome.
+            start (int): start of genomic range.
+            end (int): end of genomic range.
+            strand (str): genomic range strand. One of
+                "+", "-", "." (inessential strandness)
+                (default: None).
+            name (str): name of genomic range (defalut: None).
+            genome (str): corresponding genome filename.
+            sequence_file_loc: location of genomic range
+                sequence file.
+            synteny (GenomicRangesList): list of syntenic
+                genomic ranges (default: None).
+            neighbours (GenomicRangesList): list of neighbouring
+                genomic ranges (default: None).
+            kwargs (dict): other arguments.
+
+        Returns:
+            None.
+        """
         self.chrom = chrom
         self.start = start
         self.end = end
@@ -99,22 +157,50 @@ class GenomicRange:
         self.sequence_header = f"{self.chrom}:{self.start}" \
                                f"-{self.end}{self.strand}"
         self.name = self.sequence_header if name is None else name
-        self.connections = {'synteny': (GenomicRangesList([], self.genome)
+        # TODO: refactor relations. They should not be done this way
+        # as we loses genome information.
+        self.relations = {'synteny': (GenomicRangesList([], self.genome)
                                         if synteny is None else synteny),
                             'neighbours': (GenomicRangesList([], self.genome)
                                            if neighbours is None else neighbours)}
 
     def __repr__(self):
-        return f"GenomicRange({self.chrom}, {self.start}, {self.end}, {self.strand})"
+        """GenomicRange instance representation."""
+        return f"GenomicRange({self.chrom}, {self.start}, "
+               f"{self.end}, {self.strand})"
 
     def __str__(self):
+        """GenomicRange instance string representation."""
         return f"{self.chrom}\t{self.start}\t{self.end}\t{self.strand}"
 
     def distance(self, other):
-        if self.chrom != other.chrom:
-            raise InconsistentChromosomesError(self.chrom, other.chrom)
+        """Calculates distance between two genomic ranges.
+
+        In case of same genomes and chromosomes
+        the distance between two genomic ranges
+        can be calculated regardless of their
+        strandness. If two genomic ranges overlap,
+        the distance is zero. In case of inconsistent
+        chromosomes or genomes the distance is undefined.
+
+        Args:
+            other (GenomicRange): the genomic range
+                to which calculate the distance from
+                self.
+
+        Returns:
+            (int) distance, non-negative number.
+
+        Raises:
+            InconsistentGenomesError in case of inconsistent
+                genomes.
+            InconsistentChromosomesError in case of inconsistent
+                chromosomes.
+        """
         if self.genome != other.genome:
             raise InconsistentGenomesError(self.genome, other.genome)
+        if self.chrom != other.chrom:
+            raise InconsistentChromosomesError(self.chrom, other.chrom)
         if self.end < other.start:
             return other.start - self.end
         if other.end < self.start:
@@ -122,10 +208,32 @@ class GenomicRange:
         return 0
 
     def merge(self, other):
-        if self.chrom != other.chrom:
-            raise InconsistentChromosomesError(self.chrom, other.chrom)
+        """Merges two genomic ranges together.
+
+        In case of the same genomes and chromosomes
+        two genomic ranges can be merged strand-nonspecifically
+        into one genomic range which starts where the closest to
+        the chromosome start genomic range starts and ends where
+        the closest to the chromosome end genomic range ends.
+
+        Args:
+            other (GenomicRange): genomic range which is merged
+                with self.
+
+        Returns:
+            (GenomicRange) new genomic range with "." strand and
+                the same genome.
+
+        Raises:
+            InconsistentGenomesError in case of inconsistent
+                genomes.
+            InconsistentChromosomesError in case of inconsistent
+                chromosomes.
+        """
         if self.genome != other.genome:
             raise InconsistentGenomesError(self.genome, other.genome)
+        if self.chrom != other.chrom:
+            raise InconsistentChromosomesError(self.chrom, other.chrom)
         start = min(self.start, other.start)
         end = max(self.end, other.end)
         return GenomicRange(chrom=self.chrom,
@@ -135,6 +243,32 @@ class GenomicRange:
                             genome=self.genome)
 
     def align(self, other, **kwargs):
+        """Aligns two genomic ranges with blastn.
+
+        If both genomic ranges have their sequences
+        stored in separate files, aligns them with
+        standalone blastn and specified parameters.
+        Alignment file format is "7 std score".
+        Standalone blast package should be installed
+        manually.
+
+        Args:
+            other (GenomicRange): genomic range to
+                align self with.
+            kwargs (dict): any command line arguments
+                to blastn in the following scheme:
+                {'flag': 'value'}.
+
+        Returns:
+            (AlignedRangePair): aligned range pair,
+                which associates self and other
+                genomic ranges and their alignment.
+
+        Raises:
+            LocationNotSpecified in case one or both
+            genomic ranges do not have separate
+            sequence file.
+        """
         if self._sequence_file_loc is None:
             raise LocationNotSpecified(self)
         if other._sequence_file_loc is None:
@@ -151,56 +285,167 @@ class GenomicRange:
             alignment = Alignment.from_file(TextIOWrapper(proc.stdout))
         return AlignedRangePair(self, other, alignment)
 
-    def align_with_connections(self, connection='synteny', **kwargs):
-        if connection not in self.connections.keys():
-            raise ValueError(f"Connection {connection} not in "
-                             f"available list of connections: "
-                             f"{self.connections.keys()}.")
+    def align_with_relations(self, relation='synteny', **kwargs):
+        """Aligns genomic range with all its relations.
+
+        Aligns given genomic range with all its
+        relations using standalone blastn
+        and returns list of AlignedRangePair
+        instances.
+
+        Args:
+            relation (str): relation type.
+            kwargs (dict): any command line arguments
+                to blastn in the following scheme:
+                {'flag': 'value'}.
+
+        Returns:
+            (list) list of AlignedRangePair instances.
+
+        Raises:
+            ValueError in case provided relation is not
+                available for the genomic range.
+        """
+        if relation not in self.relations.keys():
+            raise ValueError(f"relation {relation} not in "
+                             f"available list of relations: "
+                             f"{self.relations.keys()}.")
         alignment_list = list()
-        for grange in self.connections[connection]:
-            alignment_list.append(self.align(grange))
+        for grange in self.relations[relation]:
+            alignment_list.append(self.align(grange, **kwargs))
         return alignment_list
 
-    def merge_connections(self, connection, distance=0):
+    def merge_relations(self, relation, distance=0):
+        """Merges genomic ranges from relation on specified distance.
+
+        All genomic ranges closer to each other then the
+        specified distance are merged together and returned.
+
+        Args:
+            relation (str): relation type.
+            distance (int): distance to merge
+                genomic ranges in relation
+                (default: 0).
+
+        Returns:
+            (GenomicRangesList) merged genomic ranges from
+                relation.
+
+        Raises:
+            ValueError in case there is no given relation
+                availabe for provided genomic range.
+        """
         try:
-            self.connections[connection] = self.connections[connection].merge(distance)
+            return self.relations[relation].merge(distance)
         except KeyError:
-            raise KeyError(f"There is no {connection} connections for the {self}.")
+            raise ValueError(f"There is no {relation} "
+                             f"relations for the {self}.")
 
     def to_dict(self):
+        """Returns dict representation of the genomic range."""
         raise NotImplementedError
 
     @classmethod
-    def from_dict(self, fileobj):
+    def from_dict(self, dict_):
+        """Restores genomic range from dict representation."""
         raise NotImplementedError
 
 
 class AlignedRangePair:
+    """An association of genomic ranges and their alignment.
+
+    Stores query genomic range, subject genomic range and
+    their alignment.
+
+    Attributes:
+        query_grange (GenomicRange): query genomic range.
+        subject_grange (GenomicRange): subject genomic range.
+        alignment (Alignment): alignment of query and subject
+        genomic ranges.
+    """
 
     def __init__(self, query_grange, subject_grange, alignment):
+        """Initializes AlignedRangePair instance.
+
+        Args:
+            query_grange (GenomicRange): query genomic range.
+            subject_grange (GenomicRange): subject genomic range.
+            alignment (Alignment): alignment of query and subject
+            genomic ranges.
+
+        Returns:
+            None.
+        """
         self.query_grange = query_grange
         self.subject_grange = subject_grange
         self.alignment = alignment
 
     def to_dict(self):
-        raise NotImplementedError
+        """Returns dict representation of AlignedRangePair instance."""
+        return dict(query_grange=self.query_grange,
+                    subject_grange=self.subject_grange,
+                    alignment=self.alignment)
 
     @classmethod
-    def from_dict(self, fileobj):
-        raise NotImplementedError
+    def from_dict(cls, dict_):
+        """Restores AlignedRangePair instance from dict representation."""
+        keys = ['query_grange',
+                'subject_grange',
+                'alignment']
+        try:
+            kwargs = {key: dict_[key] for key in keys}
+        except KeyError as e:
+            raise ValueError(f"Key {e} is not in the list "
+                             f"of nececcary keys {keys}.")
+        return cls(**kwargs)
 
 
 ChromosomeLocation = namedtuple('ChromosomeLocation', 'size start')
 
 
 class FastaSeqFile:
+    """Represents genomic fasta file.
+
+    Should locate to the fasta file
+    where the genome is placed. Chromosome
+    names must be placed in fasta record
+    header and separated from other header
+    information with whitespace character.
+
+    Attributes:
+        location (Path): path to the file.
+        chromsizes (dict): dictionary of
+            ChromosomseLocation instances.
+        _file_obj: opened file under the
+            location.
+    """
+
     def __init__(self, location):
-        self.location = location
+        """Initializes FastaSeqFile instance.
+
+        Args:
+            location (str, Path): path to the file.
+        """
+        self.location = Path(location)
         self._chromsizes = dict()
         self._file_obj = None
 
     @property
     def chromsizes(self):
+        """Poperty representing genomic chromosomes.
+
+        Calculates chromosome names, their sizes and
+        sequence start positions in the genome file.
+
+        Returns:
+            (dict) dictionary of ChromosomeLocation
+                instances in the following scheme:
+                {chromosome_name: ChromosomeLocation(size, start)}
+
+        Raises:
+            LocationNotSpecified in case the location of
+                sequence file is not specified.
+        """
         if not self._chromsizes:
             if self.location is None:
                 raise LocationNotSpecified(self)
@@ -209,7 +454,8 @@ class FastaSeqFile:
                 line = infile.readline()
                 while line:
                     if line.startswith(">"):
-                        self._chromsizes[chrom] = ChromosomeLocation(size, start)
+                        self._chromsizes[chrom] = ChromosomeLocation(size,
+                                                                     start)
                         chrom = line.lstrip(">").rstrip().split()[0]
                         size = 0
                         start = None
@@ -223,14 +469,39 @@ class FastaSeqFile:
         return self._chromsizes
 
     def __enter__(self):
+        """Context manager for opening location file."""
         if self.location is None:
             raise LocationNotSpecified(self)
         self._file_obj = open(self.location, 'r')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager for closing location file."""
         self._file_obj.close()
 
-    def get_fasta_by_coord(self, grange, outfile):
+    def get_fasta_by_coord(self, grange, outfile, linewidth=60):
+        """Writes sequence of the genomic range in fasta file.
+
+        Writes full fasta record of the given genomic range
+        to the file. The header is made in the following
+        scheme:
+        ">" + grange.sequence_header + "\n"
+
+        Args:
+            grange (GenomicRange): genomic range which fasta
+                sequence write to file.
+            outfile (fileobj): file object to which write fasta
+                sequence.
+            linewidth (int): line length of fasta sequence to write
+                (default: 60).
+
+        Returns:
+            None.
+
+        Raises:
+            ChromosomeNotFoundError if the chromosome of
+                the given genomic range is not presented
+                in FastaSeqFile instance.
+        """
         try:
             chrom_size, chrom_start = self.chromsizes[grange.chrom]
         except KeyError:
@@ -238,18 +509,32 @@ class FastaSeqFile:
                                           self.location,
                                           self.chromsizes.keys())
         if grange.end > chrom_size:
-            raise GenomicCoordinatesError(grange, self.chromsizes[grange.chrom])
+            raise GenomicCoordinatesError(grange,
+                                          self.chromsizes[grange.chrom])
         self._file_obj.seek(chrom_start + grange.start, 0)
         outfile.write(">" + grange.sequence_header + "\n")
         fasta_reformatter(self._file_obj,
                           outfile,
                           total=(grange.end - grange.start),
-                          linewidth=60)
+                          linewidth=linewidth)
 
 
 class GenomicRangesList(SortedKeyList):
-    # TODO: add reading from file (bed, gff, gtf)
-    # TODO: parsing orthodb-synteny output
+    """Represents a list of genomic ranges.
+
+    Attributes:
+        genome
+        source
+        name_mapping
+
+    Class attributes:
+        annotation_patterns
+        comments
+        name_patterns
+        seps
+        filetypes
+        dtypes
+    """
     annotation_patterns = {'gff': ['chrom',
                                    'source',
                                    'type',
@@ -305,6 +590,45 @@ class GenomicRangesList(SortedKeyList):
             'bed6': '\t',
             'bed12': '\t'}
     filetypes = ['gtf', 'gff', 'bed3', 'bed6', 'bed12']
+    dtypes = {'gff': [str,
+                      str,
+                      str,
+                      int,
+                      int,
+                      str,
+                      str,
+                      str,
+                      str],
+              'gtf': [str,
+                      str,
+                      str,
+                      int,
+                      int,
+                      str,
+                      str,
+                      str,
+                      str],
+              'bed3': [str,
+                       int,
+                       int],
+              'bed6': [str,
+                       int,
+                       int,
+                       str,
+                       int,
+                       str],
+              'bed12': [str,
+                        int,
+                        int,
+                        str,
+                        int,
+                        str,
+                        int,
+                        int,
+                        str,
+                        int,
+                        lambda x: x.split(","),
+                        lambda x: x.split(",")]}
 
     def __init__(self, collection=[], genome=None):
         super().__init__(iterable=collection,
@@ -361,7 +685,7 @@ class GenomicRangesList(SortedKeyList):
                 if self[current_self].distance(other[current_other]) < - distance:
                     current_other += 1
                 elif abs(self[current_self].distance(other[current_other])) <= distance:
-                    self[current_self].connections['neighbours'].add(other[current_other])
+                    self[current_self].relations['neighbours'].add(other[current_other])
                     current_other += 1
                 else:
                     self_index += 1
@@ -407,25 +731,25 @@ class GenomicRangesList(SortedKeyList):
             else:
                 raise ValueError(f"get_fasta mode {mode} not one of ['split', 'bulk'].")
 
-    def connection_mapping(self, other, mapping, connection):
+    def relation_mapping(self, other, mapping, relation):
         for key, value in mapping.items():
             for code in value:
                 try:
                     self_grange = self.name_mapping[key]
                     other_grange = other.name_mapping[code]
-                    self_grange.connections[connection].append(other_grange)
+                    self_grange.relations[relation].append(other_grange)
                 except KeyError:
                     continue
 
-    def align_with_connections(self, connection, cores=1):
+    def align_with_relations(self, relation, cores=1):
         if len(self) == 0:
             raise EmptyGenomicRangesListError(self)
-        if connection not in self[0].connections.keys():
-            raise ValueError(f"Connection type {connection} "
+        if relation not in self[0].relations.keys():
+            raise ValueError(f"relation type {relation} "
                              f"not in the list of available "
-                             f"connections: {self[0].connections.keys()}.")
+                             f"relations: {self[0].relations.keys()}.")
         with Pool(cores) as p:
-            alignments = p.map(lambda x: x.align_with_connections(connection),
+            alignments = p.map(lambda x: x.align_with_relations(relation),
                                self)
         return alignments
 
@@ -435,6 +759,7 @@ class GenomicRangesList(SortedKeyList):
                          filetype,
                          genome=None,
                          annotation_pattern=None,
+                         dtypes=None,
                          name_pattern=None,
                          comment=None,
                          sep=None):
@@ -442,17 +767,23 @@ class GenomicRangesList(SortedKeyList):
             raise ValueError(f"filetype {filetype} not one of {cls.filetypes}.")
         if annotation_pattern is None:
             annotation_pattern = cls.annotation_patterns[filetype]
+        if dtypes is None:
+            dtypes = cls.dtypes[filetype]
         if name_pattern is None:
             name_pattern = cls.name_patterns[filetype]
         if comment is None:
             comment = cls.comments[filetype]
         if sep is None:
             sep = cls.seps[filetype]
-        holder = [dict(zip(annotation_pattern, line.strip().split(sep)))
-                  for line in fileobj
-                  if line[0] != comment]
+        record_holder = ([func(item)
+                          for func, item in zip(dtypes,
+                                                line.strip().split(sep))]
+                         for line in fileobj
+                         if not line.startswith(comment))
+        annotated_holder = (dict(zip(annotation_pattern, record))
+                            for record in record_holder)
         granges = list()
-        for record in holder:
+        for record in annotated_holder:
             name = re.search(name_pattern, record['data']).group(1)
             name = name if name else None
             granges.append(GenomicRange(name=name, genome=genome, **record))
