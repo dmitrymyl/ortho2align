@@ -1,12 +1,12 @@
-import json
 import re
 from pathlib import Path
 from subprocess import Popen, PIPE
 from io import TextIOWrapper
-from collections import namedtuple, defaultdict
-from multiprocessing.pool import Pool
+from collections import namedtuple, defaultdict, deque
+from concurrent.futures import ProcessPoolExecutor
 from sortedcontainers import SortedKeyList
 from .alignment_utils import Alignment
+from .parallel import NonExceptionalProcessPool
 
 
 class GenomicException(Exception):
@@ -53,7 +53,8 @@ class EmptyGenomicRangesListError(GenomicException):
 
     def __init__(self, range_list_instance):
         self.range_list = range_list_instance
-        super().__init__(f"Empty GenomicRangesList instance: {self.range_list}")
+        super().__init__(f"Empty GenomicRangesList instance: "
+                         f"{self.range_list}")
 
 
 class GenomicCoordinatesError(GenomicException):
@@ -63,7 +64,8 @@ class GenomicCoordinatesError(GenomicException):
         self.grange = grange
         self.chromosome = chromosome
         super().__init__(f"Coordinates of GenomicRange {self.grange} "
-                         f"are out of chromosome with size {self.chromosome.size}")
+                         f"are out of chromosome with size "
+                         f"{self.chromosome.size}")
 
 
 class LocationNotSpecified(GenomicException):
@@ -124,8 +126,8 @@ class GenomicRange:
     """
 
     def __init__(self, chrom, start, end, strand='.', name=None,
-                 genome=None, sequence_file_loc=None,
-                 synteny=None, neighbours=None, **kwargs):
+                 genome=None, sequence_file_loc=None, relations=dict(),
+                 **kwargs):
         """Initializes GenomicRange instance.
 
         Args:
@@ -139,10 +141,8 @@ class GenomicRange:
             genome (str): corresponding genome filename.
             sequence_file_loc: location of genomic range
                 sequence file.
-            synteny (GenomicRangesList): list of syntenic
-                genomic ranges (default: None).
-            neighbours (GenomicRangesList): list of neighbouring
-                genomic ranges (default: None).
+            relations (dict): a dictionary with related GenomicRangesList
+                instances.
             kwargs (dict): other arguments.
 
         Returns:
@@ -157,16 +157,11 @@ class GenomicRange:
         self.sequence_header = f"{self.chrom}:{self.start}" \
                                f"-{self.end}{self.strand}"
         self.name = self.sequence_header if name is None else name
-        # TODO: refactor relations. They should not be done this way
-        # as we loses genome information.
-        self.relations = {'synteny': (GenomicRangesList([], self.genome)
-                                        if synteny is None else synteny),
-                            'neighbours': (GenomicRangesList([], self.genome)
-                                           if neighbours is None else neighbours)}
+        self.relations = relations
 
     def __repr__(self):
         """GenomicRange instance representation."""
-        return f"GenomicRange({self.chrom}, {self.start}, "
+        return f"GenomicRange({self.chrom}, {self.start}, " \
                f"{self.end}, {self.strand})"
 
     def __str__(self):
@@ -307,7 +302,7 @@ class GenomicRange:
                 available for the genomic range.
         """
         if relation not in self.relations.keys():
-            raise ValueError(f"relation {relation} not in "
+            raise ValueError(f"Relation {relation} not in "
                              f"available list of relations: "
                              f"{self.relations.keys()}.")
         alignment_list = list()
@@ -432,7 +427,7 @@ class FastaSeqFile:
 
     @property
     def chromsizes(self):
-        """Poperty representing genomic chromosomes.
+        """Property representing genomic chromosomes.
 
         Calculates chromosome names, their sizes and
         sequence start positions in the genome file.
@@ -528,52 +523,58 @@ class GenomicRangesList(SortedKeyList):
         name_mapping
 
     Class attributes:
-        annotation_patterns
+        column_names
+        name_columns
         comments
         name_patterns
         seps
-        filetypes
+        fileformats
         dtypes
     """
-    annotation_patterns = {'gff': ['chrom',
-                                   'source',
-                                   'type',
-                                   'start',
-                                   'end',
-                                   'smth1',
-                                   'strand',
-                                   'smth2',
-                                   'data'],
-                           'gtf': ['chrom',
-                                   'source',
-                                   'type',
-                                   'start',
-                                   'end',
-                                   'smth1',
-                                   'strand',
-                                   'smth2',
-                                   'data'],
-                           'bed3': ['chrom',
-                                    'start',
-                                    'end'],
-                           'bed6': ['chrom',
-                                    'start',
-                                    'end',
-                                    'data',
-                                    'score',
-                                    'strand'],
-                           'bed12': ['chrom',
-                                     'start',
-                                     'end',
-                                     'data',
-                                     'score',
-                                     'strand',
-                                     'thickstart',
-                                     'thickend',
-                                     'itemrgb',
-                                     'blockcount',
-                                     'blocksizes',
-                                     'blockstarts']}
+    column_names = {'gff': ['chrom',
+                            'source',
+                            'type',
+                            'start',
+                            'end',
+                            'smth1',
+                            'strand',
+                            'smth2',
+                            'data'],
+                    'gtf': ['chrom',
+                            'source',
+                            'type',
+                            'start',
+                            'end',
+                            'smth1',
+                            'strand',
+                            'smth2',
+                            'data'],
+                    'bed3': ['chrom',
+                             'start',
+                             'end'],
+                    'bed6': ['chrom',
+                             'start',
+                             'end',
+                             'name',
+                             'score',
+                             'strand'],
+                    'bed12': ['chrom',
+                              'start',
+                              'end',
+                              'name',
+                              'score',
+                              'strand',
+                              'thickstart',
+                              'thickend',
+                              'itemrgb',
+                              'blockcount',
+                              'blocksizes',
+                              'blockstarts']}
+    name_columns = {'gtf': 'data',
+                    'gff': 'data',
+                    'bed3': None,
+                    'bed6': 'name',
+                    'bed12': 'name'}
     comments = {'gtf': '#',
                 'gff': '#',
                 'bed3': '#',
@@ -589,7 +590,12 @@ class GenomicRangesList(SortedKeyList):
             'bed3': '\t',
             'bed6': '\t',
             'bed12': '\t'}
-    filetypes = ['gtf', 'gff', 'bed3', 'bed6', 'bed12']
+    fileformats = ['gtf',
+                   'gff',
+                   'bed3',
+                   'bed6',
+                   'bed12',
+                   None]
     dtypes = {'gff': [str,
                       str,
                       str,
@@ -631,6 +637,16 @@ class GenomicRangesList(SortedKeyList):
                         lambda x: x.split(",")]}
 
     def __init__(self, collection=[], genome=None):
+        """Initializes GenomicRangesList instance.
+
+        Args:
+            collection (iterable): collection of GenomicRange
+                instances with the same genome.
+            genome (str, Path): path to corresponding genome
+                file.
+        Returns:
+            None.
+        """
         super().__init__(iterable=collection,
                          key=lambda x: (x.chrom, x.start, x.end))
         self.genome = genome
@@ -639,15 +655,37 @@ class GenomicRangesList(SortedKeyList):
 
     @property
     def name_mapping(self):
+        """GenomicRange name mapping.
+
+        Dictionary that maps names of GenomicRange
+            instances to the instances themselves.
+        """
         if not self._name_mapping:
             for grange in self:
                 self._name_mapping[grange.name].append(grange)
         return self._name_mapping
 
     def merge(self, distance=0):
-        if len(self) == 0:
-            raise EmptyGenomicRangesListError(self)
+        """Merges genomic ranges on the given distance.
+
+        If the distance between two genomic ranges
+        is smaller then the provided value, they are
+        merged via GenomicRange.merge and added to
+        the new GenomicRangesList instance.
+
+        Args:
+            distance: distance to merge proximal
+                genomic ranges (default: 0).
+
+        Returns:
+            (GenomicRangeList) new genomic ranges list
+                with all proximal genomic ranges merged.
+                If the initial genomic ranges list is empty,
+                returns empty genomic ranges list.
+        """
         new_range_list = GenomicRangesList([], self.genome)
+        if len(self) == 0:
+            return new_range_list
         new_range_list.add(self[0])
         for grange in self[1:]:
             try:
@@ -661,6 +699,24 @@ class GenomicRangesList(SortedKeyList):
         return new_range_list
 
     def inter_ranges(self, distance=0):
+        """Returns inner genomic regions covered with no genomic ranges.
+
+        First merges all genomic ranges provided
+        in self at the given distance with
+        `GenomicRangesList.merge`, then inverses
+        them so as new regions do not contain any
+        of the previous genomic ranges. Regions
+        at the beginning and the end of chromosomes
+        are not included.
+
+        Args:
+            distance: distance to merge initial
+                genomic ranges (default: 0).
+
+        Returns:
+            (GenomicRangesList): new genomic ranges
+                list with inverted genomic ranges.
+        """
         merged = self.merge(distance)
         inverted_granges = list()
         for i in range(len(merged) - 1):
@@ -733,65 +789,147 @@ class GenomicRangesList(SortedKeyList):
 
     def relation_mapping(self, other, mapping, relation):
         for key, value in mapping.items():
+            try:
+                self_grange = self.name_mapping[key]
+            except KeyError:
+                continue
+            if self_grange.relations.get(relation) is None:
+                self_grange.relations['relation'] = GenomicRangesList([],
+                                                                      other.genome)
             for code in value:
                 try:
-                    self_grange = self.name_mapping[key]
                     other_grange = other.name_mapping[code]
                     self_grange.relations[relation].append(other_grange)
                 except KeyError:
                     continue
 
-    def align_with_relations(self, relation, cores=1):
+    def align_with_relations(self, relation, cores=1, verbose=False,
+                             suppress_exceptions=False):
         if len(self) == 0:
             raise EmptyGenomicRangesListError(self)
-        if relation not in self[0].relations.keys():
-            raise ValueError(f"relation type {relation} "
-                             f"not in the list of available "
-                             f"relations: {self[0].relations.keys()}.")
-        with Pool(cores) as p:
-            alignments = p.map(lambda x: x.align_with_relations(relation),
-                               self)
-        return alignments
+        with NonExceptionalProcessPool(max_workers=cores,
+                                       verbose=verbose,
+                                       suppress_exceptions=suppress_exceptions) as p:
+            alignments, exceptions = p.map(lambda x: x.align_with_relations(),
+                                           self)
+
+        return alignments, exceptions
 
     @classmethod
     def parse_annotation(cls,
                          fileobj,
-                         filetype,
+                         fileformat=None,
                          genome=None,
-                         annotation_pattern=None,
+                         column_names=None,
                          dtypes=None,
+                         name_column=None,
                          name_pattern=None,
                          comment=None,
                          sep=None):
-        if filetype not in cls.filetypes:
-            raise ValueError(f"filetype {filetype} not one of {cls.filetypes}.")
-        if annotation_pattern is None:
-            annotation_pattern = cls.annotation_patterns[filetype]
-        if dtypes is None:
-            dtypes = cls.dtypes[filetype]
-        if name_pattern is None:
-            name_pattern = cls.name_patterns[filetype]
-        if comment is None:
-            comment = cls.comments[filetype]
-        if sep is None:
-            sep = cls.seps[filetype]
-        record_holder = ([func(item)
-                          for func, item in zip(dtypes,
-                                                line.strip().split(sep))]
+        """Parses annotation file into GenomicRangesList.
+
+        The class method for loading GenomicRangesList instance
+        from genomic annotation file in gtf, gff, bed3, bed6
+        and bed12 formats. User can provide one's own file
+        formats with given parsing patterns: column_names,
+        dtypes, name_pattern, name_column, comment and sep. These
+        parsing patterns are already provided for expected file
+        formats. By default they are all None, so the class automatically
+        chooses them by provided fileformat. If fileformat is None, expects
+        one to provide all parsing patterns. Expects file with no header,
+        but possibly with commented lines.
+
+        Args:
+            fileobj (fileobj): file-like object to parse
+                annotation from.
+            fileformat (str): type of file. Preferrably one
+                of 'gtf', 'gff', 'bed3', 'bed6', 'bed12'. If
+                None, means custom fileformat, so column_name,
+                dtypes, name_pattern, comment and sep arguments must
+                be provided (default: None).
+            genome (str, Path): path to the corresponding genome file
+                (default: None).
+            column_names (list of str): list of column names. Has
+                to contain 'chrom', 'start', 'end' values (default: None).
+            dtypes (list of callables): list of types of column values.
+                Each callable corresponds to one column (default: None).
+            name_column (str): name of column containing the name
+                of each genomic range. May be not specified so
+                the genomic range name will be derived from its coordinates
+                (defalut: None).
+            name_pattern (r-str): regex pattern to extract genomic range
+                name from column specified in name_column. Nay be not
+                specified so the genomic range name will be derived from
+                its coordinates (default: None).
+            comment (str): a character being used to comment lines
+                (default: None).
+            sep (str): a character used to separate fields in the
+                record (i.e. columns) (default: None).
+
+        Returns:
+            (GenomicRangesList) list of genomic ranges corresponding
+                to the given genome annotation.
+
+        Raises:
+            ValueError if fileformat not one of supported (i.e
+                'gtf', 'gff', 'bed3', 'bed6', 'bed12', None).
+            ValueError if fileformat is None and one of annotation
+                patterns is None as well.
+        """
+        if fileformat not in cls.fileformats:
+            raise ValueError(f"fileformat {fileformat} not one "
+                             f"of {cls.fileformats}.")
+        parser_dict = {'column_names': column_names,
+                       'dtypes': dtypes,
+                       'name_pattern': name_pattern,
+                       'name_column': name_column,
+                       'comment': comment,
+                       'sep': sep}
+        for pattern_name, pattern in parser_dict.items():
+            if pattern is None:
+                if fileformat is None:
+                    raise ValueError(f"Custom fileformat provided as None "
+                                     f"and no custom {pattern_name} "
+                                     f"provided as well.")
+                parser_dict[pattern_name] = cls.__dict__[pattern_name + 's'][fileformat]
+        record_holder = ([dtype(item)
+                          for dtype, item in zip(parser_dict['dtypes'],
+                                                 line.strip().split(parser_dict['sep']))]
                          for line in fileobj
-                         if not line.startswith(comment))
-        annotated_holder = (dict(zip(annotation_pattern, record))
+                         if not line.startswith(parser_dict['comment']))
+        annotated_holder = (dict(zip(parser_dict['column_names'],
+                                     record))
                             for record in record_holder)
-        granges = list()
+        grangeslist = GenomicRangesList([], genome=genome)
         for record in annotated_holder:
-            name = re.search(name_pattern, record['data']).group(1)
+            name = re.search(parser_dict['name_pattern'],
+                             record.get('data', "")).group(1)
             name = name if name else None
-            granges.append(GenomicRange(name=name, genome=genome, **record))
-        return GenomicRangesList(granges, genome=genome)
+            grangeslist.add(GenomicRange(name=name, genome=genome, **record))
+        return grangeslist
 
 
 def extract_taxid_mapping(mapping, taxid):
+    """Extracts mapping of orthologs for one taxid.
+
+    Given the dictionary produced by `ortho2align
+    get_orthodb_map` retrieves mapping of orthologs
+    from query species to the provided taxid.
+
+    Args:
+        mapping (dict): mapping of orthologs
+            loaded from json file produced
+            by `ortho2align get_orthodb_map`.
+        taxid (int, str): NCBI taxid of subject
+            species.
+
+    Returns:
+        (dict) dictionary with query species
+            gene ids as keys and list of subject
+            species orthologs' ids as values.
+    """
     taxid_mapping = dict()
+    taxid = str(taxid)
     for key, value in mapping.items():
         try:
             taxid_mapping[key] = value[taxid]
