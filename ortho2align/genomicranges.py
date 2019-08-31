@@ -2,8 +2,7 @@ import re
 from pathlib import Path
 from subprocess import Popen, PIPE
 from io import TextIOWrapper
-from collections import namedtuple, defaultdict, deque
-from concurrent.futures import ProcessPoolExecutor
+from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from .alignment_utils import Alignment
 from .parallel import NonExceptionalProcessPool
@@ -162,11 +161,57 @@ class GenomicRange:
     def __repr__(self):
         """GenomicRange instance representation."""
         return f"GenomicRange({self.chrom}, {self.start}, " \
-               f"{self.end}, {self.strand})"
+               f"{self.end}, strand={self.strand}, name={self.name}, " \
+               f"genome={self.genome}, sequence_file_loc=" \
+               f"{self._sequence_file_loc}, relations={self.relations})"
 
     def __str__(self):
         """GenomicRange instance string representation."""
-        return f"{self.chrom}\t{self.start}\t{self.end}\t{self.strand}"
+        return f"{self.chrom}\t{self.start}\t{self.end}\t{self.strand}\t" \
+               f"{self.name}\t{self.genome}"
+
+    def to_dict(self):
+        """Returns dict representation of the genomic range."""
+        return {'chrom': self.chrom,
+                'start': self.start,
+                'end': self.end,
+                'strand': self.strand,
+                'genome': self.genome,
+                'sequence_file_loc': self._sequence_file_loc,
+                'name': self.name,
+                'relations': {key: value.to_dict()
+                              for key, value in self.relations}}
+
+    @classmethod
+    def from_dict(cls, dict_):
+        """Restores genomic range from dict representation.
+
+        Args:
+            dict_: dict representation of GenomicRange
+                instance generated with `GenomicRange.to_dict()`.
+
+        Returns:
+            (GenomicRange) restored GenomicRange instance.
+        """
+        arbitrary_keys = ['chrom',
+                          'start',
+                          'end']
+        optional_keys = [('strand', '.'),
+                         ('name', None),
+                         ('genome', None),
+                         ('sequence_file_loc', None),
+                         ('relations', dict())]
+        try:
+            kwargs = {key: dict_[key] for key in arbitrary_keys}
+        except KeyError as e:
+            raise ValueError(f"Key {e} is not in the list "
+                             f"of arbitrary keys {arbitrary_keys}.")
+        kwargs.update({key[0]: dict_.get(key[0], key[1])
+                       for key in optional_keys})
+        if kwargs['relations']:
+            kwargs['relations'] = {key: GenomicRangesList.from_dict(value)
+                                   for key, value in kwargs['relations'].items()}
+        return cls(**kwargs)
 
     def distance(self, other):
         """Calculates distance between two genomic ranges.
@@ -336,15 +381,6 @@ class GenomicRange:
             raise ValueError(f"There is no {relation} "
                              f"relations for the {self}.")
 
-    def to_dict(self):
-        """Returns dict representation of the genomic range."""
-        raise NotImplementedError
-
-    @classmethod
-    def from_dict(self, dict_):
-        """Restores genomic range from dict representation."""
-        raise NotImplementedError
-
 
 class AlignedRangePair:
     """An association of genomic ranges and their alignment.
@@ -374,6 +410,16 @@ class AlignedRangePair:
         self.query_grange = query_grange
         self.subject_grange = subject_grange
         self.alignment = alignment
+
+    def __repr__(self):
+        """Returns representation of AlignedRangePair instance."""
+        return f"AlignedRangePair({repr(self.query_range)}, " \
+               f"{repr(self.subject_range)}, {repr(self.alignment)})"
+
+    def __str__(self):
+        """Returns string representation."""
+        return f"AlignedRangePair\n{self.query_grange}\n" \
+               f"{self.subject_grange}\n{self.alignment}"
 
     def to_dict(self):
         """Returns dict representation of AlignedRangePair instance."""
@@ -424,6 +470,29 @@ class FastaSeqFile:
         self.location = Path(location)
         self._chromsizes = dict()
         self._file_obj = None
+
+    def __repr__(self):
+        """Returns representation of FastaSeqFile object."""
+        return f"FastaSeqFile({self.location})"
+
+    def __str__(self):
+        """Returns string representation."""
+        return f"FastaSeqFile({self.location})"
+
+    def to_dict(self):
+        """Returns dict representation."""
+        return {'location': str(self.location)}
+
+    @classmethod
+    def from_dict(cls, dict_):
+        """Restores FastaSeqFile instance from its dict representation."""
+        keys = ['location']
+        try:
+            kwargs = {key: dict_[key] for key in keys}
+        except KeyError as e:
+            raise ValueError(f"Key {e} is not in the list "
+                             f"of nececcary keys {keys}.")
+        return cls(**kwargs)
 
     @property
     def chromsizes(self):
@@ -518,18 +587,31 @@ class GenomicRangesList(SortedKeyList):
     """Represents a list of genomic ranges.
 
     Attributes:
-        genome
-        source
-        name_mapping
+        genome (str, Path): path to the corresponding genome file.
+        source (FastaSeqFile): FastaSeqFile instance with the
+            corresponding genome file.
+        name_mapping (dict of lists): dictionary with keys
+            as genomic ranges names and values as lists of
+            corresponding GenomicRange instances.
 
     Class attributes:
-        column_names
-        name_columns
-        comments
-        name_patterns
-        seps
-        fileformats
-        dtypes
+        column_names (dict of lists): column names of selected
+            file formats of genomic annotations.
+        name_columns (dict of strs): names of columns containing
+            information about genomic range names for selected
+            file formats of genomic annotations.
+        comments (dict of strs): comment characters for selected file
+            formats of genomic annotations.
+        name_patterns (dict of r-strs): regex patterns to extract
+            genomic range from the column containing the name for
+            selected file formats of genomic annotations.
+        seps (dict of strs): field separator characters for selected
+            file formats of genomic annotations.
+        fileformats (list): list of selected file formats of genomic
+            annotations (gtf, gff, bed3, bed6, bed12, None -- user-specified).
+        dtypes (dict of clists): dict of lists of callables representing
+            dtypes of columns for selected file formats of genomic
+            annotations.
     """
     column_names = {'gff': ['chrom',
                             'source',
@@ -653,6 +735,36 @@ class GenomicRangesList(SortedKeyList):
         self.source = FastaSeqFile(self.genome)
         self._name_mapping = defaultdict(list)
 
+    def __repr__(self):
+        """Returns representaion."""
+        granges = ", ".join(repr(grange) for grange in self)
+        return f"GenomicRangesList([{granges}], genome={self.genome})"
+
+    def __str__(self):
+        """Returns string representation."""
+        granges = "\n".join(str(grange) for grange in self)
+        return f"GenomicRangesList of {self.genome}\n" \
+               f"{granges}"
+
+    def to_dict(self):
+        """Returns dict representation."""
+        return {'collection': [item.to_dict() for item in self],
+                'genome': str(self.genome)}
+
+    @classmethod
+    def from_dict(cls, dict_):
+        """Restores GenomicRangesList instance from dict representation."""
+        keys = ['collection',
+                'genome']
+        try:
+            kwargs = {key: dict_[key] for key in keys}
+        except KeyError as e:
+            raise ValueError(f"Key {e} is not in the list "
+                             f"of nececcary keys {keys}.")
+        kwargs['collection'] = [GenomicRange.from_dict(item)
+                                for item in kwargs['collection']]
+        return cls(**kwargs)
+
     @property
     def name_mapping(self):
         """GenomicRange name mapping.
@@ -734,6 +846,21 @@ class GenomicRangesList(SortedKeyList):
         return GenomicRangesList(inverted_granges, self.genome)
 
     def get_neighbours(self, other, distance=0):
+        """Finds closest genomic ranges of self in other at the given distance.
+
+        Args:
+            other (GenomicRangesList): the other genomic
+                ranges list to find neighbours of self in.
+            distance (int): the distance at which to consider
+                genomic ranges to be neighbours.
+
+        Returns:
+            None
+
+        Raises:
+            InconsistentGenomesError in case genomic ranges
+                have inconsistent genomes.
+        """
         self_index, other_index = 0, 0
         current_self, current_other = self_index, other_index
         while self_index < len(self) and other_index < len(other):
@@ -767,6 +894,26 @@ class GenomicRangesList(SortedKeyList):
                     current_other = other_index
 
     def get_fasta(self, outfileprefix, mode='split'):
+        """Extracts sequences of genomic ranges.
+
+        Can extract sequences of all genomic ranges
+        into single file named `outfileprefix` + '.fasta'
+        or each sequence into separate files named
+        `outfileprefix` + genomic_range.name + '.fasta'.
+
+        Args:
+            outfileprefix (str, Path): prefix of the
+                output file(s).
+            mode (str): the mode to extract sequences,
+                one of 'split', 'bulk' (default: 'split').
+
+        Returns:
+            None
+
+        Raises:
+            ValueError in cases the extraction mode is not
+                one of 'bulk', 'split'.
+        """
         with self.source:
             if mode == 'split':
                 filenames = list()
@@ -785,17 +932,37 @@ class GenomicRangesList(SortedKeyList):
                         self.source.get_fasta_by_coord(grange, output)
                 return [outfilename]
             else:
-                raise ValueError(f"get_fasta mode {mode} not one of ['split', 'bulk'].")
+                raise ValueError(f"get_fasta mode {mode} not "
+                                 f"one of ['split', 'bulk'].")
 
     def relation_mapping(self, other, mapping, relation):
+        """Maps relations of two genomic ranges lists.
+
+        Provided with the map of genomic ranges names in
+        the form of the dict with keys as names of genomic
+        ranges in self and values as lists of names of
+        genomic ranges in other, fills a relation for each
+        genomic range in self, that's name is in the map keys,
+        with corresponding genomic ranges in other.
+
+        Args:
+            other (GenomicRangesList): the other genomic ranges
+                list to fill relations of self genomic ranges list.
+            mapping (dict of lists): mapping of genomic ranges names
+                in self to list of genomic ranges names in other.
+            relation (str): the relation to fill.
+
+        Returns:
+            None
+        """
         for key, value in mapping.items():
             try:
                 self_grange = self.name_mapping[key]
             except KeyError:
                 continue
             if self_grange.relations.get(relation) is None:
-                self_grange.relations['relation'] = GenomicRangesList([],
-                                                                      other.genome)
+                self_grange.relations[relation] = GenomicRangesList([],
+                                                                    other.genome)
             for code in value:
                 try:
                     other_grange = other.name_mapping[code]
@@ -803,14 +970,43 @@ class GenomicRangesList(SortedKeyList):
                 except KeyError:
                     continue
 
-    def align_with_relations(self, relation, cores=1, verbose=False,
-                             suppress_exceptions=False):
+    def align_with_relation(self, relation, cores=1, verbose=False,
+                            suppress_exceptions=False,
+                            **kwargs):
+        """Aligns each genomic range with its relation if it exists.
+
+        For each genomic range in self in case its' relation
+        exists, aligns that genomic range with each range in
+        that relation using standalone blastn. Allows
+        multiprocessing of the alignment process.
+
+        Args:
+            relation (str): relation to align with.
+            cores (int): how many cores to use (default: 1).
+            verbose (bool): if True, will print progress
+                with tqdm progress bar (default: False).
+            suppress_exceptions (bool): if True, will suppress
+                reporting exceptions to the return list (dfault: False).
+            kwargs (dict-like): any kwargs to pass to
+                GenomicRange.align representing CLI arguments
+                for blastn.
+        Returns:
+            (list, list) two lists: the first contains AlignedRangePair
+                instances representing alignments, the cecond contains
+                exceptions occured during alignment if `suppress_exceptions`
+                is False (otherwise it is empty).
+
+        Raises:
+            EmptyGenomicRangesListError in case self genomic ranges
+                list is empty.
+        """
         if len(self) == 0:
             raise EmptyGenomicRangesListError(self)
-        with NonExceptionalProcessPool(max_workers=cores,
-                                       verbose=verbose,
-                                       suppress_exceptions=suppress_exceptions) as p:
-            alignments, exceptions = p.map(lambda x: x.align_with_relations(),
+        with NonExceptionalProcessPool(cores,
+                                       verbose,
+                                       suppress_exceptions) as p:
+            alignments, exceptions = p.map(lambda x: x.align_with_relations(relation,
+                                                                            **kwargs),
                                            self)
 
         return alignments, exceptions
