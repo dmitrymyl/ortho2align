@@ -6,8 +6,8 @@ import textwrap
 import pandas as pd
 from pathlib import Path
 from collections import defaultdict
-from .orthodb_utils import (load_table, filter_table, query_cached_odb_file,
-                            split_odb_file, filter_odb_file)
+from .orthodb import (load_table, filter_table, query_cached_odb_file,
+                      split_odb_file, filter_odb_file)
 
 
 def cache_orthodb_xrefs():

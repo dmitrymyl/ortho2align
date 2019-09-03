@@ -1,3 +1,3 @@
-from .orthodb_utils import *
+from .orthodb import *
 from .genomicranges import *
-from .alignment_utils import *
+from .alignment import *

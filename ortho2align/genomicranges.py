@@ -4,7 +4,7 @@ from subprocess import Popen, PIPE
 from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
-from .alignment_utils import Alignment
+from .alignment import Alignment
 from .parallel import NonExceptionalProcessPool
 
 
@@ -67,13 +67,23 @@ class GenomicCoordinatesError(GenomicException):
                          f"{self.chromosome.size}")
 
 
-class LocationNotSpecified(GenomicException):
+class FilePathNotSpecifiedError(GenomicException):
     """Occurs when location of sequence file is not specified, but is accessed."""
 
     def __init__(self, instance):
         self.instance = instance
         super().__init__(f"Sequence file location for {self.instance} "
                          f"is not specified.")
+
+
+class SequenceFileNotFoundError(GenomicException):
+    """Occurs when provided sequence file path is invalid."""
+
+    def __init__(self, instance, file_path):
+        self.instance = instance
+        self.file_path = file_path
+        super().__init__(f"Sequence file {self.file_path} "
+                         f"for {self.instance} doesn't exist.")
 
 
 def fasta_reformatter(infile, outfile, total, linewidth=60):
@@ -110,22 +120,113 @@ def fasta_reformatter(infile, outfile, total, linewidth=60):
         outfile.write('\n')
 
 
+class SequencePath:
+    """Wrapper aroudn pathlib.Path with checking of None.
+
+    Attributes:
+        path (None or Path): filesystem path.
+    """
+
+    def __init__(self, path=None):
+        """Initializes SequencePath instance.
+
+        Args:
+            path (str, bytes, Path): filesystem path
+                (default: None).
+
+        Returns:
+            None
+        """
+        self.path = None if path is None else Path(path)
+
+    def __str__(self):
+        """Returns str representation."""
+        return str(self.path)
+
+    def __repr__(self):
+        """Returns representation."""
+        return f"SequencePath('{self.path}')"
+
+    def __fspath__(self):
+        """Magic method to allow use with built-in `open()`."""
+        self.check_correct()
+        return str(self.path)
+
+    def __eq__(self, other):
+        return self.path == other.path
+
+    def to_dict(self):
+        """Returns dict representation."""
+        if self.path is None:
+            return None
+        else:
+            return str(self.path)
+
+    def check_correct(self, foreign=None):
+        """Checks whether the path exists or it is correct.
+
+        Checks whether the path is not None, whether it
+        exists and whether it is a Path instance. If None
+        or doesn't exist, reports. If not a Path instance,
+        casts to the Path.
+
+        Args:
+            foreign (object): foreign class instance
+                that contains SequencePath instance
+                (default: None).
+
+        Returns:
+            None
+
+        Raises:
+            FileNotSpecifiedError in case self.path is None.
+            SequenceFileNotFoundError in case self.path
+                points to the path that doesn't exist.
+        """
+        if self.path is None:
+            raise FilePathNotSpecifiedError(foreign)
+        if not isinstance(self.path, Path):
+            self.path = Path(self.path)
+        if not self.path.exists():
+            raise SequenceFileNotFoundError(foreign, self.path)
+
+    def exists(self):
+        """Checks whether self.path exists."""
+        return self.path.exists()
+
+    def open(self, mode='r'):
+        """Opens corresponding file.
+
+        Args:
+            mode (str): mode to open file
+                (default: 'r').
+
+        Returns:
+            (fileobj) opened file instance.
+        """
+        return open(self.path, mode=mode)
+
+
 class GenomicRange:
     """Represents one genomic range.
 
     Attributes:
-        chrom
-        start
-        end
-        strand
-        _sequence_file_loc
-        sequence_header
-        name
-        relations
+        chrom (str): name of chromosome.
+        start (int): start of genomic range.
+        end (int): end of genomic range.
+        strand (str): genomic range strand. One of
+            "+", "-", "." (inessential strandness)
+            (default: None).
+        name (str): name of genomic range (defalut: None).
+        genome (str): corresponding genome filename.
+        sequence_file_path: location of genomic range
+            sequence file.
+        relations (dict): a dictionary with related GenomicRangesList
+            instances.
     """
 
     def __init__(self, chrom, start, end, strand='.', name=None,
-                 genome=None, sequence_file_loc=None, relations=dict(),
+                 genome=None, sequence_file_path=None, relations=dict(),
                  **kwargs):
         """Initializes GenomicRange instance.
 
@@ -138,7 +239,7 @@ class GenomicRange:
                 (default: None).
             name (str): name of genomic range (defalut: None).
             genome (str): corresponding genome filename.
-            sequence_file_loc: location of genomic range
+            sequence_file_path: location of genomic range
                 sequence file.
             relations (dict): a dictionary with related GenomicRangesList
                 instances.
@@ -152,7 +253,7 @@ class GenomicRange:
         self.end = end
         self.strand = strand
         self.genome = genome
-        self._sequence_file_loc = sequence_file_loc
+        self._sequence_file_path = SequencePath(sequence_file_path)
         self.sequence_header = f"{self.chrom}:{self.start}" \
                                f"-{self.end}{self.strand}"
         self.name = self.sequence_header if name is None else name
@@ -162,8 +263,8 @@ class GenomicRange:
         """GenomicRange instance representation."""
         return f"GenomicRange({self.chrom}, {self.start}, " \
                f"{self.end}, strand={self.strand}, name={self.name}, " \
-               f"genome={self.genome}, sequence_file_loc=" \
-               f"{self._sequence_file_loc}, relations={self.relations})"
+               f"genome={self.genome}, sequence_file_path=" \
+               f"{self.sequence_file_path}, relations={self.relations})"
 
     def __str__(self):
         """GenomicRange instance string representation."""
@@ -177,7 +278,7 @@ class GenomicRange:
                 'end': self.end,
                 'strand': self.strand,
                 'genome': self.genome,
-                'sequence_file_loc': self._sequence_file_loc,
+                'sequence_file_path': self.sequence_file_path.to_dict(),
                 'name': self.name,
                 'relations': {key: value.to_dict()
                               for key, value in self.relations}}
@@ -199,7 +300,7 @@ class GenomicRange:
         optional_keys = [('strand', '.'),
                          ('name', None),
                          ('genome', None),
-                         ('sequence_file_loc', None),
+                         ('sequence_file_path', None),
                          ('relations', dict())]
         try:
             kwargs = {key: dict_[key] for key in arbitrary_keys}
@@ -212,6 +313,14 @@ class GenomicRange:
             kwargs['relations'] = {key: GenomicRangesList.from_dict(value)
                                    for key, value in kwargs['relations'].items()}
         return cls(**kwargs)
+
+    @property
+    def sequence_file_path(self):
+        return self._sequence_file_path
+
+    @sequence_file_path.setter
+    def sequence_file_path(self, value):
+        self._sequence_file_path = SequencePath(value)
 
     def distance(self, other):
         """Calculates distance between two genomic ranges.
@@ -305,18 +414,17 @@ class GenomicRange:
                 genomic ranges and their alignment.
 
         Raises:
-            LocationNotSpecified in case one or both
+            FilePathNotSpecifiedError in case one or both
             genomic ranges do not have separate
             sequence file.
         """
-        if self._sequence_file_loc is None:
-            raise LocationNotSpecified(self)
-        if other._sequence_file_loc is None:
-            raise LocationNotSpecified(other)
+        for grange in (self, other):
+            grange.sequence_file_path.check_correct()
+
         command = ['blastn',
                    '-task', 'blastn',
-                   '-query', self._sequence_file_loc,
-                   '-subject', other._sequence_file_loc,
+                   '-query', self.sequence_file_path,
+                   '-subject', other.sequence_file_path,
                    '-outfmt', '"7 std score"']
         add_args = sum((['-' + key, value]
                         for key, value in kwargs.items()),
@@ -454,45 +562,53 @@ class FastaSeqFile:
     information with whitespace character.
 
     Attributes:
-        location (Path): path to the file.
+        sequence_file_path (Path): path to the file.
         chromsizes (dict): dictionary of
             ChromosomseLocation instances.
         _file_obj: opened file under the
-            location.
+            sequence_file_path.
     """
 
-    def __init__(self, location):
+    def __init__(self, sequence_file_path):
         """Initializes FastaSeqFile instance.
 
         Args:
-            location (str, Path): path to the file.
+            sequence_file_path (str, Path): path to the file.
         """
-        self.location = Path(location)
+        self._sequence_file_path = SequencePath(sequence_file_path)
         self._chromsizes = dict()
         self._file_obj = None
 
     def __repr__(self):
         """Returns representation of FastaSeqFile object."""
-        return f"FastaSeqFile({self.location})"
+        return f"FastaSeqFile({self.sequence_file_path})"
 
     def __str__(self):
         """Returns string representation."""
-        return f"FastaSeqFile({self.location})"
+        return f"FastaSeqFile({self.sequence_file_path})"
 
     def to_dict(self):
         """Returns dict representation."""
-        return {'location': str(self.location)}
+        return {'sequence_file_path': self.sequence_file_path.to_dict()}
 
     @classmethod
     def from_dict(cls, dict_):
         """Restores FastaSeqFile instance from its dict representation."""
-        keys = ['location']
+        keys = ['sequence_file_path']
         try:
             kwargs = {key: dict_[key] for key in keys}
         except KeyError as e:
             raise ValueError(f"Key {e} is not in the list "
                              f"of nececcary keys {keys}.")
         return cls(**kwargs)
+
+    @property
+    def sequence_file_path(self):
+        return self._sequence_file_path
+
+    @sequence_file_path.setter
+    def sequence_file_path(self, value):
+        self._sequence_file_path = SequencePath(value)
 
     @property
     def chromsizes(self):
@@ -507,13 +623,14 @@ class FastaSeqFile:
                 {chromosome_name: ChromosomeLocation(size, start)}
 
         Raises:
-            LocationNotSpecified in case the location of
+            FilePathNotSpecifiedError in case the location of
                 sequence file is not specified.
         """
         if not self._chromsizes:
-            if self.location is None:
-                raise LocationNotSpecified(self)
-            with open(self.location, 'r') as infile:
+
+            self.sequence_file_path.check_correct()
+
+            with open(self.sequence_file_path, 'r') as infile:
                 chrom, size, start = None, None, None
                 line = infile.readline()
                 while line:
@@ -533,13 +650,12 @@ class FastaSeqFile:
         return self._chromsizes
 
     def __enter__(self):
-        """Context manager for opening location file."""
-        if self.location is None:
-            raise LocationNotSpecified(self)
-        self._file_obj = open(self.location, 'r')
+        """Context manager for opening sequence file."""
+        self.sequence_file_path.check_correct()
+        self._file_obj = open(self.sequence_file_path, 'r')
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager for closing location file."""
+        """Context manager for closing sequence file."""
         self._file_obj.close()
 
     def get_fasta_by_coord(self, grange, outfile, linewidth=60):
@@ -587,8 +703,9 @@ class GenomicRangesList(SortedKeyList):
     """Represents a list of genomic ranges.
 
     Attributes:
-        genome (str, Path): path to the corresponding genome file.
-        source (FastaSeqFile): FastaSeqFile instance with the
+        sequence_file_path (str, Path): path to the corresponding
+            genome file.
+        sequence_file (FastaSeqFile): FastaSeqFile instance with the
             corresponding genome file.
         name_mapping (dict of lists): dictionary with keys
             as genomic ranges names and values as lists of
@@ -718,44 +835,45 @@ class GenomicRangesList(SortedKeyList):
                         lambda x: x.split(","),
                         lambda x: x.split(",")]}
 
-    def __init__(self, collection=[], genome=None):
+    def __init__(self, collection=[], sequence_file_path=None):
         """Initializes GenomicRangesList instance.
 
         Args:
             collection (iterable): collection of GenomicRange
                 instances with the same genome.
-            genome (str, Path): path to corresponding genome
+            sequence_file_path (str, Path): path to corresponding genome
                 file.
         Returns:
             None.
         """
         super().__init__(iterable=collection,
                          key=lambda x: (x.chrom, x.start, x.end))
-        self.genome = genome
-        self.source = FastaSeqFile(self.genome)
+        self._sequence_file_path = SequencePath(sequence_file_path)
+        self.sequence_file = FastaSeqFile(self.sequence_file_path)
         self._name_mapping = defaultdict(list)
 
     def __repr__(self):
         """Returns representaion."""
         granges = ", ".join(repr(grange) for grange in self)
-        return f"GenomicRangesList([{granges}], genome={self.genome})"
+        return f"GenomicRangesList([{granges}], " \
+               f"sequence_file_path={self.sequence_file_path})"
 
     def __str__(self):
         """Returns string representation."""
         granges = "\n".join(str(grange) for grange in self)
-        return f"GenomicRangesList of {self.genome}\n" \
+        return f"GenomicRangesList of {self.sequence_file_path}\n" \
                f"{granges}"
 
     def to_dict(self):
         """Returns dict representation."""
         return {'collection': [item.to_dict() for item in self],
-                'genome': str(self.genome)}
+                'sequence_file_path': str(self.sequence_file_path)}
 
     @classmethod
     def from_dict(cls, dict_):
         """Restores GenomicRangesList instance from dict representation."""
         keys = ['collection',
-                'genome']
+                'sequence_file_path']
         try:
             kwargs = {key: dict_[key] for key in keys}
         except KeyError as e:
@@ -764,6 +882,14 @@ class GenomicRangesList(SortedKeyList):
         kwargs['collection'] = [GenomicRange.from_dict(item)
                                 for item in kwargs['collection']]
         return cls(**kwargs)
+
+    @property
+    def sequence_file_path(self):
+        return self._sequence_file_path
+
+    @sequence_file_path.setter
+    def sequence_file_path(self, value):
+        self._sequence_file_path = SequencePath(value)
 
     @property
     def name_mapping(self):
@@ -795,7 +921,7 @@ class GenomicRangesList(SortedKeyList):
                 If the initial genomic ranges list is empty,
                 returns empty genomic ranges list.
         """
-        new_range_list = GenomicRangesList([], self.genome)
+        new_range_list = GenomicRangesList([], self.sequence_file_path)
         if len(self) == 0:
             return new_range_list
         new_range_list.add(self[0])
@@ -837,13 +963,13 @@ class GenomicRangesList(SortedKeyList):
                 new_start = merged[i].end
                 new_end = merged[i + 1].start
                 new_strand = "."
-                new_genome = merged[i].genome
+                new_genome = merged[i].sequence_file_path
                 inverted_granges.append(GenomicRange(new_chrom,
                                                      new_start,
                                                      new_end,
                                                      new_strand,
                                                      genome=new_genome))
-        return GenomicRangesList(inverted_granges, self.genome)
+        return GenomicRangesList(inverted_granges, self.sequence_file_path)
 
     def get_neighbours(self, other, distance=0):
         """Finds closest genomic ranges of self in other at the given distance.
@@ -914,22 +1040,22 @@ class GenomicRangesList(SortedKeyList):
             ValueError in cases the extraction mode is not
                 one of 'bulk', 'split'.
         """
-        with self.source:
+        with self.sequence_file:
             if mode == 'split':
                 filenames = list()
                 for grange in self:
-                    grange._sequence_file_loc = (str(outfileprefix) +
+                    grange.sequence_file_path = (str(outfileprefix) +
                                                  grange.sequence_header +
                                                  '.fasta')
-                    with open(grange._sequence_file_loc, 'w') as output:
-                        self.source.get_fasta_by_coord(grange, output)
-                    filenames.append(grange._sequence_file_loc)
+                    with open(grange.sequence_file_path, 'w') as output:
+                        self.sequence_file.get_fasta_by_coord(grange, output)
+                    filenames.append(grange.sequence_file_path)
                 return filenames
             elif mode == 'bulk':
                 outfilename = str(outfileprefix) + '.fasta'
                 with open(outfilename, 'w') as output:
                     for grange in self:
-                        self.source.get_fasta_by_coord(grange, output)
+                        self.sequence_file.get_fasta_by_coord(grange, output)
                 return [outfilename]
             else:
                 raise ValueError(f"get_fasta mode {mode} not "
@@ -962,7 +1088,7 @@ class GenomicRangesList(SortedKeyList):
                 continue
             if self_grange.relations.get(relation) is None:
                 self_grange.relations[relation] = GenomicRangesList([],
-                                                                    other.genome)
+                                                                    other.sequence_file_path)
             for code in value:
                 try:
                     other_grange = other.name_mapping[code]
@@ -1015,7 +1141,7 @@ class GenomicRangesList(SortedKeyList):
     def parse_annotation(cls,
                          fileobj,
                          fileformat=None,
-                         genome=None,
+                         sequence_file_path=None,
                          column_names=None,
                          dtypes=None,
                          name_column=None,
@@ -1043,8 +1169,8 @@ class GenomicRangesList(SortedKeyList):
                 None, means custom fileformat, so column_name,
                 dtypes, name_pattern, comment and sep arguments must
                 be provided (default: None).
-            genome (str, Path): path to the corresponding genome file
-                (default: None).
+            sequence_file_path (str, Path): path to the corresponding
+                genome file (default: None).
             column_names (list of str): list of column names. Has
                 to contain 'chrom', 'start', 'end' values (default: None).
             dtypes (list of callables): list of types of column values.
@@ -1096,12 +1222,15 @@ class GenomicRangesList(SortedKeyList):
         annotated_holder = (dict(zip(parser_dict['column_names'],
                                      record))
                             for record in record_holder)
-        grangeslist = GenomicRangesList([], genome=genome)
+        grangeslist = GenomicRangesList([],
+                                        sequence_file_path=sequence_file_path)
         for record in annotated_holder:
             name = re.search(parser_dict['name_pattern'],
                              record.get('data', "")).group(1)
             name = name if name else None
-            grangeslist.add(GenomicRange(name=name, genome=genome, **record))
+            grangeslist.add(GenomicRange(name=name,
+                                         genome=sequence_file_path,
+                                         **record))
         return grangeslist
 
 
