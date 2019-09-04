@@ -963,7 +963,7 @@ class GenomicRangesList(SortedKeyList):
                 new_start = merged[i].end
                 new_end = merged[i + 1].start
                 new_strand = "."
-                new_genome = merged[i].sequence_file_path
+                new_genome = merged[i].genome
                 inverted_granges.append(GenomicRange(new_chrom,
                                                      new_start,
                                                      new_end,
