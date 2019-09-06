@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE
 from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
+from tqdm import tqdm
 from .alignment import Alignment
 from .parallel import NonExceptionalProcessPool
 
@@ -149,7 +150,6 @@ class SequencePath:
 
     def __fspath__(self):
         """Magic method to allow use with built-in `open()`."""
-        self.check_correct()
         return str(self.path)
 
     def __eq__(self, other):
@@ -226,7 +226,7 @@ class GenomicRange:
     """
 
     def __init__(self, chrom, start, end, strand='.', name=None,
-                 genome=None, sequence_file_path=None, relations=dict(),
+                 genome=None, sequence_file_path=None, relations=None,
                  **kwargs):
         """Initializes GenomicRange instance.
 
@@ -257,7 +257,7 @@ class GenomicRange:
         self.sequence_header = f"{self.chrom}:{self.start}" \
                                f"-{self.end}{self.strand}"
         self.name = self.sequence_header if name is None else name
-        self.relations = relations
+        self.relations = dict() if relations is None else relations
 
     def __repr__(self):
         """GenomicRange instance representation."""
@@ -390,6 +390,43 @@ class GenomicRange:
                             end=end,
                             strand=".",
                             genome=self.genome)
+
+    def find_neighbours(self, other_list, distance=0):
+        """Finds neighbours of self in other list at given distance.
+
+        Args:
+            other_list (GenomicRangesList): other list to find
+                neighbours in.
+            distance (int, float): distance at which two
+                genomic ranges are considered neighbours
+                (default: 0).
+
+        Returns:
+            (GenomicRangesList) genomic ranges list with all
+            neighbours of self in other_list at given distance.
+        """
+        neighbours = GenomicRangesList([],
+                                       sequence_file_path=other_list.sequence_file_path)
+        index = other_list.bisect_left(self)
+        left_index = index - 1
+        right_index = index
+        try:
+            while abs(self.distance(other_list[left_index])) <= distance:
+                neighbours.add(other_list[left_index])
+                left_index -= 1
+        except InconsistentChromosomesError:
+            pass
+        except IndexError:
+            pass
+        try:
+            while abs(self.distance(other_list[right_index])) <= distance:
+                neighbours.add(other_list[right_index])
+                right_index += 1
+        except InconsistentChromosomesError:
+            pass
+        except IndexError:
+            pass
+        return neighbours
 
     def align(self, other, **kwargs):
         """Aligns two genomic ranges with blastn.
@@ -835,6 +872,13 @@ class GenomicRangesList(SortedKeyList):
                         lambda x: x.split(","),
                         lambda x: x.split(",")]}
 
+    def __new__(cls, collection=[], sequence_file_path=None):
+        """Makes new instance of GenomicRangesList."""
+        instance = super().__new__(cls,
+                                   iterable=collection,
+                                   key=lambda x: (x.chrom, x.start, x.end))
+        return instance
+
     def __init__(self, collection=[], sequence_file_path=None):
         """Initializes GenomicRangesList instance.
 
@@ -851,18 +895,21 @@ class GenomicRangesList(SortedKeyList):
         self._sequence_file_path = SequencePath(sequence_file_path)
         self.sequence_file = FastaSeqFile(self.sequence_file_path)
         self._name_mapping = defaultdict(list)
+        self._verbose_amount = 10
 
     def __repr__(self):
         """Returns representaion."""
-        granges = ", ".join(repr(grange) for grange in self)
-        return f"GenomicRangesList([{granges}], " \
+        granges = ", ".join([repr(grange) for grange in self][:self._verbose_amount])
+        appendix = ", ..." if self._verbose_amount < len(self) else ""
+        return f"GenomicRangesList([{granges}{appendix}], " \
                f"sequence_file_path={self.sequence_file_path})"
 
     def __str__(self):
         """Returns string representation."""
-        granges = "\n".join(str(grange) for grange in self)
-        return f"GenomicRangesList of {self.sequence_file_path}\n" \
-               f"{granges}"
+        granges = "\n".join([str(grange) for grange in self][:self._verbose_amount])
+        appendix = "\n..." if self._verbose_amount < len(self) else ""
+        return f"GenomicRangesList of {len(self)} genomic ranges of" \
+               f"{self.sequence_file_path}\n{granges}{appendix}"
 
     def to_dict(self):
         """Returns dict representation."""
@@ -885,10 +932,12 @@ class GenomicRangesList(SortedKeyList):
 
     @property
     def sequence_file_path(self):
+        """sequence_file_path getter."""
         return self._sequence_file_path
 
     @sequence_file_path.setter
     def sequence_file_path(self, value):
+        """sequence_file_path setter."""
         self._sequence_file_path = SequencePath(value)
 
     @property
@@ -925,7 +974,7 @@ class GenomicRangesList(SortedKeyList):
         if len(self) == 0:
             return new_range_list
         new_range_list.add(self[0])
-        for grange in self[1:]:
+        for grange in tqdm(self[1:]):
             try:
                 if abs(new_range_list[-1].distance(grange)) <= distance:
                     old_range = new_range_list.pop()
@@ -957,7 +1006,7 @@ class GenomicRangesList(SortedKeyList):
         """
         merged = self.merge(distance)
         inverted_granges = list()
-        for i in range(len(merged) - 1):
+        for i in tqdm(range(len(merged) - 1)):
             if merged[i].chrom == merged[i + 1].chrom:
                 new_chrom = merged[i].chrom
                 new_start = merged[i].end
@@ -971,53 +1020,29 @@ class GenomicRangesList(SortedKeyList):
                                                      genome=new_genome))
         return GenomicRangesList(inverted_granges, self.sequence_file_path)
 
-    def get_neighbours(self, other, distance=0):
-        """Finds closest genomic ranges of self in other at the given distance.
+    def get_neighbours(self, other, distance=0, relation='neighbours'):
+        """Finds all neighbours of self in other at the given distance.
+
+        For each genomic range in self finds all ranges in other
+        that are closer to the range than provided distance,
+        forms new GenomicRangesList instance with them and assigns
+        it to the `.relation` dict under the provided relation key.
 
         Args:
-            other (GenomicRangesList): the other genomic
-                ranges list to find neighbours of self in.
-            distance (int): the distance at which to consider
-                genomic ranges to be neighbours.
+            other (GenomicRangesList): the other genomic ranges
+                list in which to find neighbours of self.
+            distance (int, float): distance at which two genomic
+                ranges are considered neighbours (default: 0).
+            relation (str): name of relation to assign all
+                found neighbours of each genomic range in self
+                (default: 'neighbours').
 
         Returns:
-            None
-
-        Raises:
-            InconsistentGenomesError in case genomic ranges
-                have inconsistent genomes.
+            None.
         """
-        self_index, other_index = 0, 0
-        current_self, current_other = self_index, other_index
-        while self_index < len(self) and other_index < len(other):
-            try:
-                if self[current_self].distance(other[current_other]) < - distance:
-                    current_other += 1
-                elif abs(self[current_self].distance(other[current_other])) <= distance:
-                    self[current_self].relations['neighbours'].add(other[current_other])
-                    current_other += 1
-                else:
-                    self_index += 1
-                    current_self = self_index
-                    current_other = other_index
-            except InconsistentChromosomesError:
-                self_index = current_self
-                other_index = current_other
-                if self[self_index].chrom < other[other_index].chrom:
-                    self_index += 1
-                    current_self = self_index
-                else:
-                    other_index += 1
-                    current_other = other_index
-            except IndexError:
-                if current_other >= len(other):
-                    current_other = other_index
-                    current_self += 1
-                    self_index = current_self
-                else:
-                    self_index += 1
-                    current_self = self_index
-                    current_other = other_index
+        for grange in tqdm(self):
+            grange.relations[relation] = grange.find_neighbours(other,
+                                                                distance=distance)
 
     def get_fasta(self, outfileprefix, mode='split'):
         """Extracts sequences of genomic ranges.
@@ -1043,10 +1068,11 @@ class GenomicRangesList(SortedKeyList):
         with self.sequence_file:
             if mode == 'split':
                 filenames = list()
-                for grange in self:
+                for grange in tqdm(self):
                     grange.sequence_file_path = (str(outfileprefix) +
                                                  grange.sequence_header +
                                                  '.fasta')
+                    grange.sequence_file_path.check_correct()
                     with open(grange.sequence_file_path, 'w') as output:
                         self.sequence_file.get_fasta_by_coord(grange, output)
                     filenames.append(grange.sequence_file_path)
@@ -1081,20 +1107,18 @@ class GenomicRangesList(SortedKeyList):
         Returns:
             None
         """
-        for key, value in mapping.items():
-            try:
-                self_grange = self.name_mapping[key]
-            except KeyError:
-                continue
-            if self_grange.relations.get(relation) is None:
-                self_grange.relations[relation] = GenomicRangesList([],
-                                                                    other.sequence_file_path)
-            for code in value:
-                try:
-                    other_grange = other.name_mapping[code]
-                    self_grange.relations[relation].append(other_grange)
-                except KeyError:
-                    continue
+        for grange in tqdm(self):
+            if grange.relations.get(relation) is None:
+                grange.relations[relation] = GenomicRangesList([],
+                                                               other.sequence_file_path)
+            if grange.name in mapping.keys():
+                values = mapping[grange.name]
+                for code in values:
+                    try:
+                        other_granges = other.name_mapping[code]
+                        grange.relations[relation].update(other_granges)
+                    except KeyError:
+                        continue
 
     def align_with_relation(self, relation, cores=1, verbose=False,
                             suppress_exceptions=False,
@@ -1207,13 +1231,19 @@ class GenomicRangesList(SortedKeyList):
                        'name_column': name_column,
                        'comment': comment,
                        'sep': sep}
+        class_attr_map = {'column_names': 'column_names',
+                          'dtypes': 'dtypes',
+                          'name_pattern': 'name_patterns',
+                          'name_column': 'name_columns',
+                          'comment': 'comments',
+                          'sep': 'seps'}
         for pattern_name, pattern in parser_dict.items():
             if pattern is None:
                 if fileformat is None:
                     raise ValueError(f"Custom fileformat provided as None "
                                      f"and no custom {pattern_name} "
                                      f"provided as well.")
-                parser_dict[pattern_name] = cls.__dict__[pattern_name + 's'][fileformat]
+                parser_dict[pattern_name] = cls.__dict__[class_attr_map[pattern_name]][fileformat]
         record_holder = ([dtype(item)
                           for dtype, item in zip(parser_dict['dtypes'],
                                                  line.strip().split(parser_dict['sep']))]
@@ -1222,12 +1252,12 @@ class GenomicRangesList(SortedKeyList):
         annotated_holder = (dict(zip(parser_dict['column_names'],
                                      record))
                             for record in record_holder)
-        grangeslist = GenomicRangesList([],
-                                        sequence_file_path=sequence_file_path)
+        grangeslist = cls(collection=[],
+                          sequence_file_path=sequence_file_path)
         for record in annotated_holder:
             name = re.search(parser_dict['name_pattern'],
-                             record.get('data', "")).group(1)
-            name = name if name else None
+                             record.get('data', ""))
+            name = name.group(1) if name is not None else None
             grangeslist.add(GenomicRange(name=name,
                                          genome=sequence_file_path,
                                          **record))
