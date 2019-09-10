@@ -1,3 +1,19 @@
+"""Chromosome coordinate systems.
+0-based: chromosome start coordinate is 0.
+1-based: chromosome start coordinate is 1.
+inclusive: character under end coordinate
+    is included in the sequence.
+exclusive: character under end coordinate
+    is not included in the sequence.
+
+Here we use 0-based exclusive system for
+easier arithmetics.
+
+Translation from other systems:
+0-based inclusive: start += 0, end += 1
+1-based inclusive: start += -1, end += 0
+1-based exclusive: start += -1, end += -1
+"""
 import re
 from pathlib import Path
 from subprocess import Popen, PIPE
@@ -87,7 +103,8 @@ class SequenceFileNotFoundError(GenomicException):
                          f"for {self.instance} doesn't exist.")
 
 
-def fasta_reformatter(infile, outfile, total, linewidth=60):
+def fasta_reformatter(infile, outfile, total, linewidth=60,
+                      reverse=False, complement=False):
     """Reformats fasta file.
 
     Allows one to reformat existing sequence in
@@ -100,17 +117,33 @@ def fasta_reformatter(infile, outfile, total, linewidth=60):
         total (int): number of symbols to read.
         linewidth (int): linewidth of new sequence
             (default: 60).
+        reverse (bool): if True, takes sequence backwards
+            (default: False).
+        complement (bool): if True, returns complement
+            nucleotide sequence (default: False).
 
     Returns:
         None
     """
     read_counter = 0
     line_break = False
+    compl_map = {'A': 'T',
+                 'a': 't',
+                 'T': 'A',
+                 't': 'a',
+                 'G': 'C',
+                 'g': 'c',
+                 'C': 'G',
+                 'c': 'g'}
     while read_counter < total:
         c = infile.read(1)
+        if reverse:
+            infile.seek(infile.tell() - 2)
         if c == "\n":
             continue
         else:
+            if complement:
+                c = compl_map[c]
             read_counter += 1
             outfile.write(c)
             line_break = False
@@ -210,6 +243,11 @@ class SequencePath:
 class GenomicRange:
     """Represents one genomic range.
 
+    Genomic coordinates are 0-based exclusive:
+    * chromosome start coordinate is 0;
+    * character under genomic range coordinate
+        is not included into the sequence.
+
     Attributes:
         chrom (str): name of chromosome.
         start (int): start of genomic range.
@@ -271,6 +309,13 @@ class GenomicRange:
         return f"{self.chrom}\t{self.start}\t{self.end}\t{self.strand}\t" \
                f"{self.name}\t{self.genome}"
 
+    def __eq__(self, other):
+        return (self.chrom == other.chrom and self.start == other.start and
+                self.end == other.end and self.strand == other.strand and
+                self.genome == other.genome and
+                self.sequence_file_path == other.sequence_file_path and
+                self.name == other.name and self.relations == other.relations)
+
     def to_dict(self):
         """Returns dict representation of the genomic range."""
         return {'chrom': self.chrom,
@@ -281,7 +326,7 @@ class GenomicRange:
                 'sequence_file_path': self.sequence_file_path.to_dict(),
                 'name': self.name,
                 'relations': {key: value.to_dict()
-                              for key, value in self.relations}}
+                              for key, value in self.relations.items()}}
 
     @classmethod
     def from_dict(cls, dict_):
@@ -470,7 +515,7 @@ class GenomicRange:
             alignment = Alignment.from_file(TextIOWrapper(proc.stdout))
         return AlignedRangePair(self, other, alignment)
 
-    def align_with_relations(self, relation='synteny', **kwargs):
+    def align_with_relation(self, relation='synteny', **kwargs):
         """Aligns genomic range with all its relations.
 
         Aligns given genomic range with all its
@@ -615,6 +660,7 @@ class FastaSeqFile:
         self._sequence_file_path = SequencePath(sequence_file_path)
         self._chromsizes = dict()
         self._file_obj = None
+        self._line_length = None
 
     def __repr__(self):
         """Returns representation of FastaSeqFile object."""
@@ -623,6 +669,9 @@ class FastaSeqFile:
     def __str__(self):
         """Returns string representation."""
         return f"FastaSeqFile({self.sequence_file_path})"
+
+    def __eq__(self, other):
+        return self.sequence_file_path == other.sequence_file_path
 
     def to_dict(self):
         """Returns dict representation."""
@@ -686,6 +735,16 @@ class FastaSeqFile:
                 del self._chromsizes[None]
         return self._chromsizes
 
+    @property
+    def line_length(self):
+        if self._line_length is None:
+            with open(self.sequence_file_path, 'r') as infile:
+                line = infile.readline()
+                while line.startswith(">"):
+                    line = infile.readline()
+                self._line_length = len(line.strip())
+        return self._line_length
+
     def __enter__(self):
         """Context manager for opening sequence file."""
         self.sequence_file_path.check_correct()
@@ -694,6 +753,9 @@ class FastaSeqFile:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager for closing sequence file."""
         self._file_obj.close()
+
+    def locate_coordinate(self, chrom_start, coord):
+        self._file_obj.seek(chrom_start + coord + coord // self.line_length)
 
     def get_fasta_by_coord(self, grange, outfile, linewidth=60):
         """Writes sequence of the genomic range in fasta file.
@@ -723,21 +785,35 @@ class FastaSeqFile:
             chrom_size, chrom_start = self.chromsizes[grange.chrom]
         except KeyError:
             raise ChromosomeNotFoundError(grange.chrom,
-                                          self.location,
+                                          self.sequence_file_path,
                                           self.chromsizes.keys())
         if grange.end > chrom_size:
             raise GenomicCoordinatesError(grange,
                                           self.chromsizes[grange.chrom])
-        self._file_obj.seek(chrom_start + grange.start, 0)
+        if grange.strand == '-':
+            self.locate_coordinate(chrom_start, grange.end - 1)
+            reverse = True
+            complement = True
+        else:
+            self.locate_coordinate(chrom_start, grange.start)
+            reverse = False
+            complement = False
         outfile.write(">" + grange.sequence_header + "\n")
         fasta_reformatter(self._file_obj,
                           outfile,
                           total=(grange.end - grange.start),
-                          linewidth=linewidth)
+                          linewidth=linewidth,
+                          reverse=reverse,
+                          complement=complement)
 
 
 class GenomicRangesList(SortedKeyList):
     """Represents a list of genomic ranges.
+
+    Genomic coordinates are 0-based exclusive:
+    * chromosome start coordinate is 0;
+    * character under genomic range coordinate
+        is not included into the sequence.
 
     Attributes:
         sequence_file_path (str, Path): path to the corresponding
@@ -763,9 +839,13 @@ class GenomicRangesList(SortedKeyList):
             file formats of genomic annotations.
         fileformats (list): list of selected file formats of genomic
             annotations (gtf, gff, bed3, bed6, bed12, None -- user-specified).
-        dtypes (dict of clists): dict of lists of callables representing
+        dtypes (dict of lists): dict of lists of callables representing
             dtypes of columns for selected file formats of genomic
             annotations.
+        start_types (dict of ints): maps file format to genomic range
+            coordinate start type (0 or 1).
+        end_types (dict of strs): maps file format to genomic range
+            coordinate end type ('inclusive' or 'exclusive').
     """
     column_names = {'gff': ['chrom',
                             'source',
@@ -871,6 +951,16 @@ class GenomicRangesList(SortedKeyList):
                         int,
                         lambda x: x.split(","),
                         lambda x: x.split(",")]}
+    start_types = {'gtf': 1,
+                   'gff': 1,
+                   'bed3': 0,
+                   'bed6': 0,
+                   'bed12': 0}
+    end_types = {'gtf': 'inclusive',
+                 'gff': 'inclusive',
+                 'bed3': 'exclusive',
+                 'bed6': 'exclusive',
+                 'bed12': 'exclusive'}
 
     def __new__(cls, collection=[], sequence_file_path=None):
         """Makes new instance of GenomicRangesList."""
@@ -908,8 +998,17 @@ class GenomicRangesList(SortedKeyList):
         """Returns string representation."""
         granges = "\n".join([str(grange) for grange in self][:self._verbose_amount])
         appendix = "\n..." if self._verbose_amount < len(self) else ""
-        return f"GenomicRangesList of {len(self)} genomic ranges of" \
-               f"{self.sequence_file_path}\n{granges}{appendix}"
+        return f"GenomicRangesList of {len(self)} genomic ranges of"  \
+               f"{self.sequence_file_path}\n{granges}{appendix}\n" \
+               f"{min(self._verbose_amount, len(self))} of {len(self)} genomic ranges."
+
+    def __eq__(self, other):
+        if len(self) != len(other):
+            return False
+        if self.sequence_file_path != other.sequence_file_path:
+            return False
+        return all([self_grange == other_grange
+                    for self_grange, other_grange in zip(self, other)])
 
     def to_dict(self):
         """Returns dict representation."""
@@ -1072,7 +1171,6 @@ class GenomicRangesList(SortedKeyList):
                     grange.sequence_file_path = (str(outfileprefix) +
                                                  grange.sequence_header +
                                                  '.fasta')
-                    grange.sequence_file_path.check_correct()
                     with open(grange.sequence_file_path, 'w') as output:
                         self.sequence_file.get_fasta_by_coord(grange, output)
                     filenames.append(grange.sequence_file_path)
@@ -1155,7 +1253,7 @@ class GenomicRangesList(SortedKeyList):
         with NonExceptionalProcessPool(cores,
                                        verbose,
                                        suppress_exceptions) as p:
-            alignments, exceptions = p.map(lambda x: x.align_with_relations(relation,
+            alignments, exceptions = p.map(lambda x: x.align_with_relation(relation,
                                                                             **kwargs),
                                            self)
 
@@ -1171,7 +1269,9 @@ class GenomicRangesList(SortedKeyList):
                          name_column=None,
                          name_pattern=None,
                          comment=None,
-                         sep=None):
+                         sep=None,
+                         start_type=None,
+                         end_type=None):
         """Parses annotation file into GenomicRangesList.
 
         The class method for loading GenomicRangesList instance
@@ -1211,6 +1311,12 @@ class GenomicRangesList(SortedKeyList):
                 (default: None).
             sep (str): a character used to separate fields in the
                 record (i.e. columns) (default: None).
+            start_type (int): chromosome coordinate start type: 0-based
+                or 1-based. One of: 0, 1 (default: None).
+            end_type (str): chromosome coordinate end type: inclusive or
+                exclusive. Inclusive means character under the end coordinate
+                includes in the sequence, exclusive means the opposite. One
+                of: 'exclusive', 'inclusive' (default: None).
 
         Returns:
             (GenomicRangesList) list of genomic ranges corresponding
@@ -1230,13 +1336,17 @@ class GenomicRangesList(SortedKeyList):
                        'name_pattern': name_pattern,
                        'name_column': name_column,
                        'comment': comment,
-                       'sep': sep}
+                       'sep': sep,
+                       'start_type': start_type,
+                       'end_type': end_type}
         class_attr_map = {'column_names': 'column_names',
                           'dtypes': 'dtypes',
                           'name_pattern': 'name_patterns',
                           'name_column': 'name_columns',
                           'comment': 'comments',
-                          'sep': 'seps'}
+                          'sep': 'seps',
+                          'start_type': 'start_types',
+                          'end_type': 'end_types'}
         for pattern_name, pattern in parser_dict.items():
             if pattern is None:
                 if fileformat is None:
@@ -1244,6 +1354,12 @@ class GenomicRangesList(SortedKeyList):
                                      f"and no custom {pattern_name} "
                                      f"provided as well.")
                 parser_dict[pattern_name] = cls.__dict__[class_attr_map[pattern_name]][fileformat]
+        if parser_dict['end_type'] not in ('inclusive', 'exclusive'):
+            raise ValueError(f"end_type argument `{parser_dict['end_type']}` "
+                             f"is not one of ['inclusive', 'exclusive'].")
+        if parser_dict['start_type'] not in (0, 1):
+            raise ValueError(f"start_type argument `{parser_dict['start_type']}' "
+                             f"is not one of [0, 1].")
         record_holder = ([dtype(item)
                           for dtype, item in zip(parser_dict['dtypes'],
                                                  line.strip().split(parser_dict['sep']))]
@@ -1258,6 +1374,11 @@ class GenomicRangesList(SortedKeyList):
             name = re.search(parser_dict['name_pattern'],
                              record.get('data', ""))
             name = name.group(1) if name is not None else None
+            if parser_dict['start_type'] == 1:
+                record['start'] -= 1
+                record['end'] -= 1
+            if parser_dict['end_type'] == 'inclusive':
+                record['end'] += 1
             grangeslist.add(GenomicRange(name=name,
                                          genome=sequence_file_path,
                                          **record))
