@@ -1,6 +1,7 @@
 from concurrent.futures import ProcessPoolExecutor
 from collections import deque
 from tqdm import tqdm
+from functools import partial
 
 
 def apply(func, arg):
@@ -11,6 +12,11 @@ def apply(func, arg):
 def starapply(func, args):
     """Applies starred args to the func."""
     return func(*args)
+
+
+def starstarapply(func, arg_container):
+    return func(*arg_container['args'],
+                **arg_container['kwargs'])
 
 
 class NonExceptionalProcessPool:
@@ -98,6 +104,7 @@ class NonExceptionalProcessPool:
 
         Args:
             func (function): function object to multiprocess.
+                Can't accept lambdas.
             iterable (iterable): collection, range, map, zip,
                 generator, coroutine object containing arguments
                 to pass to func. The iterable is guaranteed to
@@ -120,14 +127,14 @@ class NonExceptionalProcessPool:
         if self.verbose:
             pbar = tqdm()
         futures = deque()
+        exec_func = partial(applier, func)
         try:
             collection = (item for item in iterable)
         except TypeError:
             raise ValueError("Provided iterable is not iterable.")
         for _ in range(self.max_workers):
             try:
-                futures.append(self.executor.submit(applier,
-                                                    func,
+                futures.append(self.executor.submit(exec_func,
                                                     next(collection)))
             except StopIteration:
                 break
@@ -138,8 +145,7 @@ class NonExceptionalProcessPool:
             if future.done():
                 pbar.update()
                 try:
-                    futures.append(self.executor.submit(applier,
-                                                        func,
+                    futures.append(self.executor.submit(exec_func,
                                                         next(collection)))
                 except StopIteration:
                     pass
@@ -153,6 +159,7 @@ class NonExceptionalProcessPool:
                     futures.append(future)
                 else:
                     futures.appendleft(future)
+        pbar.close()
         return results, exceptions
 
     def map(self, func, iterable):
@@ -160,6 +167,7 @@ class NonExceptionalProcessPool:
 
         Args:
             func (function): function object to multiprocess.
+                Can't accept lambdas.
             iterable (iterable): collection, range, map, zip,
                 generator, coroutine object containing arguments
                 to pass to func. The iterable is guaranteed to
@@ -184,6 +192,7 @@ class NonExceptionalProcessPool:
 
         Args:
             func (function): function object to multiprocess.
+                Can't accept lambdas.
             iterable (iterable): collection, range, map, zip,
                 generator, coroutine object containing arguments
                 to pass to func. The iterable is guaranteed to
@@ -203,11 +212,16 @@ class NonExceptionalProcessPool:
         return self._map_async(func, iterable,
                                asynchronous=False, applier=starapply)
 
+    # def starstarmap(self, func, iterable):
+    #     return self._map_async(func, iterable,
+    #                            asynchronous=False, applier=starstarapply)
+
     def map_async(self, func, iterable):
         """Maps one-argument function to an iterable in asynchronous way.
 
         Args:
             func (function): function object to multiprocess.
+                Can't accept lambdas.
             iterable (iterable): collection, range, map, zip,
                 generator, coroutine object containing arguments
                 to pass to func. The iterable is guaranteed to
@@ -233,6 +247,7 @@ class NonExceptionalProcessPool:
 
         Args:
             func (function): function object to multiprocess.
+                Can't accept lambdas.
             iterable (iterable): collection, range, map, zip,
                 generator, coroutine object containing arguments
                 to pass to func. The iterable is guaranteed to

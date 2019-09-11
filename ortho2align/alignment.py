@@ -42,6 +42,14 @@ class HSP:
     def __str__(self):
         return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} score {self.score} {self.orientation}"
 
+    def __eq__(self, other):
+        """Equality magic method."""
+        return (self.qstart == other.qstart and
+                self.qend == other.qend and
+                self.sstart == other.sstart and
+                self.send == other.send and
+                self.score == other.score)
+
     def precede(self, other):
         """Infers HSP precedence.
 
@@ -359,6 +367,14 @@ class Alignment:
     def __str__(self):
         return f"Alignment of {self.qlen} and {self.slen}\n" + "\n".join(hsp.__str__() for hsp in self.HSPs)
 
+    def __eq__(self, other):
+        """Equality magic method."""
+        if len(self._all_HSPs) != len(other._all_HSPs):
+            return False
+        if self.qlen != other.qlen or self.slen != other.slen:
+            return False
+        return all([i == k for i, k in zip(self._all_HSPs, other._all_HSPs)])
+
     def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None):
         """Plots alignment map."""
         for hsp in self.HSPs:
@@ -394,6 +410,8 @@ class Alignment:
             is not found in alignment fields.
         """
         line = file_object.readline()
+        if not line.startswith('#'):
+            raise ValueError("Provided file_object is not in accepted file format.")
 
         while not line.startswith("# Fields:"):
             line = file_object.readline()

@@ -15,6 +15,8 @@ Translation from other systems:
 1-based exclusive: start += -1, end += -1
 """
 import re
+from functools import partial
+from itertools import chain
 from pathlib import Path
 from subprocess import Popen, PIPE
 from io import TextIOWrapper
@@ -186,6 +188,7 @@ class SequencePath:
         return str(self.path)
 
     def __eq__(self, other):
+        """Equality magic method."""
         return self.path == other.path
 
     def to_dict(self):
@@ -310,6 +313,7 @@ class GenomicRange:
                f"{self.name}\t{self.genome}"
 
     def __eq__(self, other):
+        """Equality magic method."""
         return (self.chrom == other.chrom and self.start == other.start and
                 self.end == other.end and self.strand == other.strand and
                 self.genome == other.genome and
@@ -361,10 +365,12 @@ class GenomicRange:
 
     @property
     def sequence_file_path(self):
+        """`sequence_file_path` getter."""
         return self._sequence_file_path
 
     @sequence_file_path.setter
     def sequence_file_path(self, value):
+        """`sequence_file_path` setter."""
         self._sequence_file_path = SequencePath(value)
 
     def distance(self, other):
@@ -507,15 +513,15 @@ class GenomicRange:
                    '-task', 'blastn',
                    '-query', self.sequence_file_path,
                    '-subject', other.sequence_file_path,
-                   '-outfmt', '"7 std score"']
+                   '-outfmt', "7 std score"]
         add_args = sum((['-' + key, value]
                         for key, value in kwargs.items()),
                        [])
-        with Popen(command + add_args, stdout=PIPE) as proc:
+        with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
             alignment = Alignment.from_file(TextIOWrapper(proc.stdout))
         return AlignedRangePair(self, other, alignment)
 
-    def align_with_relation(self, relation='synteny', **kwargs):
+    def align_with_relation(self, relation, **kwargs):
         """Aligns genomic range with all its relations.
 
         Aligns given genomic range with all its
@@ -572,6 +578,11 @@ class GenomicRange:
                              f"relations for the {self}.")
 
 
+def align_with_relation_wrapper(grange, relation, **kwargs):
+    """Simple wrapper around GenomicRange method for multiprocessing."""
+    return grange.align_with_relation(relation, **kwargs)
+
+
 class AlignedRangePair:
     """An association of genomic ranges and their alignment.
 
@@ -603,13 +614,19 @@ class AlignedRangePair:
 
     def __repr__(self):
         """Returns representation of AlignedRangePair instance."""
-        return f"AlignedRangePair({repr(self.query_range)}, " \
-               f"{repr(self.subject_range)}, {repr(self.alignment)})"
+        return f"AlignedRangePair({repr(self.query_grange)}, " \
+               f"{repr(self.subject_grange)}, {repr(self.alignment)})"
 
     def __str__(self):
         """Returns string representation."""
         return f"AlignedRangePair\n{self.query_grange}\n" \
                f"{self.subject_grange}\n{self.alignment}"
+
+    def __eq__(self, other):
+        """Equality magic method."""
+        return (self.query_grange == other.query_grange and
+                self.subject_grange == other.subject_grange and
+                self.alignment == other.alignment)
 
     def to_dict(self):
         """Returns dict representation of AlignedRangePair instance."""
@@ -649,6 +666,7 @@ class FastaSeqFile:
             ChromosomseLocation instances.
         _file_obj: opened file under the
             sequence_file_path.
+        line_length: line length of fasta sequence.
     """
 
     def __init__(self, sequence_file_path):
@@ -671,6 +689,7 @@ class FastaSeqFile:
         return f"FastaSeqFile({self.sequence_file_path})"
 
     def __eq__(self, other):
+        """Equality magic method."""
         return self.sequence_file_path == other.sequence_file_path
 
     def to_dict(self):
@@ -690,10 +709,12 @@ class FastaSeqFile:
 
     @property
     def sequence_file_path(self):
+        """`sequence_file_path` getter"""
         return self._sequence_file_path
 
     @sequence_file_path.setter
     def sequence_file_path(self, value):
+        """`sequence_file_path` setter"""
         self._sequence_file_path = SequencePath(value)
 
     @property
@@ -737,6 +758,11 @@ class FastaSeqFile:
 
     @property
     def line_length(self):
+        """`line_length` getter.
+
+        Returns:
+            (int) length of sequence line in fasta file.
+        """
         if self._line_length is None:
             with open(self.sequence_file_path, 'r') as infile:
                 line = infile.readline()
@@ -755,6 +781,15 @@ class FastaSeqFile:
         self._file_obj.close()
 
     def locate_coordinate(self, chrom_start, coord):
+        """Puts file pointer to the beginning of the genomic range.
+
+        Args:
+            chrom_start (int): byte number of chromosome start.
+            coord (int): coordinate in the corresponding chromosome.
+
+        Returns:
+            None
+        """
         self._file_obj.seek(chrom_start + coord + coord // self.line_length)
 
     def get_fasta_by_coord(self, grange, outfile, linewidth=60):
@@ -823,6 +858,8 @@ class GenomicRangesList(SortedKeyList):
         name_mapping (dict of lists): dictionary with keys
             as genomic ranges names and values as lists of
             corresponding GenomicRange instances.
+        _verbose_amount (int): how many genomic ranges to
+            print at maximum (positive number) (default: 10).
 
     Class attributes:
         column_names (dict of lists): column names of selected
@@ -962,11 +999,16 @@ class GenomicRangesList(SortedKeyList):
                  'bed6': 'exclusive',
                  'bed12': 'exclusive'}
 
+    @classmethod
+    def key_func(cls, grange):
+        """Returns key for sorting of genomic ranges."""
+        return (grange.chrom, grange.start, grange.end)
+
     def __new__(cls, collection=[], sequence_file_path=None):
         """Makes new instance of GenomicRangesList."""
         instance = super().__new__(cls,
                                    iterable=collection,
-                                   key=lambda x: (x.chrom, x.start, x.end))
+                                   key=cls.key_func)
         return instance
 
     def __init__(self, collection=[], sequence_file_path=None):
@@ -981,7 +1023,7 @@ class GenomicRangesList(SortedKeyList):
             None.
         """
         super().__init__(iterable=collection,
-                         key=lambda x: (x.chrom, x.start, x.end))
+                         key=GenomicRangesList.key_func)
         self._sequence_file_path = SequencePath(sequence_file_path)
         self.sequence_file = FastaSeqFile(self.sequence_file_path)
         self._name_mapping = defaultdict(list)
@@ -1003,6 +1045,7 @@ class GenomicRangesList(SortedKeyList):
                f"{min(self._verbose_amount, len(self))} of {len(self)} genomic ranges."
 
     def __eq__(self, other):
+        """Equality magic method."""
         if len(self) != len(other):
             return False
         if self.sequence_file_path != other.sequence_file_path:
@@ -1250,14 +1293,20 @@ class GenomicRangesList(SortedKeyList):
         """
         if len(self) == 0:
             raise EmptyGenomicRangesListError(self)
+
+        process_func = partial(align_with_relation_wrapper,
+                               relation=relation,
+                               **kwargs)
+
         with NonExceptionalProcessPool(cores,
                                        verbose,
                                        suppress_exceptions) as p:
-            alignments, exceptions = p.map(lambda x: x.align_with_relation(relation,
-                                                                            **kwargs),
-                                           self)
+            alignments, exceptions = p.map(process_func, self)
 
-        return alignments, exceptions
+        if len(exceptions) > 0:
+            print(exceptions)
+
+        return list(chain.from_iterable(alignments))
 
     @classmethod
     def parse_annotation(cls,
