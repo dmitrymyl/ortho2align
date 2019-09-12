@@ -295,9 +295,7 @@ class GenomicRange:
         self.strand = strand
         self.genome = genome
         self._sequence_file_path = SequencePath(sequence_file_path)
-        self.sequence_header = f"{self.chrom}:{self.start}" \
-                               f"-{self.end}{self.strand}"
-        self.name = self.sequence_header if name is None else name
+        self._name = None if name is None else name
         self.relations = dict() if relations is None else relations
 
     def __repr__(self):
@@ -373,6 +371,16 @@ class GenomicRange:
         """`sequence_file_path` setter."""
         self._sequence_file_path = SequencePath(value)
 
+    @property
+    def sequence_header(self):
+        return f"{self.chrom}:{self.start}-{self.end}{self.strand}"
+
+    @property
+    def name(self):
+        if self._name is None:
+            return self.sequence_header
+        return self._name
+
     def distance(self, other):
         """Calculates distance between two genomic ranges.
 
@@ -436,6 +444,33 @@ class GenomicRange:
             raise InconsistentChromosomesError(self.chrom, other.chrom)
         start = min(self.start, other.start)
         end = max(self.end, other.end)
+        return GenomicRange(chrom=self.chrom,
+                            start=start,
+                            end=end,
+                            strand=".",
+                            genome=self.genome)
+
+    def flank(self, flank_distance=0):
+        """Flanks genomic range with the given distance.
+
+        Start coordinate is decreased and end
+        coordinate is increased by the flank distance.
+        Do not check if the start coordinate is negative or
+        the end coordinate exceeds chromosome size.
+
+        Args:
+            flank_distance (int): distance to flank
+                genomic range.
+
+        Returns:
+            (GenomicRange) flanked genomic range.
+        """
+        if - flank_distance * 2 > self.end - self.start:
+            raise ValueError(f"Flank distance value {flank_distance} "
+                             "is negative and greater than the "
+                             "half-length of the genomic range.")
+        start = self.start - flank_distance
+        end = self.end + flank_distance
         return GenomicRange(chrom=self.chrom,
                             start=start,
                             end=end,
@@ -1185,6 +1220,36 @@ class GenomicRangesList(SortedKeyList):
         for grange in tqdm(self):
             grange.relations[relation] = grange.find_neighbours(other,
                                                                 distance=distance)
+
+    def flank(self, distance=0, check_boundaries=True):
+        """Flanks all genomic ranges in the list with given distance.
+
+        Allows correction of new start and end coordinates in case
+        they exceeds corresponding chromosome size.
+
+        Args:
+            distance (int): value to flank genomic ranges
+                (default: 0).
+            check_boundaries (bool): whether to check if
+                new start coordinates are not less than zero
+                and new end coordinates are not greater than
+                corresponding chromosome sizes. If True, corrects
+                coordinates (default: False).
+
+        Returns:
+            (GenomicRangesList) new genomic ranges list with flanked
+                and corrected genomic ranges.
+        """
+        new_grangelist = GenomicRangesList([],
+                                           sequence_file_path=self.sequence_file_path)
+        for grange in tqdm(self):
+            new_grange = grange.flank(distance)
+            if check_boundaries:
+                new_grange.start = max(0, new_grange.start)
+                new_grange.end = min(self.sequence_file.chromsizes[new_grange.chrom].size,
+                                     new_grange.end)
+            new_grangelist.add(new_grange)
+        return new_grangelist
 
     def get_fasta(self, outfileprefix, mode='split'):
         """Extracts sequences of genomic ranges.

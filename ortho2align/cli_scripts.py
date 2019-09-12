@@ -10,6 +10,29 @@ from .orthodb import (load_table, filter_table, query_cached_odb_file,
                       split_odb_file, filter_odb_file)
 
 
+class CLIVerbose:
+    """
+    A context manager for verbosity before and after execution
+    of some commands.
+    """
+
+    def __init__(self, messages, target=sys.stdout):
+        """
+        Args:
+            messages (list): list with 2 items containing start message
+                and finish message.
+            target (fp): where to print messages (default: sys.stdout).
+        """
+        self.inmessage, self.outmessage = messages
+        self.target = target
+
+    def __enter__(self):
+        print(self.inmessage, file=self.target)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print(self.outmessage, file=self.target)
+
+
 def cache_orthodb_xrefs():
     parser = argparse.ArgumentParser(description='Cache OrthoDB gene ID cross-'
                                                  'references into specific '
