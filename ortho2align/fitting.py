@@ -48,6 +48,14 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         """
         pass
 
+    @abc.abstractmethod
+    def ppf(self, data):
+        pass
+
+    @abc.abstractmethod
+    def isf(self, data):
+        pass
+
     @classmethod
     def __subclasshook__(cls, C):
         """Magic method for issubclass() function."""
@@ -115,6 +123,12 @@ class HistogramFitter(AbstractFitter):
         """
         return self.estimator.sf(data)
 
+    def ppf(self, data):
+        return self.estimator.ppf(data)
+
+    def isf(self, data):
+        return self.estimator.isf(data)
+
 
 class KernelFitter(AbstractFitter):
 
@@ -161,7 +175,37 @@ class KernelFitter(AbstractFitter):
         Returns:
             (number or np.array) sf values of the items in data.
         """
+        # if isinstance(data, int) or isinstance(data, float):
+        #     return self.estimator.integrate_box_1d(data, np.Inf)
+        # return np.array([self.estimator.integrate_box_1d(x, np.Inf)
+        #                  for x in data])
+        return 1 - self.cdf(data)
+
+    def ppf(self, data):
         if isinstance(data, int) or isinstance(data, float):
-            return self.estimator.integrate_box_1d(data, np.Inf)
-        return np.array([self.estimator.integrate_box_1d(x, np.Inf)
-                         for x in data])
+            data = [data]
+        points = list()
+        for p in data:
+            left = min(data)
+            right = max(data)
+            point = (right + left) / 2
+            epsilon = (left - right) / self.estimator.n
+            result = self.cdf(point)
+            while abs(result - p) > epsilon:
+                if result > p:
+                    right = point
+                    point = (right + left) / 2
+                    result = self.cdf(point)
+                    epsilon = (left - right) / self.estimator.n  # TODO: refactor
+                else:
+                    left = point
+                    point = (right + left) / 2
+                    result = self.cdf(point)
+                    epsilon = (left - right) / self.estimator.n  # TODO: refactor
+            points.append(point)
+        if len(points) == 1:
+            return points[0]
+        return np.array(points)
+
+    def isf(self, data):
+        return 1 - self.ppf(data)

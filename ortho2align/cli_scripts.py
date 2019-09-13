@@ -1,13 +1,7 @@
 import os
 import sys
-import json
 import argparse
 import textwrap
-import pandas as pd
-from pathlib import Path
-from collections import defaultdict
-from .orthodb import (load_table, filter_table, query_cached_odb_file,
-                      split_odb_file, filter_odb_file)
 
 
 class CLIVerbose:
@@ -34,6 +28,12 @@ class CLIVerbose:
 
 
 def cache_orthodb_xrefs():
+
+
+    from pathlib import Path
+    from .orthodb import split_odb_file
+
+
     parser = argparse.ArgumentParser(description='Cache OrthoDB gene ID cross-'
                                                  'references into specific '
                                                  'directory.',
@@ -82,6 +82,16 @@ def cache_orthodb_xrefs():
 
 
 def get_orthodb_map():
+
+
+    import json
+    import pandas as pd
+    from pathlib import Path
+    from collections import defaultdict
+    from .orthodb import (load_table, filter_table, query_cached_odb_file,
+                          split_odb_file, filter_odb_file)
+
+
     external_dbs = ['GOterm',
                     'InterPro',
                     'NCBIproteinGI',
@@ -400,8 +410,291 @@ def get_orthodb_map():
     os.rmdir(tmp_proc)
 
 
-def get_orthologs():
-    pass
+def align_two_ranges(query, subject, **kwargs):
+    return query.align(subject, **kwargs)
+
+
+def estimate_background():
+    import random
+    import numpy as np
+    from .genomicranges import GenomicRangesList
+    from .parallel import NonExceptionalProcessPool
+
+    parser = argparse.ArgumentParser(description='Estimate background alignment scores.',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('-query_genes',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Query species gene annotation filename.')
+    parser.add_argument('-subject_genes',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Subject species gene annotation filename.')
+    parser.add_argument('-query_genome',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Query species genome filename (fasta format).')
+    parser.add_argument('-subject_genome',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Subject species genome filename (fasta format).')
+    parser.add_argument('-observations',
+                        type=int,
+                        nargs='?',
+                        required=True,
+                        help='Number of alignments to estimate background.')
+    parser.add_argument('-output',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='File to save background alignment scores. Uses numpy.save function.')
+    parser.add_argument('-cores',
+                        type=int,
+                        nargs='?',
+                        default=1,
+                        help='Number of cores to use for alignment multiprocessing.')
+    parser.add_argument('-seed',
+                        type=int,
+                        nargs='?',
+                        default=123,
+                        help='random seed number for sampling query genes and subject intergenic regions.')
+
+    args = parser.parse_args(sys.argv[2:])
+
+    random.seed = args.seed
+
+    query_genes_filename = args.query_genes
+    query_genes_filetype = query_genes_filename.split('.')[-1]
+    subject_genes_filename = args.subject_genes
+    subject_genes_filetype = subject_genes_filename.split('.')[-1]
+    query_genome_filename = args.query_genome
+    subject_genome_filename = args.subject_genome
+    observations = args.observations
+    output_filename = args.output
+    cores = args.cores
+
+    query_genes = GenomicRangesList.parse_annotation(query_genes_filename,
+                                                     filetype=query_genes_filetype,
+                                                     genome=query_genome_filename)
+    subject_genes = GenomicRangesList.parse_annotation(subject_genes_filename,
+                                                       filetype=subject_genes_filetype,
+                                                       genome=subject_genome_filename)
+    subject_genes = subject_genes.invert_ranges()
+    query_samples = GenomicRangesList([random.choice(query_genes) for _ in range(observations)],
+                                      query_genes.sequence_file_path)
+    subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
+                                         subject_genes.sequence_file_path)
+    query_samples.get_fasta('query_')
+    subject_samples.get_fasta('subject_')
+    sample_pairs = zip(query_samples, subject_samples)
+    
+    with NonExceptionalProcessPool(cores) as p:
+        alignments, exceptions = p.starmap(align_two_ranges, sample_pairs)
+
+    if len(exceptions) > 0:
+        print('Exceptions occured: ')
+        for exception in exceptions:
+            print(exception)
+
+    scores = [hsp.score for pair in alignments for hsp in pair.alignment.HSPs]
+    np.save(output_filename, scores, allow_pickle=False)
+
+
+def align_syntenies(grange):
+    grange.relations['neighbours'].get_fasta('neigh_')
+    grange.relations['syntenies'].get_fasta('synt_')
+    neighbourhood = grange.relations['neighbours'][0]
+    alignments = list()
+    for synteny in grange.relations['syntenies']:
+        pair = neighbourhood.align(synteny)
+        pair.alignment = pair.alignment.set_zero(neighbourhood.start,
+                                                 synteny.start) \
+                                       .cut_coordinates(qleft=grange.start,
+                                                        qright=grange.end)
+        pair.subject_grange = grange
+        alignments.append(pair)
+    return alignments
+
+
+
+def get_alignments():
+    import json
+    from .parallel import NonExceptionalProcessPool
+    from .genomicranges import GenomicRangesList, extract_taxid_mapping
+
+    parser = argparse.ArgumentParser(description='Get alignments',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-query_genes',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='query genes annotation filename')
+    parser.add_argument('-query_proteins',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='query proteins annotation filename')
+    parser.add_argument('-query_genome',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='query species genome filename (fasta)')
+    parser.add_argument('-subject_proteins',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='subject proteins annotation filename')
+    parser.add_argument('-subject_genome',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='subject genome filename (fasta)')
+    parser.add_argument('-ortho_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='orthology map filename')
+    parser.add_argument('-subject_taxid',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='subject species NCBI taxid')
+    parser.add_argument('-output',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename')
+    parser.add_argument('-neighbour_dist',
+                        type=int,
+                        nargs='?',
+                        default=0,
+                        help='distance to seek protein neighbours of query genes')
+    parser.add_argument('-flank_dist',
+                        type=int,
+                        nargs='?',
+                        default=0,
+                        help='how many nts to flank syntenic regions in subject species')
+    parser.add_argument('-merge_dist',
+                        type=int,
+                        nargs='?',
+                        default=0,
+                        help='how distant two subject proteins can be to be merged into one syntenic region')
+
+
+    args = parser.parse_args(sys.argv[2:])
+
+    
+    query_genes_filename = args.query_genes
+    query_genes_filetype = query_genes_filename.split('.')[-1]
+    query_genome_filename = args.query_genome
+    query_proteins_filename = args.query_proteins
+    query_proteins_filetype = query_proteins_filename.split('.')[-1]
+    subject_proteins_filename = args.subject_proteins
+    subject_proteins_filetype = subject_proteins_filename.split('.')[-1]
+    subject_genome_filename = args.subject_genome
+    ortho_map_filename = args.ortho_map
+    output_filename = args.output
+    subject_taxid = args.subject_taxid
+    neighbour_dist = args.neighbour_dist
+    merge_dist = args.merge_dist
+    flank_dist = args.flank_dist
+
+    query_genes = GenomicRangesList.parse_annotation(query_genes_filename,
+                                                     filetype=query_genes_filetype,
+                                                     genome=query_genome_filename)
+    query_proteins = GenomicRangesList.parse_annotation(query_proteins_filename,
+                                                        filetype=query_proteins_filetype,
+                                                        genome=query_genome_filename)
+    subject_proteins = GenomicRangesList.parse_annotation(subject_proteins_filename,
+                                                          filetype=subject_proteins_filetype,
+                                                          genome=subject_genome_filename)
+    with open(ortho_map_filename, 'r') as mapfile:
+        ortho_map = json.load(mapfile)
+
+    ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
+    query_proteins.relation_mapping(subject_proteins,
+                                    ortho_map,
+                                    'orthologs')
+    query_genes.get_neighbours(query_proteins,
+                               neighbour_dist,
+                               'neighbours')
+    for query_gene in query_genes:
+        query_gene.relations['syntenies'] = GenomicRangesList([],
+                                                              genome=subject_genome_filename)
+
+        for neighbour in query_gene.relations['neighbours']:
+            query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
+
+        query_gene.relation['syntenies'] = query_genes.relation['syntenies'] \
+                                                      .flank(flank_dist) \
+                                                      .merge(merge_dist) \
+        query_gene.relation['neighbours'] = query_gene.relation['neighbours'] \
+                                                      .merge(2 * neighbour_dist
+                                                             + query_gene.end
+                                                             - query_gene.start)
+
+    with NonExceptionalProcessPool(cores) as p:
+        alignments, exceptions = p.map(align_syntenies, query_genes)
+
+    if len(exceptions) > 0:
+        print('Exceptions occured: ')
+        for exception in exceptions:
+            print(exception)
+
+    alignments = [pair.to_dict()
+                  for group in alignments
+                  for pair in group]
+
+    with open(output_filename, 'w') as outfile:
+        json.dump(outfile, alignments)
+
+
+def refine_alignments():
+
+
+    import json
+    import numpy as np
+    from .genomicranges import AlignedRangePair
+    from .parallel import HistogramFitter, KernelFitter
+
+
+    alignments_filename = ""
+    background_filename = ""
+    fitting_type = ""
+    query_output_filename = ""
+    subject_output_filename = ""
+    pval_treshold = 0
+
+
+    with open(alignments_filename, 'r') as infile:
+        alignment_data = json.load(infile)
+
+    alignment_data = [AlignedRangePair.from_dict(item) for item in alignment_data]
+
+    background_data = np.load(backgroud_filename)
+
+    if fitting_type == 'histogram':
+        fitter = HistogramFitter
+    elif fitting_type == 'kernel':
+        fitter = KernelFitter
+
+    background = fitter(background_data)
+    score_threshold = background.isf(pval_treshold)
+
+    for pair in alignment_data:
+        pair.alignment.filter_by_socre(score_threshold)
+        transcript = pair.alignment.best_transcript()
+        record = transcript.to_bed12()
+
+
+
+
+
 
 
 def ortho2align():
@@ -415,14 +708,23 @@ def ortho2align():
         get_orthodb_map         Retrieve mapping of OrthoDB genes in query
                                 species to known orthologs in subject species.
 
-        get_orthologs           Find orthologs of provided query genes in
+        estimate_background     Estimate background distribution of alignment scores
+                                between query genes and subject species intergenic
+                                regions.
+
+        get_alignments          Find orthologs of provided query genes in
                                 subject species.
+
+        refine_alignments       Refine alignments based on chosen strategy and
+                                build final orthologous transcripts.
 
     Run ortho2align <command> -h for help on a specific command.
     '''
     commands = {'cache_orthodb_xrefs': cache_orthodb_xrefs,
                 'get_orthodb_map': get_orthodb_map,
-                'get_orthologs': get_orthologs}
+                'estimate_background': estimate_background,
+                'get_alignments': get_alignments,
+                'refine_alignments': refine_alignments}
     parser = argparse.ArgumentParser(description='ortho2align set of programms.',
                                      usage=textwrap.dedent(usage))
     parser.add_argument('command',
