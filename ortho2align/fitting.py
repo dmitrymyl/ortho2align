@@ -67,6 +67,27 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         return NotImplemented
 
 
+def inverse_approximator(value, function, left, right, epsilon, increasing=True, iterations=100):
+    if right <= left:
+        raise ValueError(f"`right` must be greater than `left`.")
+    point = (right + left) / 2
+    result = function(point)
+    counter = 0
+    while abs(result - value) > epsilon and counter < iterations:
+        if result == value:
+            return point
+        elif increasing == (result > value):
+            right = point
+            point = (right + left) / 2
+            result = function(point)
+        else:
+            left = point
+            point = (right + left) / 2
+            result = function(point)
+        counter += 1
+    return point
+
+
 class HistogramFitter(AbstractFitter):
     """Fits empirical data with histogram and produces continuous distribution."""
 
@@ -181,31 +202,41 @@ class KernelFitter(AbstractFitter):
         #                  for x in data])
         return 1 - self.cdf(data)
 
-    def ppf(self, data):
+    def ppf(self, data, epsilon='auto'):
         if isinstance(data, int) or isinstance(data, float):
             data = [data]
         points = list()
+        if epsilon == 'auto':
+            epsilon = (max(self.data) - min(self.data)) / self.estimator.n
+        elif not (isinstance(epsilon, int) or isinstance(epsilon, float)):
+            raise ValueError('Provided epsilon is not an "auto", int or float instance.')
         for p in data:
-            left = min(data)
-            right = max(data)
-            point = (right + left) / 2
-            epsilon = (left - right) / self.estimator.n
-            result = self.cdf(point)
-            while abs(result - p) > epsilon:
-                if result > p:
-                    right = point
-                    point = (right + left) / 2
-                    result = self.cdf(point)
-                    epsilon = (left - right) / self.estimator.n  # TODO: refactor
-                else:
-                    left = point
-                    point = (right + left) / 2
-                    result = self.cdf(point)
-                    epsilon = (left - right) / self.estimator.n  # TODO: refactor
+            point = inverse_approximator(p,
+                                         self.cdf,
+                                         min(self.data),
+                                         max(self.data),
+                                         epsilon)
             points.append(point)
         if len(points) == 1:
             return points[0]
         return np.array(points)
 
-    def isf(self, data):
-        return 1 - self.ppf(data)
+    def isf(self, data, epsilon='auto'):
+        if isinstance(data, int) or isinstance(data, float):
+            data = [data]
+        points = list()
+        if epsilon == 'auto':
+            epsilon = (max(self.data) - min(self.data)) / self.estimator.n
+        elif not (isinstance(epsilon, int) or isinstance(epsilon, float)):
+            raise ValueError('Provided epsilon is not an "auto", int or float instance.')
+        for p in data:
+            point = inverse_approximator(p,
+                                         self.sf,
+                                         min(self.data),
+                                         max(self.data),
+                                         epsilon,
+                                         increasing=False)
+            points.append(point)
+        if len(points) == 1:
+            return points[0]
+        return np.array(points)

@@ -29,7 +29,6 @@ class CLIVerbose:
 
 def cache_orthodb_xrefs():
 
-
     from pathlib import Path
     from .orthodb import split_odb_file
 
@@ -82,7 +81,6 @@ def cache_orthodb_xrefs():
 
 
 def get_orthodb_map():
-
 
     import json
     import pandas as pd
@@ -492,7 +490,7 @@ def estimate_background():
     query_samples.get_fasta('query_')
     subject_samples.get_fasta('subject_')
     sample_pairs = zip(query_samples, subject_samples)
-    
+
     with NonExceptionalProcessPool(cores) as p:
         alignments, exceptions = p.starmap(align_two_ranges, sample_pairs)
 
@@ -519,7 +517,6 @@ def align_syntenies(grange):
         pair.subject_grange = grange
         alignments.append(pair)
     return alignments
-
 
 
 def get_alignments():
@@ -588,7 +585,6 @@ def get_alignments():
 
     args = parser.parse_args(sys.argv[2:])
 
-    
     query_genes_filename = args.query_genes
     query_genes_filetype = query_genes_filename.split('.')[-1]
     query_genome_filename = args.query_genome
@@ -642,7 +638,7 @@ def get_alignments():
         alignments, exceptions = p.map(align_syntenies, query_genes)
 
     if len(exceptions) > 0:
-        print('Exceptions occured: ')
+        print('Exceptions occured:')
         for exception in exceptions:
             print(exception)
 
@@ -656,7 +652,6 @@ def get_alignments():
 
 def refine_alignments():
 
-
     import json
     import numpy as np
     from .genomicranges import AlignedRangePair
@@ -669,7 +664,6 @@ def refine_alignments():
     query_output_filename = ""
     subject_output_filename = ""
     pval_treshold = 0
-
 
     with open(alignments_filename, 'r') as infile:
         alignment_data = json.load(infile)
@@ -689,7 +683,7 @@ def refine_alignments():
     for pair in alignment_data:
         pair.alignment.filter_by_socre(score_threshold)
         transcript = pair.alignment.best_transcript()
-        record = transcript.to_bed12()
+        record = transcript.to_bed12()  # TODO: transcript.to_bed12()
 
 
 

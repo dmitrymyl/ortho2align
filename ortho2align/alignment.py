@@ -1,6 +1,23 @@
 import matplotlib.pyplot as plt
 
 
+def compare(a, b, side='g'):
+    if side == 'g':
+        return a > b
+    elif side == 'l':
+        return a < b
+    elif side == 'eq':
+        return a == b
+    elif side == 'neq':
+        return a != b
+    elif side == 'geq':
+        return a >= b
+    elif side == 'leq':
+        return a <= b
+    else:
+        raise ValueError('Incorrect side argument.')
+
+
 class HSP:
     """
     High-scoring pair from BLAST alignment representing
@@ -391,7 +408,7 @@ class Alignment:
         plt.ylabel("Subject")
 
     @staticmethod
-    def from_file(file_object):
+    def from_file(file_object, start_type=1, end_type='inclusive'):
         """File parser.
 
         Takes file object that corresponds to
@@ -429,6 +446,14 @@ class Alignment:
             hsp = file_object.readline().strip().split("\t")
             hsp = [numberize(item) for item in hsp]
             hsp = HSPVertex(**dict(zip(fields, hsp)))
+            if start_type == 1:
+                hsp.qstart -= 1
+                hsp.qend -= 1
+                hsp.sstart -= 1
+                hsp.send -= 1
+            if end_type == 'inclusive':
+                hsp.qend += 1
+                hsp.send += 1
             HSPs.append(hsp)
         return Alignment(HSPs, hsp.kwargs.get('qlen'), hsp.kwargs.get('slen'))
 
@@ -457,7 +482,7 @@ class Alignment:
                              for item in dict_.get('filtered_HSPs')]
         return Alignment(HSPs, qlen, slen, filtered_HSPs)
 
-    def filter_by_score(self, score):
+    def filter_by_score(self, score, side='g'):
         """Filters HSPs by score.
 
         All HSPs being stored in `self._all_HSPs`,
@@ -471,7 +496,15 @@ class Alignment:
         Returns:
             None
         """
-        self.HSPs = [hsp for hsp in self._all_HSPs if hsp.score > score]
+        self.HSPs = [hsp
+                     for hsp in self.HSPs
+                     if compare(hsp.score, score, side)]
+        self.filtered = True
+
+    def filter_by_function_score(self, function, score, side='g'):
+        self.HSPs = [hsp
+                     for hsp in self.HSPs
+                     if compare(function(hsp.score), score, side)]
         self.filtered = True
 
     def reset_filter_by_score(self):
