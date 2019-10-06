@@ -654,16 +654,52 @@ def refine_alignments():
 
     import json
     import numpy as np
+    from pathlib import Path
     from .genomicranges import AlignedRangePair
     from .parallel import HistogramFitter, KernelFitter
 
+    parser = argparse.ArgumentParser(description='',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-alignments',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='input alignments filename produced with ortho2align get_alignments.')
+    parser.add_argument('-background',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='background file produced with ortho2align estimate_background.')
+    parser.add_argument('-fitting',
+                        type=str,
+                        nargs='?',
+                        choices=['kde', 'hist'],
+                        default='kde',
+                        help='approach to fit background distribution (kde: KDE, hist: Histogram).')
+    parser.add_argument('-threshold',
+                        type=float,
+                        nargs='?',
+                        default=0.05,
+                        help='p-value threshold to filter HSPs by score.')
+    parser.add_argument('-query_output',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename for query transcripts.')
+    parser.add_argument('-subject_output',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename for subject transcripts.')
 
-    alignments_filename = ""
-    background_filename = ""
-    fitting_type = ""
-    query_output_filename = ""
-    subject_output_filename = ""
-    pval_treshold = 0
+    args = parser.parse_args(sys.argv[2:])
+
+    alignments_filename = Path(args.alignments)
+    background_filename = Path(args.background)
+    fitting_type = args.fitting
+    query_output_filename = Path(args.query_output)
+    subject_output_filename = Path(args.subject_output)
+    pval_treshold = args.threshold
 
     with open(alignments_filename, 'r') as infile:
         alignment_data = json.load(infile)
@@ -679,16 +715,22 @@ def refine_alignments():
 
     background = fitter(background_data)
     score_threshold = background.isf(pval_treshold)
+    query_transcripts = list()
+    subject_transcripts = list()
 
     for pair in alignment_data:
         pair.alignment.filter_by_socre(score_threshold)
         transcript = pair.alignment.best_transcript()
         record = transcript.to_bed12()  # TODO: transcript.to_bed12()
+        query_transcripts.append(record[0])
+        subject_transcripts.append(record[1])
 
-
-
-
-
+    with open(query_output_filename, 'w') as outfile:
+        for record in query_transcripts:
+            outfile.write(record + "\n")
+    with open(subject_output_filename, 'w') as outfile:
+        for record in subject_transcripts:
+            outfile.write(record + "\n")
 
 
 def ortho2align():

@@ -2,6 +2,29 @@ import matplotlib.pyplot as plt
 
 
 def compare(a, b, side='g'):
+    """Calculates boolean function of two values.
+
+    Args:
+        a: the first argument to compare
+            with the second argument.
+        b: the second argument to compare
+            with the first argument.
+        side (str): boolean function code which
+            is used to compare a with b. The accepted
+            values are:
+            'g': greater, a > b
+            'l': less, a < b
+            'eq': equal, a == b
+            'neq': not equal, a != b
+            'geq': greater or equal, a >= b
+            'leq': less or equal, a <= b
+    Returns:
+        (bool) True or False, result of comparison
+        of a and b with side function.
+    Raises:
+        ValueError in case side is not one of 'g',
+            'l', 'eq', 'neq', 'geq', 'leq'.
+    """
     if side == 'g':
         return a > b
     elif side == 'l':
@@ -57,7 +80,8 @@ class HSP:
         return f"HSP({', '.join(params_list)})"
 
     def __str__(self):
-        return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} score {self.score} {self.orientation}"
+        return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} " \
+               f"score {self.score} {self.orientation}"
 
     def __eq__(self, other):
         """Equality magic method."""
@@ -269,7 +293,8 @@ class HSPVertex(HSP):
 
     def __str__(self):
         next_vertices_str = "\t" + "\n\t".join(" ".join(str(i).split(" ")[:-1]) for i in self.next_vertices)
-        return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} score {self.score} {self.orientation}\n" + next_vertices_str
+        return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} score " \
+               f"{self.score} {self.orientation}\n" + next_vertices_str
 
     def _relax(self, other, weight):
         """A relax method for dynamic programming.
@@ -382,7 +407,8 @@ class Alignment:
         return f"Alignment({self.HSPs.__repr__()}, {self.qlen}, {self.slen})"
 
     def __str__(self):
-        return f"Alignment of {self.qlen} and {self.slen}\n" + "\n".join(hsp.__str__() for hsp in self.HSPs)
+        return f"Alignment of {self.qlen} and {self.slen}\n" + \
+               "\n".join(hsp.__str__() for hsp in self.HSPs)
 
     def __eq__(self, other):
         """Equality magic method."""
@@ -485,13 +511,24 @@ class Alignment:
     def filter_by_score(self, score, side='g'):
         """Filters HSPs by score.
 
-        All HSPs being stored in `self._all_HSPs`,
+        All HSPs being stored in `self.HSPs`,
         the method puts those HSPs in `self.HSPs`
-        that have score greater than `score`.
+        that have score compared to `score` in a
+        manner specified by `side` argument. As default (side='g'),
+        HSP.score have to be greater than `score`.
 
         Args:
             self: Alignment instance;
-            score: score to filter by.
+            score (int): score to filter by.
+            side (str): a side to compare score and HSP
+                scores by. One of:
+                'g' for greater (HSP.score > score)
+                'l' for less (HSP.score < score)
+                'eq' for equal (HSP.score == score)
+                'neq' for not equal (HSP.score != score)
+                'geq' for greater or equal (HSP.score >= score)
+                'leq' for less or equal (HSP.score <= score)
+                Default: 'g'.
 
         Returns:
             None
@@ -502,6 +539,32 @@ class Alignment:
         self.filtered = True
 
     def filter_by_function_score(self, function, score, side='g'):
+        """Filter HSPs by function value of score.
+
+        All HSPs being stored in `self.HSPs`,
+        the method puts those HSPs in `self.HSPs`
+        that have function value of score compared to `score` in a
+        manner specified by `side` argument. As default (side='g'),
+        function(HSP.score) have to be greater than `score`.
+
+        Args:
+            self: Alignment instance;
+            function (callable): a function to apply to
+                HSP.score.
+            score (int): score to filter by.
+            side (str): a side to compare score and function results
+                by. One of:
+                'g' for greater (HSP.score > score)
+                'l' for less (HSP.score < score)
+                'eq' for equal (HSP.score == score)
+                'neq' for not equal (HSP.score != score)
+                'geq' for greater or equal (HSP.score >= score)
+                'leq' for less or equal (HSP.score <= score)
+                Default: 'g'.
+
+        Returns:
+            None
+        """
         self.HSPs = [hsp
                      for hsp in self.HSPs
                      if compare(function(hsp.score), score, side)]
