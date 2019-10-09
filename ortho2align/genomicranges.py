@@ -514,8 +514,8 @@ class GenomicRange:
             pass
         return neighbours
 
-    def align(self, other, **kwargs):
-        """Aligns two genomic ranges with blastn.
+    def align_blast(self, other, program='blastn', task='blastn', **kwargs):
+        """Aligns two genomic ranges with BLAST.
 
         If both genomic ranges have their sequences
         stored in separate files, aligns them with
@@ -527,6 +527,10 @@ class GenomicRange:
         Args:
             other (GenomicRange): genomic range to
                 align self with.
+            program (str): a program from Standalone
+                BLAST to use (default: 'blastn')
+            task (str): which task from a BLAST program
+                use (default: 'blastn')
             kwargs (dict): any command line arguments
                 to blastn in the following scheme:
                 {'flag': 'value'}.
@@ -543,9 +547,13 @@ class GenomicRange:
         """
         for grange in (self, other):
             grange.sequence_file_path.check_correct()
+        
+        if program not in ['blastn', 'blastp']:
+            raise ValueError("`program` attribute is not one of "
+                             "['blastn', 'blastp']")
 
-        command = ['blastn',
-                   '-task', 'blastn',
+        command = [program,
+                   '-task', task,
                    '-query', self.sequence_file_path,
                    '-subject', other.sequence_file_path,
                    '-outfmt', "7 std score"]
@@ -553,7 +561,9 @@ class GenomicRange:
                         for key, value in kwargs.items()),
                        [])
         with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
-            alignment = Alignment.from_file(TextIOWrapper(proc.stdout))
+            alignment = Alignment.from_file_blast(TextIOWrapper(proc.stdout),
+                                                  self.chrom,
+                                                  other.chrom)
         return AlignedRangePair(self, other, alignment)
 
     def align_with_relation(self, relation, **kwargs):
@@ -583,7 +593,7 @@ class GenomicRange:
                              f"{self.relations.keys()}.")
         alignment_list = list()
         for grange in self.relations[relation]:
-            alignment_list.append(self.align(grange, **kwargs))
+            alignment_list.append(self.align_blast(grange, **kwargs))
         return alignment_list
 
     def merge_relations(self, relation, distance=0):

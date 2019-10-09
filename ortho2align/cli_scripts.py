@@ -509,7 +509,7 @@ def align_syntenies(grange):
     neighbourhood = grange.relations['neighbours'][0]
     alignments = list()
     for synteny in grange.relations['syntenies']:
-        pair = neighbourhood.align(synteny)
+        pair = neighbourhood.align_blast(synteny)
         pair.alignment = pair.alignment.set_zero(neighbourhood.start,
                                                  synteny.start) \
                                        .cut_coordinates(qleft=grange.start,

@@ -49,20 +49,27 @@ class HSP:
     orientation_dict = {(True, True): 'direct',
                         (True, False): 'reverse'}
 
-    def __init__(self, qstart, qend, sstart, send, score, **kwargs):
-        """Inits HSP class.
+    def __init__(self, qstart, qend, sstart, send, score, qchrom=None, schrom=None, **kwargs):
+        """Initializes HSP class.
 
         Args:
             qstart (int): start of HSP in query sequence.
             qend (int): end of HSP in query sequence.
             sstart (int): start of HSP in subject sequence.
             send (int): end of HSP in subject sequence.
+            score (int, float): alignment score of HSP.
+            qchrom (int, str): chromosome of query sequence
+                (default: None).
+            schrom (int, str): chromosome of subject sequence
+                (default: None).
         """
         self.qstart = qstart
         self.qend = qend
         self.sstart = sstart
         self.send = send
         self.score = score
+        self.qchrom = qchrom
+        self.schrom = schrom
         self.kwargs = kwargs
         self.qstrand = self.qend - self.qstart > 0
         self.sstrand = self.send - self.sstart > 0
@@ -76,7 +83,9 @@ class HSP:
                                  self.qend,
                                  self.sstart,
                                  self.send,
-                                 self.score)] + ["**" + kwargs_repr]
+                                 self.score,
+                                 self.qchrom,
+                                 self.schrom)] + ["**" + kwargs_repr]
         return f"HSP({', '.join(params_list)})"
 
     def __str__(self):
@@ -177,7 +186,7 @@ class HSP:
     @staticmethod
     def from_dict(dict_):
         """Recovers from a dict representation."""
-        keys = ['qstart', 'qend', 'sstart', 'send', 'score']
+        keys = ['qstart', 'qend', 'sstart', 'send', 'score', 'qchrom', 'schrom']
         return HSP(*[dict_.get(key, None) for key in keys],
                    **dict_.get('kwargs', dict()))
 
@@ -191,6 +200,8 @@ class HSP:
                    self.sstart,
                    self.send,
                    self.score,
+                   self.qchrom,
+                   self.schrom,
                    **self.kwargs)
 
     @staticmethod
@@ -267,7 +278,7 @@ class HSPVertex(HSP):
     operations (contains a list of neighbours).
     """
 
-    def __init__(self, qstart, qend, sstart, send, score, **kwargs):
+    def __init__(self, qstart, qend, sstart, send, score, qchrom=None, schrom=None, **kwargs):
         """Inits HSPVertex class.
 
         Args:
@@ -275,8 +286,12 @@ class HSPVertex(HSP):
             qend (int): end of HSP in query sequence.
             sstart (int): start of HSP in subject sequence.
             send (int): end of HSP in subject sequence.
+            qchrom (int, str): chromosome of query sequence
+                (default: None).
+            schrom (int, str): chromosome of subject sequence
+                (default: None).
         """
-        super().__init__(qstart, qend, sstart, send, score, **kwargs)
+        super().__init__(qstart, qend, sstart, send, score, qchrom=qchrom, schrom=schrom, **kwargs)
         self.next_vertices = []
         self.total_score = float("Inf")
         self.best_prev = None
@@ -288,7 +303,9 @@ class HSPVertex(HSP):
                                  self.qend,
                                  self.sstart,
                                  self.send,
-                                 self.score)] + ["**" + kwargs_repr]
+                                 self.score,
+                                 self.qchrom,
+                                 self.schrom)] + ["**" + kwargs_repr]
         return f"HSPVertex({', '.join(params_list)})"
 
     def __str__(self):
@@ -378,7 +395,7 @@ class Alignment:
                     'query length': 'qlen',
                     'subject length': 'slen'}
 
-    def __init__(self, HSPs, qlen=None, slen=None, filtered_HSPs=None):
+    def __init__(self, HSPs, qlen=None, slen=None, qchrom=None, schrom=None, filtered_HSPs=None):
         """Inits Alignment class.
 
         Args:
@@ -401,10 +418,12 @@ class Alignment:
                          max(self._all_HSPs,
                              key=lambda hsp: hsp.send).send + 1)
                      if slen is None else slen)
+        self.qchrom = qchrom
+        self.schrom = schrom
         self.filtered = False if filtered_HSPs is None else True
 
     def __repr__(self):
-        return f"Alignment({self.HSPs.__repr__()}, {self.qlen}, {self.slen})"
+        return f"Alignment({self.HSPs.__repr__()}, {self.qlen}, {self.slen}, {self.qchrom}, {self.schrom})"
 
     def __str__(self):
         return f"Alignment of {self.qlen} and {self.slen}\n" + \
@@ -434,7 +453,7 @@ class Alignment:
         plt.ylabel("Subject")
 
     @staticmethod
-    def from_file(file_object, start_type=1, end_type='inclusive'):
+    def from_file_blast(file_object, qchrom, schrom, start_type=1, end_type='inclusive'):
         """File parser.
 
         Takes file object that corresponds to
@@ -444,6 +463,10 @@ class Alignment:
 
         Args:
             file_object: file object.
+            qchrom
+            schrom
+            start_type
+            end_type
 
         Returns:
             An Alignment instance.
@@ -465,12 +488,12 @@ class Alignment:
                              "Please provide an alignment file with score "
                              "field (raw score, not bit score).")
         fields = [Alignment.replace_dict.get(item, item)
-                  for item in fields]
+                  for item in fields] + ['qchrom', 'schrom']
         hit_number = int(file_object.readline().split(" ")[1])
         HSPs = list()
         for i in range(hit_number):
             hsp = file_object.readline().strip().split("\t")
-            hsp = [numberize(item) for item in hsp]
+            hsp = [numberize(item) for item in hsp] + [qchrom, schrom]
             hsp = HSPVertex(**dict(zip(fields, hsp)))
             if start_type == 1:
                 hsp.qstart -= 1
@@ -481,16 +504,22 @@ class Alignment:
                 hsp.qend += 1
                 hsp.send += 1
             HSPs.append(hsp)
-        return Alignment(HSPs, hsp.kwargs.get('qlen'), hsp.kwargs.get('slen'))
+        return Alignment(HSPs,
+                         hsp.kwargs.get('qlen'),
+                         hsp.kwargs.get('slen'),
+                         qchrom,
+                         schrom)
 
     def to_dict(self):
         """Transforms instance to dict representation."""
-        keys = ['HSPs', 'qlen', 'slen', 'filtered_HSPs', 'filtered']
+        keys = ['HSPs', 'qlen', 'slen', 'qchrom', 'schrom', 'filtered_HSPs', 'filtered']
         HSPs = [hsp.to_dict() for hsp in self._all_HSPs]
         filtered_HSPs = [hsp.to_dict() for hsp in self.HSPs]
         return dict(zip(keys, [HSPs,
                                self.qlen,
                                self.slen,
+                               self.qchrom,
+                               self.schrom,
                                filtered_HSPs,
                                self.filtered]))
 
@@ -938,6 +967,16 @@ class Transcript:
         return dict(zip(keys, [HSPs,
                                alignment,
                                self.score]))
+
+    def to_bed12(self):
+        """
+        From hsps can get chromStart (2), chromEnd (3), score (5),
+        thickStart = chromStart (7), thickEnd = chromEnd (8),
+        blockCount (10), blockSizes (11), blockStarts (12).
+        Must get additional information into HSPs or Alignment instance
+        chrom (1 -- done), name (4), strand (6 -- XNOR of Alignment strand and HSP strand).
+        Another: itemRgb(9).
+        """
 
     @staticmethod
     def from_dict(dict_):
