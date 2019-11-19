@@ -32,6 +32,8 @@ Input files are:
 
 First, the packages inferes protein neighbourhood of query sequences in the genome of query species at the given radius with `bedtools window -w radius`. Next, it retrieves orthologs of neighbouring proteins in the target genome and construct quasi-syntenic regions. In case orthologous protein in the target genome are placed within merge distance, then they will be merged. After there are no possibilities to merge, derived syntenic ranges can be flanked to some extent. This might be helpful in case protein neihbourhood of one query sequence contain only one protein. There might be more than one quasi-syntenic regions for one query sequence due to paralogues.
 
+TODO: add image of synteny estimation.
+
 Query sequences and quasi-syntenic regions are extracted from corresponding genomes with `bedtools getfasta` one fasta file per sequence with names following the pattern: chromosome:start-end(strand), where chromosome corresponds to fasta headers in genome files, start and end are integer genomic positions and strand is either "+", "-" or "." (without quotes).
 
 Then query sequences are aligned against their syntenic regions with BLAT. User can define tile size and minimal identity of sequences to report. BLAT was chosen for its convenient psl3 format of alignments, that provides exon-intron-like structure of aligned regions. Alignment of many sequences can take a lot of time so user can specify how many cores can be used for alignment process.
@@ -49,6 +51,7 @@ All scripts produce json files.
 * `get_fasta.py` retrieves query and syntenic target sequences one per file from given query and target genomes.
 * `grid_alignment.py`performs alignment of query sequences to target syntenies.
 * `ortho2align.py` master script to ~~rule them all~~ run listed above scripts in sequential manner. All output files produced by the scripts have fixed names, so user can run each step separately as long as one follows naming conventions.
+
 TODO: add image of data flow within scripts.
 
 # TODO
@@ -56,3 +59,4 @@ TODO: add image of data flow within scripts.
 * add synteny map example
 * add orthodb file processing
 * add examples folder
+* correct software versions
