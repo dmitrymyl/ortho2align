@@ -41,6 +41,25 @@ def compare(a, b, side='g'):
         raise ValueError('Incorrect side argument.')
 
 
+def nxor_strands(hsp_strand, alignment_strand):
+    """Returns NXOR of hsp strand and alignment strand.
+    
+    Args:
+        hsp_strand (boolean): HSP.qstrand or HSP.sstrand.
+        qlignment_strand (str): Alignment.qstrand or Alignment.sstrand.
+            One of "+", "-", ".".
+
+    Returns:
+        (str): "+" if both strands are concordant, "-" otherwise.
+            "." is equal to "+".
+    """
+    _alignment_strand = alignment_strand in ['+', '.']
+    if hsp_strand == _alignment_strand:
+        return "+"
+    else:
+        return "-"
+
+
 class HSP:
     """
     High-scoring pair from BLAST alignment representing
@@ -395,7 +414,17 @@ class Alignment:
                     'query length': 'qlen',
                     'subject length': 'slen'}
 
-    def __init__(self, HSPs, qlen=None, slen=None, qchrom=None, schrom=None, filtered_HSPs=None):
+    def __init__(self,
+                 HSPs,
+                 qlen=None,
+                 slen=None,
+                 qchrom=None,
+                 schrom=None,
+                 qname=None,
+                 sname=None,
+                 qstrand='.',
+                 sstrand='.',
+                 filtered_HSPs=None):
         """Inits Alignment class.
 
         Args:
@@ -404,6 +433,14 @@ class Alignment:
                 (default: None);
             slen (int): subject sequence length
                 (default: None);
+            qchrom (str, int): query chromosome name (default: None).
+            schrom (str, int): subject chromosome name (default: None).
+            qname (str): query sequence name (default: None).
+            sname (str): subject sequence name (default: None).
+            qstrand (str): query sequence name.
+                One of "+", "-", "." (default: ".").
+            sstrand (str): subject sequence name. 
+                One of "+", "-", "." (default: ".").
             filtered_HSPs (list): list of HSP instances
                 that were filtered by some criterion
                (default: None).
@@ -420,6 +457,10 @@ class Alignment:
                      if slen is None else slen)
         self.qchrom = qchrom
         self.schrom = schrom
+        self.qname = qname
+        self.sname = sname
+        self.qstrand = qstrand
+        self.sstrand = sstrand
         self.filtered = False if filtered_HSPs is None else True
 
     def __repr__(self):
@@ -453,7 +494,15 @@ class Alignment:
         plt.ylabel("Subject")
 
     @staticmethod
-    def from_file_blast(file_object, qchrom, schrom, start_type=1, end_type='inclusive'):
+    def from_file_blast(file_object,
+                        qchrom=None,
+                        schrom=None,
+                        qname=None,
+                        sname=None,
+                        qstrand='.',
+                        sstrand='.',
+                        start_type=1,
+                        end_type='inclusive'):
         """File parser.
 
         Takes file object that corresponds to
@@ -463,10 +512,18 @@ class Alignment:
 
         Args:
             file_object: file object.
-            qchrom
-            schrom
-            start_type
-            end_type
+            qchrom (str, int): query chromosome name (default: None).
+            schrom (str, int): subject chromosome name (default: None).
+            qname (str): query sequence name (default: None).
+            sname (str): subject sequence name (default: None).
+            qstrand (str): query sequence name.
+                One of "+", "-", "." (default: ".").
+            sstrand (str): subject sequence name. 
+                One of "+", "-", "." (default: ".").
+            start_type (int): chromosome start coordinate.
+                One of 0, 1 (default: 1).
+            end_type (str): chromosome end inclusion type.
+                One of 'inclusive', 'exclusive' (default: 'inclusive').
 
         Returns:
             An Alignment instance.
@@ -508,11 +565,25 @@ class Alignment:
                          hsp.kwargs.get('qlen'),
                          hsp.kwargs.get('slen'),
                          qchrom,
-                         schrom)
+                         schrom,
+                         qname,
+                         sname,
+                         qstrand,
+                         sstrand)
 
     def to_dict(self):
         """Transforms instance to dict representation."""
-        keys = ['HSPs', 'qlen', 'slen', 'qchrom', 'schrom', 'filtered_HSPs', 'filtered']
+        keys = ['HSPs',
+                'qlen',
+                'slen',
+                'qchrom',
+                'schrom',
+                'qname',
+                'sname',
+                'qstrand',
+                'sstrand',
+                'filtered_HSPs',
+                'filtered']
         HSPs = [hsp.to_dict() for hsp in self._all_HSPs]
         filtered_HSPs = [hsp.to_dict() for hsp in self.HSPs]
         return dict(zip(keys, [HSPs,
@@ -520,6 +591,10 @@ class Alignment:
                                self.slen,
                                self.qchrom,
                                self.schrom,
+                               self.qname,
+                               self.sname,
+                               self.qstrand,
+                               self.sstrand,
                                filtered_HSPs,
                                self.filtered]))
 
@@ -530,12 +605,19 @@ class Alignment:
                 for item in dict_.get('HSPs', [])]
         qlen = dict_.get('qlen')
         slen = dict_.get('slen')
+        qchrom = dict_.get('qchrom')
+        schrom = dict_.get('schrom')
+        qname = dict_.get('qname')
+        sname = dict_.get('sname')
+        qstrand = dict_.get('qstrand')
+        sstrand = dict_.get('sstrand')
+        filtered = dict_.get('filtered')
         if dict_.get('filtered_HSPs') is None:
             filtered_HSPs = None
         else:
             filtered_HSPs = [HSPVertex.from_dict(item)
                              for item in dict_.get('filtered_HSPs')]
-        return Alignment(HSPs, qlen, slen, filtered_HSPs)
+        return Alignment(HSPs, qlen, slen, qchrom, schrom, qname, sname, qstrand, sstrand, filtered_HSPs, filtered)
 
     def filter_by_score(self, score, side='g'):
         """Filters HSPs by score.
@@ -701,6 +783,7 @@ class Alignment:
             Alignment instance with new HSP coordinates
             and new qlen and slen.
         """
+        # TODO: deal with reverse-derived sequences and their representation.
         qlen = self.qlen + qzero
         slen = self.slen + szero
         HSPs = list()
@@ -968,22 +1051,78 @@ class Transcript:
                                alignment,
                                self.score]))
 
-    def to_bed12(self):
-        """
-        From hsps can get chromStart (2), chromEnd (3), score (5),
-        thickStart = chromStart (7), thickEnd = chromEnd (8),
-        blockCount (10), blockSizes (11), blockStarts (12).
-        Must get additional information into HSPs or Alignment instance
-        chrom (1 -- done), name (4), strand (6 -- XNOR of Alignment strand and HSP strand).
-        Another: itemRgb(9).
-        """
-
     @staticmethod
     def from_dict(dict_):
         HSPs = [HSPVertex.from_dict(item)
                 for item in dict_.get('HSPs', [])]
         alignment = Alignment.from_dict(dict_.get('alignment'))
-        return Transcript(HSPs, alignment)
+        score = dict_.get('score')
+        return Transcript(HSPs, alignment, score)
+
+    def to_bed12(self, mode='list'):
+        """
+        Turns transcript into BED12 representation of both
+        query side and subject side.
+
+        Args:
+            mode (str): how to return representation. If 'list' then
+            list of lists, if 'str' then complete BED12 record.
+
+        Returns:
+            (list of two lists or two strs): BED12 representation.
+        """
+        # TODO: test
+        if len(self.HSPs) == 0:
+            raise ValueError('No HSPs were found in the Transcript.')
+        Qchrom = self.alignment.qchrom
+        QchromStart = min(min(self.HSPs, key=lambda i: i.qstart),
+                          min(self.HSPs, key=lambda i: i.qend))
+        QchromEnd = max(max(self.HSPs, key=lambda i: i.qstart),
+                        max(self.HSPs, key=lambda i: i.qend))
+        Qname = self.alignment.qname
+        Qscore = 1000
+        Qstrand = nxor_strands(self.HSPs[0].qstrand, self.alignment.qstrand)
+        QthickStart = QchromStart
+        QthickEnd = QchromEnd
+        QitemRgb = 0
+        QblockCount = len(self.HSPs)
+        QblockSizes = [abs(hsp.qend - hsp.qstart) for hsp in self.HSPs]
+        if Qstrand == "+":
+            QblockStarts = [hsp.qstart - QchromStart for hsp in self.HSPs]
+        else:
+            QblockStarts = [hsp.qend - QchromStart for hsp in self.HSPs]
+        
+        Schrom = self.alignment.schrom
+        SchromStart = min(min(self.HSPs, key=lambda i: i.sstart),
+                          min(self.HSPs, key=lambda i: i.send))
+        SchromEnd = max(max(self.HSPs, key=lambda i: i.sstart),
+                        max(self.HSPs, key=lambda i: i.send))
+        Sname = self.alignment.Sname
+        Sscore = 1000
+        Sstrand = nxor_strands(self.HSPs[0].sstrand, self.alignment.sstrand)
+        SthickStart = SchromStart
+        SthickEnd = SchromEnd
+        SitemRgb = 0
+        SblockCount = len(self.HSPs)
+        SblockSizes = [abs(hsp.send - hsp.sstart) for hsp in self.HSPs]
+        if Sstrand == "+":
+            SblockStarts = [hsp.sstart - SchromStart for hsp in self.HSPs]
+        else:
+            SblockStarts = [hsp.Send - SchromStart for hsp in self.HSPs]
+
+        q_side = [Qchrom, QchromStart, QchromEnd, Qname, Qscore,
+                  Qstrand, QthickStart, QthickEnd, QitemRgb, QblockCount,
+                  QblockSizes, QblockStarts]
+        s_side = [Schrom, SchromStart, SchromEnd, Sname, Sscore,
+                  Sstrand, SthickStart, SthickEnd, SitemRgb, SblockCount,
+                  SblockSizes, SblockStarts]
+        if mode == 'list':
+            return [q_side, s_side]
+        elif mode == 'str':
+            return ["\t".join([','.join(item) if isinstance(item, list) else item for item in q_side]),
+                    "\t".join([','.join(item) if isinstance(item, list) else item for item in s_side])]
+        else:
+            raise ValueError('mode not one of ["list", "str"].')
 
     def plot_transcript(self, color='red', link_color='blue'):
         """Plots transcript with corresponding alignment.

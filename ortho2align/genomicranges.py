@@ -563,7 +563,11 @@ class GenomicRange:
         with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
             alignment = Alignment.from_file_blast(TextIOWrapper(proc.stdout),
                                                   self.chrom,
-                                                  other.chrom)
+                                                  other.chrom,
+                                                  self.name,
+                                                  other.name,
+                                                  self.strand,
+                                                  other.strand)
         return AlignedRangePair(self, other, alignment)
 
     def align_with_relation(self, relation, **kwargs):

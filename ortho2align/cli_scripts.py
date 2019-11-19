@@ -721,7 +721,7 @@ def refine_alignments():
     for pair in alignment_data:
         pair.alignment.filter_by_socre(score_threshold)
         transcript = pair.alignment.best_transcript()
-        record = transcript.to_bed12()  # TODO: transcript.to_bed12()
+        record = transcript.to_bed12(mode='str')
         query_transcripts.append(record[0])
         subject_transcripts.append(record[1])
 
