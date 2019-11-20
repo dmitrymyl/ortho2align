@@ -628,7 +628,7 @@ def get_alignments():
 
         query_gene.relation['syntenies'] = query_genes.relation['syntenies'] \
                                                       .flank(flank_dist) \
-                                                      .merge(merge_dist) \
+                                                      .merge(merge_dist)
         query_gene.relation['neighbours'] = query_gene.relation['neighbours'] \
                                                       .merge(2 * neighbour_dist
                                                              + query_gene.end

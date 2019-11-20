@@ -43,7 +43,7 @@ def compare(a, b, side='g'):
 
 def nxor_strands(hsp_strand, alignment_strand):
     """Returns NXOR of hsp strand and alignment strand.
-    
+
     Args:
         hsp_strand (boolean): HSP.qstrand or HSP.sstrand.
         qlignment_strand (str): Alignment.qstrand or Alignment.sstrand.
@@ -399,13 +399,14 @@ class Alignment:
 
     Attributes:
         _all_HSPs (list): list of all HSPs related
-            to the alignment;
+            to the alignment.
         HSPs (list): list of HSP instances that were
-            filtered by some criterion;
-        qlen (int): length of query sequence;
-        slen (int): length of subject sequence;
+            filtered by some criterion.
+        qlen (int): length of query sequence.
+        slen (int): length of subject sequence.
         replace_dict (dict): field names to replace
             for convenience.
+
     """
     replace_dict = {'q. start': 'qstart',
                     'q. end': 'qend',
@@ -439,11 +440,12 @@ class Alignment:
             sname (str): subject sequence name (default: None).
             qstrand (str): query sequence name.
                 One of "+", "-", "." (default: ".").
-            sstrand (str): subject sequence name. 
+            sstrand (str): subject sequence name.
                 One of "+", "-", "." (default: ".").
             filtered_HSPs (list): list of HSP instances
                 that were filtered by some criterion
                (default: None).
+
         """
         self._all_HSPs = HSPs
         self.HSPs = HSPs.copy() if filtered_HSPs is None else filtered_HSPs
