@@ -23,7 +23,7 @@ from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from tqdm import tqdm
-from .alignment import Alignment
+from .alignment import HSPVertex, Alignment
 from .parallel import NonExceptionalProcessPool
 
 
@@ -561,13 +561,9 @@ class GenomicRange:
                         for key, value in kwargs.items()),
                        [])
         with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
-            alignment = Alignment.from_file_blast(TextIOWrapper(proc.stdout),
-                                                  self.chrom,
-                                                  other.chrom,
-                                                  self.name,
-                                                  other.name,
-                                                  self.strand,
-                                                  other.strand)
+            alignment = GenomicRangesAlignment.from_file_blast(TextIOWrapper(proc.stdout),
+                                                               self,
+                                                               other)
         return AlignedRangePair(self, other, alignment)
 
     def align_with_relation(self, relation, **kwargs):
@@ -630,6 +626,78 @@ class GenomicRange:
 def align_with_relation_wrapper(grange, relation, **kwargs):
     """Simple wrapper around GenomicRange method for multiprocessing."""
     return grange.align_with_relation(relation, **kwargs)
+
+
+class GenomicRangesAlignment(Alignment):
+    def __init__(self,
+                 HSPs,
+                 qrange,
+                 srange,
+                 qlen=None,
+                 slen=None,
+                 filtered_HSPs=None):
+        """Inits Alignment class.
+
+        Args:
+            HSPs (list): list of HSP instances;
+            qrange (GenomicRange): query genomic range;
+            srange (GenomicRange): subject genomic range;
+            qlen (int): query sequence length
+                (default: None);
+            slen (int): subject sequence length
+                (default: None);
+            filtered_HSPs (list): list of HSP instances
+                that were filtered by some criterion
+               (default: None).
+
+        """
+        super().__init__(HSPs, qlen, slen, filtered_HSPs)
+        self.qrange = qrange
+        self.srange = srange
+
+    def __str__(self):
+        return super().__str__()
+
+    def __repr__(self):
+        return super().__str__()
+
+    def to_dict(self):
+        dict_ = super().to_dict()
+        dict_.update({'qrange': self.qrange.to_dict(),
+                      'srange': self.srange.to_dict()})
+        return dict_
+
+    @classmethod
+    def from_dict(cls, dict_):
+        keys = ['HSPs',
+                'qlen',
+                'slen',
+                'filtered',
+                'filtered_HSPs',
+                'qrange',
+                'srange']
+        functions = [lambda i: [HSPVertex.from_dict(item) for item in i.get('HSPs')],
+                     lambda i: i.get('qlen'),
+                     lambda i: i.get('slen'),
+                     lambda i: i.get('filtered'),
+                     lambda i: None if i.get('filtered_HSPs') is None else [HSPVertex.from_dict(item) for item in i.get('HSPs')],
+                     lambda i: GenomicRange.from_dict(i.get('qrange')),
+                     lambda i: GenomicRange.from_dict(i.get('srange'))]
+        kwargs = {key: function(dict_) for key, function in zip(keys, functions)}
+        return cls(**kwargs)
+
+    @classmethod
+    def from_file_blast(cls,
+                        file_object,
+                        qrange,
+                        srange,
+                        start_type=1,
+                        end_type='inclusive'):
+        return super().from_file_blast(file_object,
+                                       start_type=start_type,
+                                       end_type=end_type,
+                                       qrange=qrange,
+                                       srange=srange)
 
 
 class AlignedRangePair:
