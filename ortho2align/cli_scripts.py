@@ -566,6 +566,11 @@ def get_alignments():
                         nargs='?',
                         required=True,
                         help='output filename')
+    parser.add_argument('-cores',
+                        type=int,
+                        nargs='?',
+                        default=1,
+                        help='Number of cores to use for alignment multiprocessing.')
     parser.add_argument('-neighbour_dist',
                         type=int,
                         nargs='?',
@@ -582,7 +587,6 @@ def get_alignments():
                         default=0,
                         help='how distant two subject proteins can be to be merged into one syntenic region')
 
-
     args = parser.parse_args(sys.argv[2:])
 
     query_genes_filename = args.query_genes
@@ -596,6 +600,7 @@ def get_alignments():
     ortho_map_filename = args.ortho_map
     output_filename = args.output
     subject_taxid = args.subject_taxid
+    cores = args.cores
     neighbour_dist = args.neighbour_dist
     merge_dist = args.merge_dist
     flank_dist = args.flank_dist
@@ -655,7 +660,7 @@ def refine_alignments():
     import json
     import numpy as np
     from pathlib import Path
-    from .genomicranges import AlignedRangePair
+    from .genomicranges import GenomicRangesAlignment
     from .parallel import HistogramFitter, KernelFitter
 
     parser = argparse.ArgumentParser(description='',
@@ -704,9 +709,10 @@ def refine_alignments():
     with open(alignments_filename, 'r') as infile:
         alignment_data = json.load(infile)
 
-    alignment_data = [AlignedRangePair.from_dict(item) for item in alignment_data]
+    alignment_data = [GenomicRangesAlignment.from_dict(item)
+                      for item in alignment_data]
 
-    background_data = np.load(backgroud_filename)
+    background_data = np.load(background_filename)
 
     if fitting_type == 'histogram':
         fitter = HistogramFitter

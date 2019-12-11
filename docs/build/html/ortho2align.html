@@ -1,34 +1,159 @@
 
+
 <!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>ortho2align package &mdash; ortho2align 0.7 documentation</title>
+  
 
-<html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <meta charset="utf-8" />
-    <title>ortho2align package &#8212; ortho2align 0.7 documentation</title>
-    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
-    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-    <script type="text/javascript" src="_static/jquery.js"></script>
-    <script type="text/javascript" src="_static/underscore.js"></script>
-    <script type="text/javascript" src="_static/doctools.js"></script>
-    <script type="text/javascript" src="_static/language_data.js"></script>
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
    
-  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
-  
-  
-  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
-
-  </head><body>
-  
-
-    <div class="document">
-      <div class="documentwrapper">
-        <div class="bodywrapper">
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
           
 
-          <div class="body" role="main">
+          
+            <a href="index.html" class="icon icon-home"> ortho2align
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">ortho2align package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-ortho2align.alignment">ortho2align.alignment module</a></li>
+<li><a class="reference internal" href="#module-ortho2align.cli_scripts">ortho2align.cli_scripts module</a></li>
+<li><a class="reference internal" href="#module-ortho2align.fitting">ortho2align.fitting module</a></li>
+<li><a class="reference internal" href="#module-ortho2align.genomicranges">ortho2align.genomicranges module</a></li>
+<li><a class="reference internal" href="#module-ortho2align.orthodb">ortho2align.orthodb module</a></li>
+<li><a class="reference internal" href="#module-ortho2align.parallel">ortho2align.parallel module</a></li>
+<li><a class="reference internal" href="#module-ortho2align">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ortho2align</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>ortho2align package</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/ortho2align.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
             
   <div class="section" id="ortho2align-package">
 <h1>ortho2align package<a class="headerlink" href="#ortho2align-package" title="Permalink to this headline">¶</a></h1>
@@ -39,7 +164,7 @@
 <span id="ortho2align-alignment-module"></span><h2>ortho2align.alignment module<a class="headerlink" href="#module-ortho2align.alignment" title="Permalink to this headline">¶</a></h2>
 <dl class="class">
 <dt id="ortho2align.alignment.Alignment">
-<em class="property">class </em><code class="sig-prename descclassname">ortho2align.alignment.</code><code class="sig-name descname">Alignment</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">qlen=None</em>, <em class="sig-param">slen=None</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">qname=None</em>, <em class="sig-param">sname=None</em>, <em class="sig-param">qstrand='.'</em>, <em class="sig-param">sstrand='.'</em>, <em class="sig-param">filtered_HSPs=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">ortho2align.alignment.</code><code class="sig-name descname">Alignment</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">qlen=None</em>, <em class="sig-param">slen=None</em>, <em class="sig-param">filtered_HSPs=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>BLAST alignment of two sequences.</p>
 <blockquote>
@@ -76,7 +201,7 @@ replace_dict (dict): field names to replace</p>
 
 <dl class="method">
 <dt id="ortho2align.alignment.Alignment.__init__">
-<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">qlen=None</em>, <em class="sig-param">slen=None</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">qname=None</em>, <em class="sig-param">sname=None</em>, <em class="sig-param">qstrand='.'</em>, <em class="sig-param">sstrand='.'</em>, <em class="sig-param">filtered_HSPs=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment.__init__" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">qlen=None</em>, <em class="sig-param">slen=None</em>, <em class="sig-param">filtered_HSPs=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Inits Alignment class.</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters</dt>
@@ -193,7 +318,10 @@ reverse orientations and then choses the one
 with the biggest score.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>(Transcript) of the biggest score.</p>
+<dd class="field-odd"><p>transcript of the biggest score.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#ortho2align.alignment.Transcript" title="ortho2align.alignment.Transcript">Transcript</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -294,13 +422,13 @@ Default: ‘g’.</p></li>
 
 <dl class="method">
 <dt id="ortho2align.alignment.Alignment.from_dict">
-<em class="property">static </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment.from_dict" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment.from_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Restores object from dict representation.</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="ortho2align.alignment.Alignment.from_file_blast">
-<em class="property">static </em><code class="sig-name descname">from_file_blast</code><span class="sig-paren">(</span><em class="sig-param">file_object</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">qname=None</em>, <em class="sig-param">sname=None</em>, <em class="sig-param">qstrand='.'</em>, <em class="sig-param">sstrand='.'</em>, <em class="sig-param">start_type=1</em>, <em class="sig-param">end_type='inclusive'</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment.from_file_blast" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="sig-name descname">from_file_blast</code><span class="sig-paren">(</span><em class="sig-param">file_object</em>, <em class="sig-param">start_type=1</em>, <em class="sig-param">end_type='inclusive'</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Alignment.from_file_blast" title="Permalink to this definition">¶</a></dt>
 <dd><p>File parser.</p>
 <p>Takes file object that corresponds to
 a BLAST alignment of two sequences
@@ -437,7 +565,7 @@ and new qlen and slen.</p>
 
 <dl class="class">
 <dt id="ortho2align.alignment.HSP">
-<em class="property">class </em><code class="sig-prename descclassname">ortho2align.alignment.</code><code class="sig-name descname">HSP</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">score</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSP" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">ortho2align.alignment.</code><code class="sig-name descname">HSP</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSP" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>High-scoring pair from BLAST alignment representing
 an alignment block.</p>
@@ -449,7 +577,7 @@ an alignment block.</p>
 
 <dl class="method">
 <dt id="ortho2align.alignment.HSP.__init__">
-<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">score</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSP.__init__" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSP.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Initializes HSP class.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -537,7 +665,7 @@ the other one.</p>
 
 <dl class="method">
 <dt id="ortho2align.alignment.HSP.from_dict">
-<em class="property">static </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSP.from_dict" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSP.from_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Recovers from a dict representation.</p>
 </dd></dl>
 
@@ -576,13 +704,13 @@ in both query and subject sequence.</p>
 
 <dl class="class">
 <dt id="ortho2align.alignment.HSPVertex">
-<em class="property">class </em><code class="sig-prename descclassname">ortho2align.alignment.</code><code class="sig-name descname">HSPVertex</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">score</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSPVertex" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">ortho2align.alignment.</code><code class="sig-name descname">HSPVertex</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">score</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSPVertex" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#ortho2align.alignment.HSP" title="ortho2align.alignment.HSP"><code class="xref py py-class docutils literal notranslate"><span class="pre">ortho2align.alignment.HSP</span></code></a></p>
 <p>An extension of HSP class for handling graph
 operations (contains a list of neighbours).</p>
 <dl class="method">
 <dt id="ortho2align.alignment.HSPVertex.__init__">
-<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">score</em>, <em class="sig-param">qchrom=None</em>, <em class="sig-param">schrom=None</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSPVertex.__init__" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">qstart</em>, <em class="sig-param">qend</em>, <em class="sig-param">sstart</em>, <em class="sig-param">send</em>, <em class="sig-param">score</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.HSPVertex.__init__" title="Permalink to this definition">¶</a></dt>
 <dd><p>Inits HSPVertex class.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -682,7 +810,7 @@ penalties (see <cite>set_score</cite> and
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>HSPs</strong> (<em>list</em>) – a list of HSPs representing the
 transcript.</p></li>
-<li><p><strong>alignment</strong> (<em>Alignment</em>) – corresponding <cite>Alignment</cite>
+<li><p><strong>alignment</strong> (<em>GenomicRangesAlignment</em>) – corresponding <cite>Alignment</cite>
 instance.</p></li>
 </ul>
 </dd>
@@ -691,7 +819,7 @@ instance.</p></li>
 
 <dl class="method">
 <dt id="ortho2align.alignment.Transcript.from_dict">
-<em class="property">static </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Transcript.from_dict" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Transcript.from_dict" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
@@ -726,27 +854,6 @@ function.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>Transcript score.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="method">
-<dt id="ortho2align.alignment.Transcript.to_bed12">
-<code class="sig-name descname">to_bed12</code><span class="sig-paren">(</span><em class="sig-param">mode='list'</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.alignment.Transcript.to_bed12" title="Permalink to this definition">¶</a></dt>
-<dd><p>Turns transcript into BED12 representation of both
-query side and subject side.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>mode</strong> (<em>str</em>) – how to return representation. If ‘list’ then</p></li>
-<li><p><strong>list of lists, if ‘str’ then complete BED12 record.</strong></p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>BED12 representation.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>(list of two lists or two strs)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1822,13 +1929,13 @@ genomic ranges and their alignment.</p>
 </p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>(<a class="reference internal" href="#ortho2align.genomicranges.AlignedRangePair" title="ortho2align.genomicranges.AlignedRangePair">AlignedRangePair</a>)</p>
+<dd class="field-odd"><p>(<a class="reference internal" href="#ortho2align.genomicranges.GenomicRangesAlignment" title="ortho2align.genomicranges.GenomicRangesAlignment">GenomicRangesAlignment</a>)</p>
 </dd>
 <dt class="field-even">Raises</dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>FilePathNotSpecifiedError in case one</strong><strong> or </strong><strong>both</strong> – </p></li>
 <li><p><strong>genomic ranges do not have separate</strong> – </p></li>
-<li><p><strong>sequence file.</strong> – </p></li>
+<li><p><strong>sequence files.</strong> – </p></li>
 </ul>
 </dd>
 </dl>
@@ -1840,7 +1947,7 @@ genomic ranges and their alignment.</p>
 <dd><p>Aligns genomic range with all its relations.</p>
 <p>Aligns given genomic range with all its
 relations using standalone blastn
-and returns list of AlignedRangePair
+and returns list of GenomicRangesAlignment
 instances.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -1852,10 +1959,13 @@ to blastn in the following scheme:
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>(list) list of AlignedRangePair instances.</p>
+<dd class="field-even"><p>list of GenomicRangesAlignment instances.</p>
 </dd>
-<dt class="field-odd">Raises</dt>
-<dd class="field-odd"><p><strong>ValueError in case provided relation is not</strong> – available for the genomic range.</p>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(list)</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ValueError in case provided relation is not</strong> – available for the genomic range.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2026,6 +2136,98 @@ genomic ranges in relation
 </dd></dl>
 
 <dl class="class">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment">
+<em class="property">class </em><code class="sig-prename descclassname">ortho2align.genomicranges.</code><code class="sig-name descname">GenomicRangesAlignment</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">qrange</em>, <em class="sig-param">srange</em>, <em class="sig-param">qlen=None</em>, <em class="sig-param">slen=None</em>, <em class="sig-param">filtered_HSPs=None</em>, <em class="sig-param">relative=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ortho2align.alignment.Alignment" title="ortho2align.alignment.Alignment"><code class="xref py py-class docutils literal notranslate"><span class="pre">ortho2align.alignment.Alignment</span></code></a></p>
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment.__init__">
+<code class="sig-name descname">__init__</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">qrange</em>, <em class="sig-param">srange</em>, <em class="sig-param">qlen=None</em>, <em class="sig-param">slen=None</em>, <em class="sig-param">filtered_HSPs=None</em>, <em class="sig-param">relative=True</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Inits Alignment class.</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul>
+<li><p><strong>HSPs</strong> (<em>list</em>) – list of HSP instances;</p></li>
+<li><p><strong>qrange</strong> (<em>GenomicRange</em>) – query genomic range;</p></li>
+<li><p><strong>srange</strong> (<em>GenomicRange</em>) – subject genomic range;</p></li>
+<li><p><strong>qlen</strong> (<em>int</em>) – query sequence length
+(default: None);</p></li>
+<li><p><strong>slen</strong> (<em>int</em>) – subject sequence length
+(default: None);</p></li>
+<li><p><strong>filtered_HSPs</strong> (<em>list</em>) –</p>
+<dl class="simple">
+<dt>list of HSP instances</dt><dd><p>that were filtered by some criterion</p>
+</dd>
+</dl>
+<p>(default: None).</p>
+</li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment.from_dict">
+<em class="property">classmethod </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment.from_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Restores object from dict representation.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment.from_file_blast">
+<em class="property">classmethod </em><code class="sig-name descname">from_file_blast</code><span class="sig-paren">(</span><em class="sig-param">file_object</em>, <em class="sig-param">qrange</em>, <em class="sig-param">srange</em>, <em class="sig-param">start_type=1</em>, <em class="sig-param">end_type='inclusive'</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment.from_file_blast" title="Permalink to this definition">¶</a></dt>
+<dd><p>File parser.</p>
+<p>Takes file object that corresponds to
+a BLAST alignment of two sequences
+produced with <cite>-outfmt 7</cite> key and
+parses it into an Alignment object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>file_object</strong> – file object.</p></li>
+<li><p><strong>qchrom</strong> (<em>str, int</em>) – query chromosome name (default: None).</p></li>
+<li><p><strong>schrom</strong> (<em>str, int</em>) – subject chromosome name (default: None).</p></li>
+<li><p><strong>qname</strong> (<em>str</em>) – query sequence name (default: None).</p></li>
+<li><p><strong>sname</strong> (<em>str</em>) – subject sequence name (default: None).</p></li>
+<li><p><strong>qstrand</strong> (<em>str</em>) – query sequence name.
+One of “+”, “-“, “.” (default: “.”).</p></li>
+<li><p><strong>sstrand</strong> (<em>str</em>) – subject sequence name.
+One of “+”, “-“, “.” (default: “.”).</p></li>
+<li><p><strong>start_type</strong> (<em>int</em>) – chromosome start coordinate.
+One of 0, 1 (default: 1).</p></li>
+<li><p><strong>end_type</strong> (<em>str</em>) – chromosome end inclusion type.
+One of ‘inclusive’, ‘exclusive’ (default: ‘inclusive’).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>An Alignment instance.</p>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ValueError in case field 'score'</strong> – </p></li>
+<li><p><strong>is not found in alignment fields.</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment.to_dict">
+<code class="sig-name descname">to_dict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment.to_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transforms instance to dict representation.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment.to_genomic">
+<code class="sig-name descname">to_genomic</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment.to_genomic" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesAlignment.to_relative">
+<code class="sig-name descname">to_relative</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesAlignment.to_relative" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="ortho2align.genomicranges.GenomicRangesList">
 <em class="property">class </em><code class="sig-prename descclassname">ortho2align.genomicranges.</code><code class="sig-name descname">GenomicRangesList</code><span class="sig-paren">(</span><em class="sig-param">collection=[]</em>, <em class="sig-param">sequence_file_path=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesList" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">sortedcontainers.sortedlist.SortedKeyList</span></code></p>
@@ -2178,7 +2380,7 @@ for blastn.</p></li>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p><dl class="simple">
-<dt>the first contains AlignedRangePair</dt><dd><p>instances representing alignments, the cecond contains
+<dt>the first contains GenomicRangesAlignment</dt><dd><p>instances representing alignments, the cecond contains
 exceptions occured during alignment if <cite>suppress_exceptions</cite>
 is False (otherwise it is empty).</p>
 </dd>
@@ -2497,6 +2699,38 @@ in self to list of genomic ranges names in other.</p></li>
 <dt id="ortho2align.genomicranges.GenomicRangesList.to_dict">
 <code class="sig-name descname">to_dict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesList.to_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Returns dict representation.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="ortho2align.genomicranges.GenomicRangesTranscript">
+<em class="property">class </em><code class="sig-prename descclassname">ortho2align.genomicranges.</code><code class="sig-name descname">GenomicRangesTranscript</code><span class="sig-paren">(</span><em class="sig-param">HSPs</em>, <em class="sig-param">alignment</em>, <em class="sig-param">score=None</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesTranscript" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#ortho2align.alignment.Transcript" title="ortho2align.alignment.Transcript"><code class="xref py py-class docutils literal notranslate"><span class="pre">ortho2align.alignment.Transcript</span></code></a></p>
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesTranscript.from_dict">
+<em class="property">classmethod </em><code class="sig-name descname">from_dict</code><span class="sig-paren">(</span><em class="sig-param">dict_</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesTranscript.from_dict" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="ortho2align.genomicranges.GenomicRangesTranscript.to_bed12">
+<code class="sig-name descname">to_bed12</code><span class="sig-paren">(</span><em class="sig-param">mode='list'</em><span class="sig-paren">)</span><a class="headerlink" href="#ortho2align.genomicranges.GenomicRangesTranscript.to_bed12" title="Permalink to this definition">¶</a></dt>
+<dd><p>Turns transcript into BED12 representation of both
+query side and subject side.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mode</strong> (<em>str</em>) – how to return representation. If ‘list’ then</p></li>
+<li><p><strong>list of lists, if ‘str’ then complete BED12 record.</strong></p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>BED12 representation.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(list of two lists or two strs)</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -3290,66 +3524,43 @@ passed via iterable.</p>
 </div>
 
 
+           </div>
+           
           </div>
-          
-        </div>
-      </div>
-      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
-        <div class="sphinxsidebarwrapper">
-<h1 class="logo"><a href="index.html">ortho2align</a></h1>
+          <footer>
+  
 
+  <hr/>
 
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Dmitry Mylarshchikov
 
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
-
-
-
-
-<h3>Navigation</h3>
-
-<div class="relations">
-<h3>Related Topics</h3>
-<ul>
-  <li><a href="index.html">Documentation overview</a><ul>
-  </ul></li>
-</ul>
-</div>
-<div id="searchbox" style="display: none" role="search">
-  <h3 id="searchlabel">Quick search</h3>
-    <div class="searchformwrapper">
-    <form class="search" action="search.html" method="get">
-      <input type="text" name="q" aria-labelledby="searchlabel" />
-      <input type="submit" value="Go" />
-    </form>
-    </div>
-</div>
-<script type="text/javascript">$('#searchbox').show(0);</script>
-
-
-
-
-
-
-
+</footer>
 
         </div>
       </div>
-      <div class="clearer"></div>
-    </div>
-    <div class="footer">
-      &copy;2019, Dmitry Mylarshchikov.
-      
-      |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 2.2.1</a>
-      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
-      
-      |
-      <a href="_sources/ortho2align.rst.txt"
-          rel="nofollow">Page source</a>
-    </div>
 
-    
+    </section>
 
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
     
-  </body>
+   
+
+</body>
 </html>

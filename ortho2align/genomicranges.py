@@ -23,7 +23,7 @@ from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from tqdm import tqdm
-from .alignment import HSPVertex, Alignment
+from .alignment import HSPVertex, Alignment, Transcript, nxor_strands
 from .parallel import NonExceptionalProcessPool
 
 
@@ -536,18 +536,18 @@ class GenomicRange:
                 {'flag': 'value'}.
 
         Returns:
-            (AlignedRangePair): aligned range pair,
+            (GenomicRangesAlignment): aligned range pair,
                 which associates self and other
                 genomic ranges and their alignment.
 
         Raises:
             FilePathNotSpecifiedError in case one or both
             genomic ranges do not have separate
-            sequence file.
+            sequence files.
         """
         for grange in (self, other):
             grange.sequence_file_path.check_correct()
-        
+
         if program not in ['blastn', 'blastp']:
             raise ValueError("`program` attribute is not one of "
                              "['blastn', 'blastp']")
@@ -564,14 +564,14 @@ class GenomicRange:
             alignment = GenomicRangesAlignment.from_file_blast(TextIOWrapper(proc.stdout),
                                                                self,
                                                                other)
-        return AlignedRangePair(self, other, alignment)
+        return alignment
 
     def align_with_relation(self, relation, **kwargs):
         """Aligns genomic range with all its relations.
 
         Aligns given genomic range with all its
         relations using standalone blastn
-        and returns list of AlignedRangePair
+        and returns list of GenomicRangesAlignment
         instances.
 
         Args:
@@ -581,7 +581,7 @@ class GenomicRange:
                 {'flag': 'value'}.
 
         Returns:
-            (list) list of AlignedRangePair instances.
+            (list): list of GenomicRangesAlignment instances.
 
         Raises:
             ValueError in case provided relation is not
@@ -635,7 +635,8 @@ class GenomicRangesAlignment(Alignment):
                  srange,
                  qlen=None,
                  slen=None,
-                 filtered_HSPs=None):
+                 filtered_HSPs=None,
+                 relative=True):
         """Inits Alignment class.
 
         Args:
@@ -654,6 +655,7 @@ class GenomicRangesAlignment(Alignment):
         super().__init__(HSPs, qlen, slen, filtered_HSPs)
         self.qrange = qrange
         self.srange = srange
+        self.relative = relative
 
     def __str__(self):
         return super().__str__()
@@ -664,7 +666,8 @@ class GenomicRangesAlignment(Alignment):
     def to_dict(self):
         dict_ = super().to_dict()
         dict_.update({'qrange': self.qrange.to_dict(),
-                      'srange': self.srange.to_dict()})
+                      'srange': self.srange.to_dict(),
+                      'relative': self.relative})
         return dict_
 
     @classmethod
@@ -675,16 +678,28 @@ class GenomicRangesAlignment(Alignment):
                 'filtered',
                 'filtered_HSPs',
                 'qrange',
-                'srange']
+                'srange',
+                'relative']
         functions = [lambda i: [HSPVertex.from_dict(item) for item in i.get('HSPs')],
                      lambda i: i.get('qlen'),
                      lambda i: i.get('slen'),
                      lambda i: i.get('filtered'),
-                     lambda i: None if i.get('filtered_HSPs') is None else [HSPVertex.from_dict(item) for item in i.get('HSPs')],
+                     lambda i: None if i.get('filtered_HSPs') is None else [HSPVertex.from_dict(item)
+                                                                            for item in i.get('HSPs')],
                      lambda i: GenomicRange.from_dict(i.get('qrange')),
-                     lambda i: GenomicRange.from_dict(i.get('srange'))]
-        kwargs = {key: function(dict_) for key, function in zip(keys, functions)}
+                     lambda i: GenomicRange.from_dict(i.get('srange')),
+                     lambda i: i.get('relative')]
+        kwargs = {key: function(dict_)
+                  for key, function in zip(keys, functions)}
         return cls(**kwargs)
+
+    def to_genomic(self):
+        self.relative = False
+        # TODO: complete.
+
+    def to_relative(self):
+        self.relative = True
+        # TODO: complete.
 
     @classmethod
     def from_file_blast(cls,
@@ -698,6 +713,105 @@ class GenomicRangesAlignment(Alignment):
                                        end_type=end_type,
                                        qrange=qrange,
                                        srange=srange)
+
+
+class GenomicRangesTranscript(Transcript):
+
+    def __init__(self, HSPs, alignment, score=None):
+        super().__init__(HSPs, alignment, score)
+
+    @classmethod
+    def from_dict(cls, dict_):
+        keys = ['HSPs',
+                'alignment',
+                'score']
+        functions = [lambda i: [HSPVertex.from_dict(item)
+                                for item in i.get('HSPs', [])],
+                     lambda i: GenomicRangesAlignment.from_dict(i.get('alignment')),
+                     lambda i: i.get('score')]
+        kwargs = {key: function(dict_)
+                  for key, function in zip(keys, functions)}
+        return cls(**kwargs)
+
+    def _prepare_side(self, side='q'):
+        if side == 'q':
+            chrom = self.alignment.qrange.chrom
+            chromStart = min(min(self.HSPs, key=lambda i: i.qstart),
+                             min(self.HSPs, key=lambda i: i.qend))
+            chromEnd = max(max(self.HSPs, key=lambda i: i.qstart),
+                           max(self.HSPs, key=lambda i: i.qend))
+            name = self.alignment.qrange.name
+            strand = nxor_strands(self.HSPs[0].qstrand,
+                                  self.alignment.qrange.strand)
+            blockSizes = [abs(hsp.qend - hsp.qstart) for hsp in self.HSPs]
+            if strand == "+":
+                blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
+            else:
+                blockStarts = [hsp.qend - chromStart for hsp in self.HSPs]
+        elif side == 's':
+            chrom = self.alignment.srange.chrom
+            chromStart = min(min(self.HSPs, key=lambda i: i.sstart),
+                             min(self.HSPs, key=lambda i: i.send))
+            chromEnd = max(max(self.HSPs, key=lambda i: i.sstart),
+                           max(self.HSPs, key=lambda i: i.send))
+            name = self.alignment.srange.name
+            strand = nxor_strands(self.HSPs[0].sstrand,
+                                  self.alignment.srange.strand)
+            blockSizes = [abs(hsp.send - hsp.sstart) for hsp in self.HSPs]
+            if strand == "+":
+                blockStarts = [hsp.sstart - chromStart for hsp in self.HSPs]
+            else:
+                blockStarts = [hsp.send - chromStart for hsp in self.HSPs]
+        else:
+            raise ValueError(f'side argument {side} is not one of ["q", "s"]')
+        score = self.score
+        thickStart = chromStart
+        thickEnd = chromEnd
+        itemRgb = 0
+        blockCount = len(self.HSPs)
+        side = [chrom,
+                chromStart,
+                chromEnd,
+                name,
+                score,
+                strand,
+                thickStart,
+                thickEnd,
+                itemRgb,
+                blockCount,
+                blockSizes,
+                blockStarts]
+        return side
+
+    def to_bed12(self, mode='list'):
+        """
+        Turns transcript into BED12 representation of both
+        query side and subject side.
+
+        Args:
+            mode (str): how to return representation. If 'list' then
+            list of lists, if 'str' then complete BED12 record.
+
+        Returns:
+            (list of two lists or two strs): BED12 representation.
+        """
+        # TODO: test
+        if len(self.HSPs) == 0:
+            raise ValueError('No HSPs were found in the Transcript.')
+        if self.alignment.relative:
+            raise ValueError('Alignment coordinates are not translated to genomic coordinates. '\
+                             'Use Transcript.alignment.to_genomic().')
+        q_side = self._prepare_side(side='q')
+        s_side = self._prepare_side(side='s')
+        if mode == 'list':
+            return [q_side, s_side]
+        elif mode == 'str':
+            return ["\t".join([','.join(item) if isinstance(item, list) else item
+                               for item in q_side]),
+                    "\t".join([','.join(item) if isinstance(item, list) else item
+                               for item in s_side])]
+        else:
+            raise ValueError('mode not one of ["list", "str"].')
 
 
 class AlignedRangePair:
@@ -1429,7 +1543,7 @@ class GenomicRangesList(SortedKeyList):
                 GenomicRange.align representing CLI arguments
                 for blastn.
         Returns:
-            (list, list) two lists: the first contains AlignedRangePair
+            (list, list) two lists: the first contains GenomicRangesAlignment
                 instances representing alignments, the cecond contains
                 exceptions occured during alignment if `suppress_exceptions`
                 is False (otherwise it is empty).
