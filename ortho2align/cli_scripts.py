@@ -89,7 +89,6 @@ def get_orthodb_map():
     from .orthodb import (load_table, filter_table, query_cached_odb_file,
                           split_odb_file, filter_odb_file)
 
-
     external_dbs = ['GOterm',
                     'InterPro',
                     'NCBIproteinGI',
@@ -408,8 +407,8 @@ def get_orthodb_map():
     os.rmdir(tmp_proc)
 
 
-def align_two_ranges(query, subject, **kwargs):
-    return query.align(subject, **kwargs)
+def align_two_ranges_blast(query, subject, **kwargs):
+    return query.align_blast(subject, **kwargs)
 
 
 def estimate_background():
@@ -492,14 +491,14 @@ def estimate_background():
     sample_pairs = zip(query_samples, subject_samples)
 
     with NonExceptionalProcessPool(cores) as p:
-        alignments, exceptions = p.starmap(align_two_ranges, sample_pairs)
+        alignments, exceptions = p.starmap(align_two_ranges_blast, sample_pairs)
 
     if len(exceptions) > 0:
         print('Exceptions occured: ')
         for exception in exceptions:
             print(exception)
 
-    scores = [hsp.score for pair in alignments for hsp in pair.alignment.HSPs]
+    scores = [hsp.score for alignment in alignments for hsp in alignment.HSPs]
     np.save(output_filename, scores, allow_pickle=False)
 
 
@@ -509,13 +508,11 @@ def align_syntenies(grange):
     neighbourhood = grange.relations['neighbours'][0]
     alignments = list()
     for synteny in grange.relations['syntenies']:
-        pair = neighbourhood.align_blast(synteny)
-        pair.alignment = pair.alignment.set_zero(neighbourhood.start,
-                                                 synteny.start) \
-                                       .cut_coordinates(qleft=grange.start,
-                                                        qright=grange.end)
-        pair.subject_grange = grange
-        alignments.append(pair)
+        alignment = neighbourhood.align_blast(synteny)
+        alignment = alignment.to_genomic().cut_coordinates(qleft=grange.start,
+                                                           qright=grange.end)
+        alignment.srange = grange
+        alignments.append(alignment)
     return alignments
 
 
@@ -647,9 +644,9 @@ def get_alignments():
         for exception in exceptions:
             print(exception)
 
-    alignments = [pair.to_dict()
+    alignments = [alignment.to_dict()
                   for group in alignments
-                  for pair in group]
+                  for alignment in group]
 
     with open(output_filename, 'w') as outfile:
         json.dump(outfile, alignments)
@@ -724,9 +721,9 @@ def refine_alignments():
     query_transcripts = list()
     subject_transcripts = list()
 
-    for pair in alignment_data:
-        pair.alignment.filter_by_socre(score_threshold)
-        transcript = pair.alignment.best_transcript()
+    for alignment in alignment_data:
+        alignment.filter_by_socre(score_threshold)
+        transcript = alignment.best_transcript()
         record = transcript.to_bed12(mode='str')
         query_transcripts.append(record[0])
         subject_transcripts.append(record[1])

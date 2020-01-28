@@ -640,7 +640,7 @@ class Alignment:
         self.HSPs = [hsp for hsp in self._all_HSPs]
         self.filtered = False
 
-    def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
+    def _cut_hsps(self, qleft=None, qright=None, sleft=None, sright=None):
         """Leaves only HSPs in certain range of coordinates.
 
         Given query and subject sequence boundaries only
@@ -661,8 +661,7 @@ class Alignment:
                 (default: None);
 
         Returns:
-            New Alignment instance with HSPs within given
-            coordinates.
+            list of cut hsps.
         """
         hsps = [hsp.copy() for hsp in self._all_HSPs]
         if qleft is not None:
@@ -716,6 +715,10 @@ class Alignment:
                 elif hsp.sstart <= sright and hsp.orientation == 'reverse':
                     new_hsps.append(hsp)
             hsps = new_hsps
+        return hsps
+
+    def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
+        hsps = self._cut_hsps(qleft=qleft, qright=qright, sleft=sleft, sright=sright)
         return Alignment(hsps, self.qlen, self.slen)
 
     def set_zero(self, qzero, szero):

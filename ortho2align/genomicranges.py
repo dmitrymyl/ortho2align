@@ -680,7 +680,8 @@ class GenomicRangesAlignment(Alignment):
                 'qrange',
                 'srange',
                 'relative']
-        functions = [lambda i: [HSPVertex.from_dict(item) for item in i.get('HSPs')],
+        functions = [lambda i: [HSPVertex.from_dict(item)
+                                for item in i.get('HSPs')],
                      lambda i: i.get('qlen'),
                      lambda i: i.get('slen'),
                      lambda i: i.get('filtered'),
@@ -694,12 +695,49 @@ class GenomicRangesAlignment(Alignment):
         return cls(**kwargs)
 
     def to_genomic(self):
+        # query sequence
+        if self.qrange.strand != '-':
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.qstart = hsp.qstart + self.qrange.start
+                hsp.qend = hsp.qend + self.qrange.start
+        else:
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.qstart = self.qrange.end - hsp.qstart
+                hsp.qend = self.qrange.end - hsp.qend
+        # subject sequence
+        if self.srange.strand != '-':
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.sstart = hsp.sstart + self.srange.start
+                hsp.send = hsp.send + self.srange.start
+        else:
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.sstart = self.srange.end - hsp.sstart
+                hsp.send = self.srange.end - hsp.send
         self.relative = False
-        # TODO: complete.
 
     def to_relative(self):
+        if self.qrange.strand != '-':
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.qstart = hsp.qstart - self.qrange.start
+                hsp.qend = hsp.qend - self.qrange.start
+        else:
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.qstart = self.qrange.end - hsp.qstart
+                hsp.qend = self.qrange.end - hsp.qend
+        # subject sequence
+        if self.srange.strand != '-':
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.sstart = hsp.sstart - self.srange.start
+                hsp.send = hsp.send - self.srange.start
+        else:
+            for hsp in chain(self._all_HSPs, self.HSPs):
+                hsp.sstart = self.srange.end - hsp.sstart
+                hsp.send = self.srange.end - hsp.send
         self.relative = True
-        # TODO: complete.
+
+    def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
+        hsps = self._cut_hsps(qleft=qleft, qright=qright, sleft=sleft, sright=sright)
+        return GenomicRangesAlignment(hsps, qrange=self.qrange, srange=self.srange)
 
     @classmethod
     def from_file_blast(cls,
@@ -795,7 +833,6 @@ class GenomicRangesTranscript(Transcript):
         Returns:
             (list of two lists or two strs): BED12 representation.
         """
-        # TODO: test
         if len(self.HSPs) == 0:
             raise ValueError('No HSPs were found in the Transcript.')
         if self.alignment.relative:
@@ -814,72 +851,72 @@ class GenomicRangesTranscript(Transcript):
             raise ValueError('mode not one of ["list", "str"].')
 
 
-class AlignedRangePair:
-    """An association of genomic ranges and their alignment.
+# class AlignedRangePair:
+#     """An association of genomic ranges and their alignment.
 
-    Stores query genomic range, subject genomic range and
-    their alignment.
+#     Stores query genomic range, subject genomic range and
+#     their alignment.
 
-    Attributes:
-        query_grange (GenomicRange): query genomic range.
-        subject_grange (GenomicRange): subject genomic range.
-        alignment (Alignment): alignment of query and subject
-        genomic ranges.
-    """
+#     Attributes:
+#         query_grange (GenomicRange): query genomic range.
+#         subject_grange (GenomicRange): subject genomic range.
+#         alignment (Alignment): alignment of query and subject
+#         genomic ranges.
+#     """
 
-    def __init__(self, query_grange, subject_grange, alignment):
-        """Initializes AlignedRangePair instance.
+#     def __init__(self, query_grange, subject_grange, alignment):
+#         """Initializes AlignedRangePair instance.
 
-        Args:
-            query_grange (GenomicRange): query genomic range.
-            subject_grange (GenomicRange): subject genomic range.
-            alignment (Alignment): alignment of query and subject
-            genomic ranges.
+#         Args:
+#             query_grange (GenomicRange): query genomic range.
+#             subject_grange (GenomicRange): subject genomic range.
+#             alignment (Alignment): alignment of query and subject
+#             genomic ranges.
 
-        Returns:
-            None.
-        """
-        self.query_grange = query_grange
-        self.subject_grange = subject_grange
-        self.alignment = alignment
+#         Returns:
+#             None.
+#         """
+#         self.query_grange = query_grange
+#         self.subject_grange = subject_grange
+#         self.alignment = alignment
 
-    def __repr__(self):
-        """Returns representation of AlignedRangePair instance."""
-        return f"AlignedRangePair({repr(self.query_grange)}, " \
-               f"{repr(self.subject_grange)}, {repr(self.alignment)})"
+#     def __repr__(self):
+#         """Returns representation of AlignedRangePair instance."""
+#         return f"AlignedRangePair({repr(self.query_grange)}, " \
+#                f"{repr(self.subject_grange)}, {repr(self.alignment)})"
 
-    def __str__(self):
-        """Returns string representation."""
-        return f"AlignedRangePair\n{self.query_grange}\n" \
-               f"{self.subject_grange}\n{self.alignment}"
+#     def __str__(self):
+#         """Returns string representation."""
+#         return f"AlignedRangePair\n{self.query_grange}\n" \
+#                f"{self.subject_grange}\n{self.alignment}"
 
-    def __eq__(self, other):
-        """Equality magic method."""
-        return (self.query_grange == other.query_grange and
-                self.subject_grange == other.subject_grange and
-                self.alignment == other.alignment)
+#     def __eq__(self, other):
+#         """Equality magic method."""
+#         return (self.query_grange == other.query_grange and
+#                 self.subject_grange == other.subject_grange and
+#                 self.alignment == other.alignment)
 
-    def to_dict(self):
-        """Returns dict representation of AlignedRangePair instance."""
-        return dict(query_grange=self.query_grange,
-                    subject_grange=self.subject_grange,
-                    alignment=self.alignment)
+#     def to_dict(self):
+#         """Returns dict representation of AlignedRangePair instance."""
+#         return dict(query_grange=self.query_grange,
+#                     subject_grange=self.subject_grange,
+#                     alignment=self.alignment)
 
-    @classmethod
-    def from_dict(cls, dict_):
-        """Restores AlignedRangePair instance from dict representation."""
-        keys = ['query_grange',
-                'subject_grange',
-                'alignment']
-        try:
-            kwargs = {key: dict_[key] for key in keys}
-        except KeyError as e:
-            raise ValueError(f"Key {e} is not in the list "
-                             f"of nececcary keys {keys}.")
-        return cls(**kwargs)
+#     @classmethod
+#     def from_dict(cls, dict_):
+#         """Restores AlignedRangePair instance from dict representation."""
+#         keys = ['query_grange',
+#                 'subject_grange',
+#                 'alignment']
+#         try:
+#             kwargs = {key: dict_[key] for key in keys}
+#         except KeyError as e:
+#             raise ValueError(f"Key {e} is not in the list "
+#                              f"of nececcary keys {keys}.")
+#         return cls(**kwargs)
 
 
-ChromosomeLocation = namedtuple('ChromosomeLocation', 'size start')
+# ChromosomeLocation = namedtuple('ChromosomeLocation', 'size start')
 
 
 class FastaSeqFile:
