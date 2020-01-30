@@ -68,7 +68,7 @@ class HSP:
     orientation_dict = {(True, True): 'direct',
                         (True, False): 'reverse'}
 
-    def __init__(self, qstart, qend, sstart, send, **kwargs):
+    def __init__(self, qstart, qend, sstart, send, score, **kwargs):
         """Initializes HSP class.
 
         Args:
@@ -86,6 +86,7 @@ class HSP:
         self.qend = qend
         self.sstart = sstart
         self.send = send
+        self.score = score
         self.kwargs = kwargs
         self.qstrand = self.qend - self.qstart > 0
         self.sstrand = self.send - self.sstart > 0
@@ -410,7 +411,8 @@ class Alignment:
                  HSPs,
                  qlen=None,
                  slen=None,
-                 filtered_HSPs=None):
+                 filtered_HSPs=None,
+                 filtered=None):
         """Inits Alignment class.
 
         Args:
@@ -459,16 +461,20 @@ class Alignment:
             return False
         return all([i == k for i, k in zip(self._all_HSPs, other._all_HSPs)])
 
+    @property
+    def transcript_class(self):
+        return Transcript
+
     def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None):
         """Plots alignment map."""
+        for hsp in self._all_HSPs:
+            plt.plot([hsp.qstart, hsp.qend],
+                     [hsp.sstart, hsp.send],
+                     color='grey')
         for hsp in self.HSPs:
             plt.plot([hsp.qstart, hsp.qend],
                      [hsp.sstart, hsp.send],
                      color='black')
-        for hsp in set(self._all_HSPs) - set(self.HSPs):
-            plt.plot([hsp.qstart, hsp.qend],
-                     [hsp.sstart, hsp.send],
-                     color='grey')
         plt.xlim(qleft, qright)
         plt.ylim(sleft, sright)
         plt.xlabel("Query")
@@ -843,7 +849,7 @@ class Alignment:
                 for neighbour, weight in nascent_transcript[-1].next_vertices:
                     stack.append(nascent_transcript + [neighbour])
             else:
-                transcripts.append(Transcript(stack.pop()[1:-1], self))
+                transcripts.append(self.transcript_class(stack.pop()[1:-1], self))
         return transcripts
 
     def get_all_transcripts(self):
@@ -890,7 +896,7 @@ class Alignment:
             A Transcript instance with the best score.
         """
         if len(vertices) == 0:
-            return Transcript([], self)
+            return self.transcript_class([], self)
         vertices = self._build_hsp_graph(vertices, orientation)
         for vertex in vertices:
             for neighbour, weight in vertex.next_vertices:
@@ -901,7 +907,7 @@ class Alignment:
         while current_vertex.best_prev is not None:
             best_hsps.append(current_vertex)
             current_vertex = current_vertex.best_prev
-        return Transcript(best_hsps[1:][::-1], self, -score)
+        return self.transcript_class(best_hsps[1:][::-1], self, -score)
 
     def get_best_transcripts(self):
         """Finds best transcripts.
@@ -999,6 +1005,15 @@ class Transcript:
 
     def __repr__(self):
         return f"Transcript({repr(self.HSPs)})"
+
+    def __eq__(self, other):
+        if len(self.HSPs) != len(other.HSPs):
+            return False
+        return all([i == k
+                    for i, k in zip([self.HSPs + [self.alignment,
+                                                  self.score]],
+                                    [other.HSPs + [other.alignment,
+                                                   other.score]])])
 
     def to_dict(self):
         keys = ['HSPs', 'alignment', 'score']

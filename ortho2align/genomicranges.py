@@ -137,12 +137,12 @@ def fasta_reformatter(infile, outfile, total, linewidth=60,
                  'g': 'c',
                  'C': 'G',
                  'c': 'g'}
-    while read_counter < total:
-        c = infile.read(1)
+    c = infile.read(1)
+    while read_counter < total and c != '':
         if reverse:
             infile.seek(infile.tell() - 2)
         if c == "\n":
-            continue
+            pass
         else:
             if complement:
                 c = compl_map[c]
@@ -152,6 +152,7 @@ def fasta_reformatter(infile, outfile, total, linewidth=60,
             if read_counter % linewidth == 0:
                 outfile.write('\n')
                 line_break = True
+        c = infile.read(1)
     if not line_break:
         outfile.write('\n')
 
@@ -194,9 +195,13 @@ class SequencePath:
     def to_dict(self):
         """Returns dict representation."""
         if self.path is None:
-            return None
+            return {'path': None}
         else:
-            return str(self.path)
+            return {'path': str(self.path)}
+
+    @classmethod
+    def from_dict(cls, dict_):
+        return cls(dict_.get('path'))
 
     def check_correct(self, foreign=None):
         """Checks whether the path exists or it is correct.
@@ -566,66 +571,66 @@ class GenomicRange:
                                                                other)
         return alignment
 
-    def align_with_relation(self, relation, **kwargs):
-        """Aligns genomic range with all its relations.
+    # def align_with_relation(self, relation, **kwargs):
+    #     """Aligns genomic range with all its relations.
 
-        Aligns given genomic range with all its
-        relations using standalone blastn
-        and returns list of GenomicRangesAlignment
-        instances.
+    #     Aligns given genomic range with all its
+    #     relations using standalone blastn
+    #     and returns list of GenomicRangesAlignment
+    #     instances.
 
-        Args:
-            relation (str): relation type.
-            kwargs (dict): any command line arguments
-                to blastn in the following scheme:
-                {'flag': 'value'}.
+    #     Args:
+    #         relation (str): relation type.
+    #         kwargs (dict): any command line arguments
+    #             to blastn in the following scheme:
+    #             {'flag': 'value'}.
 
-        Returns:
-            (list): list of GenomicRangesAlignment instances.
+    #     Returns:
+    #         (list): list of GenomicRangesAlignment instances.
 
-        Raises:
-            ValueError in case provided relation is not
-                available for the genomic range.
-        """
-        if relation not in self.relations.keys():
-            raise ValueError(f"Relation {relation} not in "
-                             f"available list of relations: "
-                             f"{self.relations.keys()}.")
-        alignment_list = list()
-        for grange in self.relations[relation]:
-            alignment_list.append(self.align_blast(grange, **kwargs))
-        return alignment_list
+    #     Raises:
+    #         ValueError in case provided relation is not
+    #             available for the genomic range.
+    #     """
+    #     if relation not in self.relations.keys():
+    #         raise ValueError(f"Relation {relation} not in "
+    #                          f"available list of relations: "
+    #                          f"{self.relations.keys()}.")
+    #     alignment_list = list()
+    #     for grange in self.relations[relation]:
+    #         alignment_list.append(self.align_blast(grange, **kwargs))
+    #     return alignment_list
 
-    def merge_relations(self, relation, distance=0):
-        """Merges genomic ranges from relation on specified distance.
+    # def merge_relations(self, relation, distance=0):
+    #     """Merges genomic ranges from relation on specified distance.
 
-        All genomic ranges closer to each other then the
-        specified distance are merged together and returned.
+    #     All genomic ranges closer to each other then the
+    #     specified distance are merged together and returned.
 
-        Args:
-            relation (str): relation type.
-            distance (int): distance to merge
-                genomic ranges in relation
-                (default: 0).
+    #     Args:
+    #         relation (str): relation type.
+    #         distance (int): distance to merge
+    #             genomic ranges in relation
+    #             (default: 0).
 
-        Returns:
-            (GenomicRangesList) merged genomic ranges from
-                relation.
+    #     Returns:
+    #         (GenomicRangesList) merged genomic ranges from
+    #             relation.
 
-        Raises:
-            ValueError in case there is no given relation
-                availabe for provided genomic range.
-        """
-        try:
-            return self.relations[relation].merge(distance)
-        except KeyError:
-            raise ValueError(f"There is no {relation} "
-                             f"relations for the {self}.")
+    #     Raises:
+    #         ValueError in case there is no given relation
+    #             availabe for provided genomic range.
+    #     """
+    #     try:
+    #         return self.relations[relation].merge(distance)
+    #     except KeyError:
+    #         raise ValueError(f"There is no {relation} "
+    #                          f"relations for the {self}.")
 
 
-def align_with_relation_wrapper(grange, relation, **kwargs):
-    """Simple wrapper around GenomicRange method for multiprocessing."""
-    return grange.align_with_relation(relation, **kwargs)
+# def align_with_relation_wrapper(grange, relation, **kwargs):
+#     """Simple wrapper around GenomicRange method for multiprocessing."""
+#     return grange.align_with_relation(relation, **kwargs)
 
 
 class GenomicRangesAlignment(Alignment):
@@ -662,6 +667,10 @@ class GenomicRangesAlignment(Alignment):
 
     def __repr__(self):
         return super().__str__()
+
+    @property
+    def transcript_class(self):
+        return GenomicRangesTranscript
 
     def to_dict(self):
         dict_ = super().to_dict()
@@ -916,7 +925,7 @@ class GenomicRangesTranscript(Transcript):
 #         return cls(**kwargs)
 
 
-# ChromosomeLocation = namedtuple('ChromosomeLocation', 'size start')
+ChromosomeLocation = namedtuple('ChromosomeLocation', 'size start')
 
 
 class FastaSeqFile:
@@ -950,11 +959,11 @@ class FastaSeqFile:
 
     def __repr__(self):
         """Returns representation of FastaSeqFile object."""
-        return f"FastaSeqFile({self.sequence_file_path})"
+        return f"FastaSeqFile('{self.sequence_file_path}')"
 
     def __str__(self):
         """Returns string representation."""
-        return f"FastaSeqFile({self.sequence_file_path})"
+        return f"FastaSeqFile('{self.sequence_file_path}')"
 
     def __eq__(self, other):
         """Equality magic method."""
@@ -969,7 +978,7 @@ class FastaSeqFile:
         """Restores FastaSeqFile instance from its dict representation."""
         keys = ['sequence_file_path']
         try:
-            kwargs = {key: dict_[key] for key in keys}
+            kwargs = {key: SequencePath.from_dict(dict_[key]) for key in keys}
         except KeyError as e:
             raise ValueError(f"Key {e} is not in the list "
                              f"of nececcary keys {keys}.")
@@ -1559,52 +1568,52 @@ class GenomicRangesList(SortedKeyList):
                     except KeyError:
                         continue
 
-    def align_with_relation(self, relation, cores=1, verbose=False,
-                            suppress_exceptions=False,
-                            **kwargs):
-        """Aligns each genomic range with its relation if it exists.
+    # def align_with_relation(self, relation, cores=1, verbose=False,
+    #                         suppress_exceptions=False,
+    #                         **kwargs):
+    #     """Aligns each genomic range with its relation if it exists.
 
-        For each genomic range in self in case its' relation
-        exists, aligns that genomic range with each range in
-        that relation using standalone blastn. Allows
-        multiprocessing of the alignment process.
+    #     For each genomic range in self in case its' relation
+    #     exists, aligns that genomic range with each range in
+    #     that relation using standalone blastn. Allows
+    #     multiprocessing of the alignment process.
 
-        Args:
-            relation (str): relation to align with.
-            cores (int): how many cores to use (default: 1).
-            verbose (bool): if True, will print progress
-                with tqdm progress bar (default: False).
-            suppress_exceptions (bool): if True, will suppress
-                reporting exceptions to the return list (dfault: False).
-            kwargs (dict-like): any kwargs to pass to
-                GenomicRange.align representing CLI arguments
-                for blastn.
-        Returns:
-            (list, list) two lists: the first contains GenomicRangesAlignment
-                instances representing alignments, the cecond contains
-                exceptions occured during alignment if `suppress_exceptions`
-                is False (otherwise it is empty).
+    #     Args:
+    #         relation (str): relation to align with.
+    #         cores (int): how many cores to use (default: 1).
+    #         verbose (bool): if True, will print progress
+    #             with tqdm progress bar (default: False).
+    #         suppress_exceptions (bool): if True, will suppress
+    #             reporting exceptions to the return list (dfault: False).
+    #         kwargs (dict-like): any kwargs to pass to
+    #             GenomicRange.align representing CLI arguments
+    #             for blastn.
+    #     Returns:
+    #         (list, list) two lists: the first contains GenomicRangesAlignment
+    #             instances representing alignments, the cecond contains
+    #             exceptions occured during alignment if `suppress_exceptions`
+    #             is False (otherwise it is empty).
 
-        Raises:
-            EmptyGenomicRangesListError in case self genomic ranges
-                list is empty.
-        """
-        if len(self) == 0:
-            raise EmptyGenomicRangesListError(self)
+    #     Raises:
+    #         EmptyGenomicRangesListError in case self genomic ranges
+    #             list is empty.
+    #     """
+    #     if len(self) == 0:
+    #         raise EmptyGenomicRangesListError(self)
 
-        process_func = partial(align_with_relation_wrapper,
-                               relation=relation,
-                               **kwargs)
+    #     process_func = partial(align_with_relation_wrapper,
+    #                            relation=relation,
+    #                            **kwargs)
 
-        with NonExceptionalProcessPool(cores,
-                                       verbose,
-                                       suppress_exceptions) as p:
-            alignments, exceptions = p.map(process_func, self)
+    #     with NonExceptionalProcessPool(cores,
+    #                                    verbose,
+    #                                    suppress_exceptions) as p:
+    #         alignments, exceptions = p.map(process_func, self)
 
-        if len(exceptions) > 0:
-            print(exceptions)
+    #     if len(exceptions) > 0:
+    #         print(exceptions)
 
-        return list(chain.from_iterable(alignments))
+    #     return list(chain.from_iterable(alignments))
 
     @classmethod
     def parse_annotation(cls,

@@ -15,8 +15,8 @@ def starapply(func, args):
 
 
 def starstarapply(func, arg_container):
-    return func(*arg_container['args'],
-                **arg_container['kwargs'])
+    return func(*arg_container.get('args', []),
+                **arg_container.get('kwargs', {}))
 
 
 class NonExceptionalProcessPool:
@@ -82,6 +82,13 @@ class NonExceptionalProcessPool:
         self.max_workers = max_workers
         self.verbose = verbose
         self.suppress_exceptions = suppress_exceptions
+        self._pbar = None
+
+    @property
+    def pbar(self):
+        if self._pbar is None:
+            self._pbar = tqdm()
+        return self._pbar
 
     def __enter__(self):
         """Context manager enter."""
@@ -89,6 +96,7 @@ class NonExceptionalProcessPool:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
+        self.pbar.close()
         self.shutdown(wait=True)
         return False
 
@@ -124,8 +132,6 @@ class NonExceptionalProcessPool:
         Raises:
             ValueError in case provided iterable is not iterable.
         """
-        if self.verbose:
-            pbar = tqdm()
         futures = deque()
         exec_func = partial(applier, func)
         try:
@@ -143,7 +149,8 @@ class NonExceptionalProcessPool:
         while futures:
             future = futures.popleft()
             if future.done():
-                pbar.update()
+                if self.verbose:
+                    self.pbar.update()
                 try:
                     futures.append(self.executor.submit(exec_func,
                                                         next(collection)))
@@ -159,7 +166,6 @@ class NonExceptionalProcessPool:
                     futures.append(future)
                 else:
                     futures.appendleft(future)
-        pbar.close()
         return results, exceptions
 
     def map(self, func, iterable):
