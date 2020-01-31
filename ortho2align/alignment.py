@@ -210,12 +210,12 @@ class HSP:
 
         All dynamic data in HSPVertex will be lost!
         """
-        return HSP(self.qstart,
-                   self.qend,
-                   self.sstart,
-                   self.send,
-                   self.score,
-                   **self.kwargs)
+        return self.__class__(self.qstart,
+                              self.qend,
+                              self.sstart,
+                              self.send,
+                              self.score,
+                              **self.kwargs)
 
     @staticmethod
     def _process_boundary(hsp, point, type_, inplace=True):
@@ -545,8 +545,8 @@ class Alignment:
                 hsp.send += 1
             HSPs.append(hsp)
         return cls(HSPs,
-                   hsp.kwargs.get('qlen'),
-                   hsp.kwargs.get('slen'),
+                   qlen=hsp.kwargs.get('qlen'),
+                   slen=hsp.kwargs.get('slen'),
                    **kwargs)
 
     def to_dict(self):
@@ -674,9 +674,8 @@ class Alignment:
             new_hsps = list()
             for hsp in hsps:
                 if hsp.qstart < qleft <= hsp.qend:
-                    HSP._process_boundary(hsp, qleft, 'qleft')
+                    HSPVertex._process_boundary(hsp, qleft, 'qleft')
                     new_hsps.append(hsp)
-                    pass
                 elif qleft <= hsp.qstart:
                     new_hsps.append(hsp)
             hsps = new_hsps
@@ -684,7 +683,7 @@ class Alignment:
             new_hsps = list()
             for hsp in hsps:
                 if hsp.qstart <= qright < hsp.qend:
-                    HSP._process_boundary(hsp, qright, 'qright')
+                    HSPVertex._process_boundary(hsp, qright, 'qright')
                     new_hsps.append(hsp)
                 elif hsp.qend <= qright:
                     new_hsps.append(hsp)
@@ -693,15 +692,13 @@ class Alignment:
             new_hsps = list()
             for hsp in hsps:
                 if hsp.sstart < sleft <= hsp.send:
-                    HSP._process_boundary(hsp, sleft, 'sleft')
+                    HSPVertex._process_boundary(hsp, sleft, 'sleft')
                     new_hsps.append(hsp)
-                    pass
                 elif sleft <= hsp.sstart and hsp.orientation == 'direct':
                     new_hsps.append(hsp)
                 elif hsp.send < sleft <= hsp.sstart:
-                    HSP._process_boundary(hsp, sleft, 'sleft')
+                    HSPVertex._process_boundary(hsp, sleft, 'sleft')
                     new_hsps.append(hsp)
-                    pass
                 elif sleft <= hsp.send and hsp.orientation == 'reverse':
                     new_hsps.append(hsp)
             hsps = new_hsps
@@ -709,15 +706,13 @@ class Alignment:
             new_hsps = list()
             for hsp in hsps:
                 if hsp.sstart <= sright < hsp.send:
-                    HSP._process_boundary(hsp, sright, 'sright')
+                    HSPVertex._process_boundary(hsp, sright, 'sright')
                     new_hsps.append(hsp)
-                    pass
                 elif hsp.send <= sright and hsp.orientation == 'direct':
                     new_hsps.append(hsp)
                 elif hsp.send <= sright < hsp.sstart:
-                    HSP._process_boundary(hsp, sright, 'sright')
+                    HSPVertex._process_boundary(hsp, sright, 'sright')
                     new_hsps.append(hsp)
-                    pass
                 elif hsp.sstart <= sright and hsp.orientation == 'reverse':
                     new_hsps.append(hsp)
             hsps = new_hsps

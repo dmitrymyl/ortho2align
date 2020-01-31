@@ -346,24 +346,40 @@ class GenomicRange:
         Returns:
             (GenomicRange) restored GenomicRange instance.
         """
-        arbitrary_keys = ['chrom',
-                          'start',
-                          'end']
-        optional_keys = [('strand', '.'),
-                         ('name', None),
-                         ('genome', None),
-                         ('sequence_file_path', None),
-                         ('relations', dict())]
-        try:
-            kwargs = {key: dict_[key] for key in arbitrary_keys}
-        except KeyError as e:
-            raise ValueError(f"Key {e} is not in the list "
-                             f"of arbitrary keys {arbitrary_keys}.")
-        kwargs.update({key[0]: dict_.get(key[0], key[1])
-                       for key in optional_keys})
-        if kwargs['relations']:
-            kwargs['relations'] = {key: GenomicRangesList.from_dict(value)
-                                   for key, value in kwargs['relations'].items()}
+        # arbitrary_keys = ['chrom',
+        #                   'start',
+        #                   'end']
+        # optional_keys = [('strand', '.'),
+        #                  ('name', None),
+        #                  ('genome', None),
+        #                  ('sequence_file_path', None),
+        #                  ('relations', dict())]
+        # try:
+        #     kwargs = {key: dict_[key] for key in arbitrary_keys}
+        # except KeyError as e:
+        #     raise ValueError(f"Key {e} is not in the list "
+        #                      f"of arbitrary keys {arbitrary_keys}.")
+        # kwargs.update({key[0]: dict_.get(key[0], key[1])
+        #                for key in optional_keys})
+        keys = ['chrom',
+                'start',
+                'end',
+                'strand',
+                'name',
+                'genome',
+                'sequence_file_path',
+                'relations']
+        functions = [lambda i: i.get('chrom'),
+                     lambda i: i.get('start'),
+                     lambda i: i.get('end'),
+                     lambda i: i.get('strand'),
+                     lambda i: i.get('name'),
+                     lambda i: i.get('genome'),
+                     lambda i: SequencePath.from_dict(i.get('sequence_file_path', {'path': None})),
+                     lambda i: {key: GenomicRangesList.from_dict(value)
+                                for key, value in i.get('relations', {}).items()}]
+        kwargs = {key: function(dict_)
+                  for key, function in zip(keys, functions)}
         return cls(**kwargs)
 
     @property
@@ -562,7 +578,7 @@ class GenomicRange:
                    '-query', self.sequence_file_path,
                    '-subject', other.sequence_file_path,
                    '-outfmt', "7 std score"]
-        add_args = sum((['-' + key, value]
+        add_args = sum((['-' + str(key), str(value)]
                         for key, value in kwargs.items()),
                        [])
         with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
@@ -641,6 +657,7 @@ class GenomicRangesAlignment(Alignment):
                  qlen=None,
                  slen=None,
                  filtered_HSPs=None,
+                 filtered=None,
                  relative=True):
         """Inits Alignment class.
 
@@ -657,7 +674,7 @@ class GenomicRangesAlignment(Alignment):
                (default: None).
 
         """
-        super().__init__(HSPs, qlen, slen, filtered_HSPs)
+        super().__init__(HSPs, qlen, slen, filtered_HSPs, filtered)
         self.qrange = qrange
         self.srange = srange
         self.relative = relative
@@ -667,6 +684,17 @@ class GenomicRangesAlignment(Alignment):
 
     def __repr__(self):
         return super().__str__()
+
+    def __eq__(self, other):
+        if len(self._all_HSPs) != len(other._all_HSPs):
+            return False
+        if self.qlen != other.qlen or self.slen != other.slen:
+            return False
+        if self.qrange != other.qrange or self.srange != other.srange:
+            return False
+        if self.relative != other.relative:
+            return False
+        return all([i == k for i, k in zip(self._all_HSPs, other._all_HSPs)])
 
     @property
     def transcript_class(self):
@@ -704,6 +732,8 @@ class GenomicRangesAlignment(Alignment):
         return cls(**kwargs)
 
     def to_genomic(self):
+        if not self.relative:
+            return
         # query sequence
         if self.qrange.strand != '-':
             for hsp in chain(self._all_HSPs, self.HSPs):
@@ -725,6 +755,8 @@ class GenomicRangesAlignment(Alignment):
         self.relative = False
 
     def to_relative(self):
+        if self.relative:
+            return
         if self.qrange.strand != '-':
             for hsp in chain(self._all_HSPs, self.HSPs):
                 hsp.qstart = hsp.qstart - self.qrange.start
@@ -746,7 +778,7 @@ class GenomicRangesAlignment(Alignment):
 
     def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
         hsps = self._cut_hsps(qleft=qleft, qright=qright, sleft=sleft, sright=sright)
-        return GenomicRangesAlignment(hsps, qrange=self.qrange, srange=self.srange)
+        return GenomicRangesAlignment(hsps, qrange=self.qrange, srange=self.srange, relative=self.relative)
 
     @classmethod
     def from_file_blast(cls,
@@ -783,10 +815,10 @@ class GenomicRangesTranscript(Transcript):
     def _prepare_side(self, side='q'):
         if side == 'q':
             chrom = self.alignment.qrange.chrom
-            chromStart = min(min(self.HSPs, key=lambda i: i.qstart),
-                             min(self.HSPs, key=lambda i: i.qend))
-            chromEnd = max(max(self.HSPs, key=lambda i: i.qstart),
-                           max(self.HSPs, key=lambda i: i.qend))
+            chromStart = min(min(self.HSPs, key=lambda i: i.qstart).qstart,
+                             min(self.HSPs, key=lambda i: i.qend).qend)
+            chromEnd = max(max(self.HSPs, key=lambda i: i.qstart).qstart,
+                           max(self.HSPs, key=lambda i: i.qend).qend)
             name = self.alignment.qrange.name
             strand = nxor_strands(self.HSPs[0].qstrand,
                                   self.alignment.qrange.strand)
@@ -797,10 +829,10 @@ class GenomicRangesTranscript(Transcript):
                 blockStarts = [hsp.qend - chromStart for hsp in self.HSPs]
         elif side == 's':
             chrom = self.alignment.srange.chrom
-            chromStart = min(min(self.HSPs, key=lambda i: i.sstart),
-                             min(self.HSPs, key=lambda i: i.send))
-            chromEnd = max(max(self.HSPs, key=lambda i: i.sstart),
-                           max(self.HSPs, key=lambda i: i.send))
+            chromStart = min(min(self.HSPs, key=lambda i: i.sstart).sstart,
+                             min(self.HSPs, key=lambda i: i.send).send)
+            chromEnd = max(max(self.HSPs, key=lambda i: i.sstart).sstart,
+                           max(self.HSPs, key=lambda i: i.send).send)
             name = self.alignment.srange.name
             strand = nxor_strands(self.HSPs[0].sstrand,
                                   self.alignment.srange.strand)
@@ -852,9 +884,9 @@ class GenomicRangesTranscript(Transcript):
         if mode == 'list':
             return [q_side, s_side]
         elif mode == 'str':
-            return ["\t".join([','.join(item) if isinstance(item, list) else item
+            return ["\t".join([','.join(str(value) for value in item) if isinstance(item, list) else str(item)
                                for item in q_side]),
-                    "\t".join([','.join(item) if isinstance(item, list) else item
+                    "\t".join([','.join(str(value) for value in item) if isinstance(item, list) else str(item)
                                for item in s_side])]
         else:
             raise ValueError('mode not one of ["list", "str"].')
