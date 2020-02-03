@@ -105,56 +105,163 @@ class SequenceFileNotFoundError(GenomicException):
                          f"for {self.instance} doesn't exist.")
 
 
-def fasta_reformatter(infile, outfile, total, linewidth=60,
-                      reverse=False, complement=False):
+# def fasta_reformatter(infile, outfile, total, linewidth=60,
+#                       reverse=False, complement=False):
+#     """Reformats fasta file.
+
+#     Allows one to reformat existing sequence in
+#     fasta format to the specified linewidth.
+
+#     Args:
+#         infile (fileobj): input fasta file with cursor set
+#             at the start of sequence fragment.
+#         outfile (fileobj): output fasta file.
+#         total (int): number of symbols to read.
+#         linewidth (int): linewidth of new sequence
+#             (default: 60).
+#         reverse (bool): if True, takes sequence backwards
+#             (default: False).
+#         complement (bool): if True, returns complement
+#             nucleotide sequence (default: False).
+
+#     Returns:
+#         None
+#     """
+#     read_counter = 0
+#     line_break = False
+#     compl_map = {'A': 'T',
+#                  'a': 't',
+#                  'T': 'A',
+#                  't': 'a',
+#                  'G': 'C',
+#                  'g': 'c',
+#                  'C': 'G',
+#                  'c': 'g'}
+#     c = infile.read(1)
+#     while read_counter < total and c != '':
+#         if reverse:
+#             infile.seek(infile.tell() - 2)
+#         if c == "\n":
+#             pass
+#         else:
+#             if complement:
+#                 c = compl_map[c]
+#             read_counter += 1
+#             outfile.write(c)
+#             line_break = False
+#             if read_counter % linewidth == 0:
+#                 outfile.write('\n')
+#                 line_break = True
+#         c = infile.read(1)
+#     if not line_break:
+#         outfile.write('\n')
+
+
+def sequence_getter(infile, total=None):
+    """Gets a genomic sequence from the file object.
+
+    Gets at most `total` sequence characters from the
+    fasta `infile` excluding line breaks. If `total` is
+    None, than reads infinite number of characters up to
+    EOF or next record in fasta file.
+
+    Args:
+        infile (fileobj): input file object to read
+            characters from.
+        total (int): a total number of characters to read
+            (default: None; means to read characters up to EOF
+            or next record in fasta file).
+
+    Returns:
+        (str) a string with read characters.
+    """
+    # In case user wants to extract all sequence till its end.
+    if total is None:
+        total = float('inf')
+    # Initial assignments.
+    line = infile.readline().rstrip()
+    record = ''
+    # A loop for reading the record from infile.
+    while len(record) < total and line != '' and not line.startswith('>'):
+        record += line
+        line = infile.readline().rstrip()
+    # Record trimming.
+    if len(record) > total:
+        record = record[:total]
+    return record
+
+
+def wrap_generator(line, width):
+    """Generator that wraps line.
+
+    A generator that given a string
+    yields its slices of given width.
+
+    Args:
+        line (str): a string to wrap.
+        width (int): a length of yielded
+            slices.
+    Yields:
+        (str): one string slice of given length
+            at a time.
+    """
+    if len(line) <= width:
+        yield line
+    else:
+        for i in range(0, len(line) - width, width):
+            yield line[i: i + width]
+        i += width
+        if i < len(line):
+            yield line[i:]
+
+
+from_line = 'AaTtGgCc'
+to_line = 'TtAaCcGg'
+trans_map = str.maketrans(from_line, to_line)
+
+
+def fasta_extractor(infile, outfile, total=None, linewidth=60, reverse=False,
+                    complement=False, header=False):
     """Reformats fasta file.
 
     Allows one to reformat existing sequence in
-    fasta format to the specified linewidth.
+    fasta format to the specified linewidth. If `header`
+    is `False` (default), the pointer in the infile
+    must be put at the beginning of the desired sequence.
 
     Args:
         infile (fileobj): input fasta file with cursor set
             at the start of sequence fragment.
         outfile (fileobj): output fasta file.
-        total (int): number of symbols to read.
+        total (int): number of symbols to read (default: None;
+            means to read all sequence up to EOF or next record).
         linewidth (int): linewidth of new sequence
             (default: 60).
         reverse (bool): if True, takes sequence backwards
             (default: False).
         complement (bool): if True, returns complement
             nucleotide sequence (default: False).
-
+        header (bool): if True, writes fasta record header from `infile`
+            to `outfile` (default: False).
     Returns:
         None
     """
-    read_counter = 0
-    line_break = False
-    compl_map = {'A': 'T',
-                 'a': 't',
-                 'T': 'A',
-                 't': 'a',
-                 'G': 'C',
-                 'g': 'c',
-                 'C': 'G',
-                 'c': 'g'}
-    c = infile.read(1)
-    while read_counter < total and c != '':
-        if reverse:
-            infile.seek(infile.tell() - 2)
-        if c == "\n":
-            pass
-        else:
-            if complement:
-                c = compl_map[c]
-            read_counter += 1
-            outfile.write(c)
-            line_break = False
-            if read_counter % linewidth == 0:
-                outfile.write('\n')
-                line_break = True
-        c = infile.read(1)
-    if not line_break:
-        outfile.write('\n')
+    # In case user wants to reformat fasta file and retain its header.
+    if header:
+        line = infile.readline()
+        while not line.startswith('>'):
+            line = infile.readline()
+        outfile.write(line)
+    # Getting the record.
+    record = sequence_getter(infile, total)
+    # Processing the recod.
+    if complement:
+        record = record.translate(trans_map)
+    if reverse:
+        record = record[::-1]
+    # A loop for writing record to the file.
+    for line in wrap_generator(record, linewidth):
+        outfile.write(line + '\n')
 
 
 class SequencePath:
@@ -1134,21 +1241,23 @@ class FastaSeqFile:
         if grange.end > chrom_size:
             raise GenomicCoordinatesError(grange,
                                           self.chromsizes[grange.chrom])
+        self.locate_coordinate(chrom_start, grange.start)
         if grange.strand == '-':
-            self.locate_coordinate(chrom_start, grange.end - 1)
+            # self.locate_coordinate(chrom_start, grange.end - 1)
             reverse = True
             complement = True
         else:
-            self.locate_coordinate(chrom_start, grange.start)
+            # self.locate_coordinate(chrom_start, grange.start)
             reverse = False
             complement = False
         outfile.write(">" + grange.sequence_header + "\n")
-        fasta_reformatter(self._file_obj,
-                          outfile,
-                          total=(grange.end - grange.start),
-                          linewidth=linewidth,
-                          reverse=reverse,
-                          complement=complement)
+        # fasta_reformatter(self._file_obj,
+        fasta_extractor(self._file_obj,
+                        outfile,
+                        total=(grange.end - grange.start),
+                        linewidth=linewidth,
+                        reverse=reverse,
+                        complement=complement)
 
 
 class GenomicRangesList(SortedKeyList):
