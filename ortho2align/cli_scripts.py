@@ -153,7 +153,7 @@ def get_orthodb_map():
     parser.add_argument('-orthodb_prefix',
                         type=str,
                         nargs='?',
-                        default='odb10v0_',
+                        default='odb10v1_',
                         help='Prefix of all OrthoDB files in OrthoDB folder.')
     parser.add_argument('-tmp_path',
                         type=str,
@@ -299,11 +299,17 @@ def get_orthodb_map():
                       'odb_species_id',
                       'protein_seq_id',
                       'synonyms',
+                      'UniProt',
+                      'ENSEMBL',
+                      'NCBIgid',
                       'description']
     genes_dtypes = {'odb_gene_id': 'str',
                     'odb_species_id': 'category',
                     'protein_seq_id': 'str',
                     'synonyms': 'str',
+                    'UniProt': 'str',
+                    'ENSEMBL': 'str',
+                    'NCBIgid': 'str',
                     'description': 'str'}
 
     subject_species_genes_filename = filter_odb_file('genes.tab',
@@ -475,13 +481,15 @@ def estimate_background():
     output_filename = args.output
     cores = args.cores
 
-    query_genes = GenomicRangesList.parse_annotation(query_genes_filename,
-                                                     filetype=query_genes_filetype,
-                                                     genome=query_genome_filename)
-    subject_genes = GenomicRangesList.parse_annotation(subject_genes_filename,
-                                                       filetype=subject_genes_filetype,
-                                                       genome=subject_genome_filename)
-    subject_genes = subject_genes.invert_ranges()
+    with open(query_genes_filename, 'r') as infile:
+        query_genes = GenomicRangesList.parse_annotation(infile,
+                                                         fileformat=query_genes_filetype,
+                                                         sequence_file_path=query_genome_filename)
+    with open(subject_genes_filename, 'r') as infile:
+        subject_genes = GenomicRangesList.parse_annotation(infile,
+                                                           fileformat=subject_genes_filetype,
+                                                           sequence_file_path=subject_genome_filename)
+    subject_genes = subject_genes.inter_ranges()
     query_samples = GenomicRangesList([random.choice(query_genes) for _ in range(observations)],
                                       query_genes.sequence_file_path)
     subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
@@ -491,7 +499,7 @@ def estimate_background():
     sample_pairs = zip(query_samples, subject_samples)
 
     with NonExceptionalProcessPool(cores) as p:
-        alignments, exceptions = p.starmap(align_two_ranges_blast, sample_pairs)
+        alignments, exceptions = p.starmap_async(align_two_ranges_blast, sample_pairs)
 
     if len(exceptions) > 0:
         print('Exceptions occured: ')
@@ -602,15 +610,18 @@ def get_alignments():
     merge_dist = args.merge_dist
     flank_dist = args.flank_dist
 
-    query_genes = GenomicRangesList.parse_annotation(query_genes_filename,
-                                                     filetype=query_genes_filetype,
-                                                     genome=query_genome_filename)
-    query_proteins = GenomicRangesList.parse_annotation(query_proteins_filename,
-                                                        filetype=query_proteins_filetype,
-                                                        genome=query_genome_filename)
-    subject_proteins = GenomicRangesList.parse_annotation(subject_proteins_filename,
-                                                          filetype=subject_proteins_filetype,
-                                                          genome=subject_genome_filename)
+    with open(query_genes_filename, 'r') as infile:
+        query_genes = GenomicRangesList.parse_annotation(infile,
+                                                         fileformat=query_genes_filetype,
+                                                         sequence_file_path=query_genome_filename)
+    with open(query_proteins_filename, 'r') as infile:
+        query_proteins = GenomicRangesList.parse_annotation(infile,
+                                                            fileformat=query_proteins_filetype,
+                                                            sequence_file_path=query_genome_filename)
+    with open(subject_proteins_filename, 'r') as infile:
+        subject_proteins = GenomicRangesList.parse_annotation(infile,
+                                                              fileformat=subject_proteins_filetype,
+                                                              sequence_file_path=subject_genome_filename)
     with open(ortho_map_filename, 'r') as mapfile:
         ortho_map = json.load(mapfile)
 

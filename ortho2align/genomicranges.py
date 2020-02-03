@@ -15,7 +15,6 @@ Translation from other systems:
 1-based exclusive: start += -1, end += -1
 """
 import re
-from functools import partial
 from itertools import chain
 from pathlib import Path
 from subprocess import Popen, PIPE
@@ -24,7 +23,6 @@ from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from tqdm import tqdm
 from .alignment import HSPVertex, Alignment, Transcript, nxor_strands
-from .parallel import NonExceptionalProcessPool
 
 
 class GenomicException(Exception):
