@@ -687,9 +687,11 @@ class GenomicRange:
                         for key, value in kwargs.items()),
                        [])
         with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
-            alignment = GenomicRangesAlignment.from_file_blast(TextIOWrapper(proc.stdout),
+            stream = TextIOWrapper(proc.stdout)
+            alignment = GenomicRangesAlignment.from_file_blast(stream,
                                                                self,
                                                                other)
+            stream.close()
         return alignment
 
     # def align_with_relation(self, relation, **kwargs):
@@ -883,7 +885,10 @@ class GenomicRangesAlignment(Alignment):
 
     def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
         hsps = self._cut_hsps(qleft=qleft, qright=qright, sleft=sleft, sright=sright)
-        return GenomicRangesAlignment(hsps, qrange=self.qrange, srange=self.srange, relative=self.relative)
+        return GenomicRangesAlignment(hsps,
+                                      qrange=self.qrange,
+                                      srange=self.srange,
+                                      relative=self.relative)
 
     @classmethod
     def from_file_blast(cls,
@@ -1193,6 +1198,7 @@ class FastaSeqFile:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager for closing sequence file."""
         self._file_obj.close()
+        self._file_obj = None
 
     def locate_coordinate(self, chrom_start, coord):
         """Puts file pointer to the beginning of the genomic range.
@@ -1653,8 +1659,8 @@ class GenomicRangesList(SortedKeyList):
             ValueError in cases the extraction mode is not
                 one of 'bulk', 'split'.
         """
-        with self.sequence_file:
-            if mode == 'split':
+        if mode == 'split':
+            with self.sequence_file:
                 filenames = list()
                 for grange in tqdm(self):
                     grange.sequence_file_path = (str(outfileprefix) +
@@ -1663,16 +1669,17 @@ class GenomicRangesList(SortedKeyList):
                     with open(grange.sequence_file_path, 'w') as output:
                         self.sequence_file.get_fasta_by_coord(grange, output)
                     filenames.append(grange.sequence_file_path)
-                return filenames
-            elif mode == 'bulk':
+        elif mode == 'bulk':
+            with self.sequence_file:
                 outfilename = str(outfileprefix) + '.fasta'
                 with open(outfilename, 'w') as output:
                     for grange in self:
                         self.sequence_file.get_fasta_by_coord(grange, output)
-                return [outfilename]
-            else:
-                raise ValueError(f"get_fasta mode {mode} not "
-                                 f"one of ['split', 'bulk'].")
+                filenames = [outfilename]
+        else:
+            raise ValueError(f"get_fasta mode {mode} not "
+                             f"one of ['split', 'bulk'].")
+        return filenames
 
     def relation_mapping(self, other, mapping, relation):
         """Maps relations of two genomic ranges lists.

@@ -88,8 +88,8 @@ class HSP:
         self.send = send
         self.score = score
         self.kwargs = kwargs
-        self.qstrand = self.qend - self.qstart > 0
-        self.sstrand = self.send - self.sstart > 0
+        self.qstrand = self.qend - self.qstart >= 0
+        self.sstrand = self.send - self.sstart >= 0
         self.orientation = self.orientation_dict.get((self.qstrand,
                                                       self.sstrand))
 
@@ -519,8 +519,13 @@ class Alignment:
         if not line.startswith('#'):
             raise ValueError("Provided file_object is not in accepted file format.")
 
-        while not line.startswith("# Fields:"):
+        for _ in range(100):
             line = file_object.readline()
+            if line.startswith("# Fields:"):
+                break
+        else:
+            return cls([HSPVertex(0, 0, 0, 0, 0)],
+                       **kwargs)
 
         fields = line.lstrip("# Fields: ").rstrip("\n").split(", ")
         if 'score' not in fields:
@@ -715,7 +720,8 @@ class Alignment:
                     new_hsps.append(hsp)
                 elif hsp.sstart <= sright and hsp.orientation == 'reverse':
                     new_hsps.append(hsp)
-            hsps = new_hsps
+        if len(hsps) == 0:
+            hsps.append(HSPVertex(0, 0, 0, 0, 0))
         return hsps
 
     def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):

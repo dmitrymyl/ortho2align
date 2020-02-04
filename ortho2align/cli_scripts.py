@@ -397,7 +397,8 @@ def get_orthodb_map():
                                            axis=1))
     map_df = (report_df.drop(['og_id'], axis=1)
                        .groupby(['query_xref_id', 'ncbi_tax_id'])
-                       .agg(list))
+                       .agg(list)
+                       .applymap(lambda x: x if isinstance(x, list) else []))
     json_map = defaultdict(dict)
     for key, value in map_df.to_dict()['subject_xref_id'].items():
         subject_xref_id = key[0]
@@ -507,7 +508,8 @@ def estimate_background():
             print(exception)
 
     scores = [hsp.score for alignment in alignments for hsp in alignment.HSPs]
-    np.save(output_filename, scores, allow_pickle=False)
+    with open(output_filename, 'wb') as outfile:
+        np.save(outfile, scores, allow_pickle=False)
 
 
 def align_syntenies(grange):
@@ -517,9 +519,10 @@ def align_syntenies(grange):
     alignments = list()
     for synteny in grange.relations['syntenies']:
         alignment = neighbourhood.align_blast(synteny)
-        alignment = alignment.to_genomic().cut_coordinates(qleft=grange.start,
-                                                           qright=grange.end)
-        alignment.srange = grange
+        alignment.to_genomic()
+        # alignment = alignment.cut_coordinates(qleft=grange.start,
+        #                                       qright=grange.end)
+        alignment.qrange = grange
         alignments.append(alignment)
     return alignments
 
@@ -634,21 +637,22 @@ def get_alignments():
                                'neighbours')
     for query_gene in query_genes:
         query_gene.relations['syntenies'] = GenomicRangesList([],
-                                                              genome=subject_genome_filename)
+                                                              sequence_file_path=subject_genome_filename)
 
         for neighbour in query_gene.relations['neighbours']:
             query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
 
-        query_gene.relation['syntenies'] = query_genes.relation['syntenies'] \
+        query_gene.relations['syntenies'] = query_gene.relations['syntenies'] \
                                                       .flank(flank_dist) \
                                                       .merge(merge_dist)
-        query_gene.relation['neighbours'] = query_gene.relation['neighbours'] \
-                                                      .merge(2 * neighbour_dist
-                                                             + query_gene.end
-                                                             - query_gene.start)
+        # query_gene.relations['neighbours'] = query_gene.relations['neighbours'] \
+        #                                                .merge(2 * neighbour_dist
+        #                                                       + query_gene.end
+        #                                                       - query_gene.start)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].merge(float('inf'))
 
-    with NonExceptionalProcessPool(cores) as p:
-        alignments, exceptions = p.map(align_syntenies, query_genes)
+    with NonExceptionalProcessPool(cores, verbose=True) as p:
+        alignments, exceptions = p.map_async(align_syntenies, query_genes)
 
     if len(exceptions) > 0:
         print('Exceptions occured:')
@@ -660,7 +664,7 @@ def get_alignments():
                   for alignment in group]
 
     with open(output_filename, 'w') as outfile:
-        json.dump(outfile, alignments)
+        json.dump(alignments, outfile)
 
 
 def refine_alignments():
@@ -733,11 +737,14 @@ def refine_alignments():
     subject_transcripts = list()
 
     for alignment in alignment_data:
-        alignment.filter_by_socre(score_threshold)
+        alignment.filter_by_score(score_threshold)
         transcript = alignment.best_transcript()
-        record = transcript.to_bed12(mode='str')
-        query_transcripts.append(record[0])
-        subject_transcripts.append(record[1])
+        try:
+            record = transcript.to_bed12(mode='str')
+            query_transcripts.append(record[0])
+            subject_transcripts.append(record[1])
+        except ValueError:
+            print(transcript.qrange)
 
     with open(query_output_filename, 'w') as outfile:
         for record in query_transcripts:
