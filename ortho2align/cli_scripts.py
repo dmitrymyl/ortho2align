@@ -520,8 +520,8 @@ def align_syntenies(grange):
     for synteny in grange.relations['syntenies']:
         alignment = neighbourhood.align_blast(synteny)
         alignment.to_genomic()
-        # alignment = alignment.cut_coordinates(qleft=grange.start,
-        #                                       qright=grange.end)
+        alignment = alignment.cut_coordinates(qleft=grange.start,
+                                              qright=grange.end)
         alignment.qrange = grange
         alignments.append(alignment)
     return alignments
@@ -673,7 +673,7 @@ def refine_alignments():
     import numpy as np
     from pathlib import Path
     from .genomicranges import GenomicRangesAlignment
-    from .parallel import HistogramFitter, KernelFitter
+    from .fitting import HistogramFitter, KernelFitter
 
     parser = argparse.ArgumentParser(description='',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -698,24 +698,36 @@ def refine_alignments():
                         nargs='?',
                         default=0.05,
                         help='p-value threshold to filter HSPs by score.')
-    parser.add_argument('-query_output',
+    parser.add_argument('-query_transcripts',
                         type=str,
                         nargs='?',
                         required=True,
                         help='output filename for query transcripts.')
-    parser.add_argument('-subject_output',
+    parser.add_argument('-subject_transcripts',
                         type=str,
                         nargs='?',
                         required=True,
                         help='output filename for subject transcripts.')
+    parser.add_argument('-query_unaligned',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename for unaligned query ranges.')
+    parser.add_argument('-subject_unaligned',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename for unaligned subject ranges.')
 
     args = parser.parse_args(sys.argv[2:])
 
     alignments_filename = Path(args.alignments)
     background_filename = Path(args.background)
     fitting_type = args.fitting
-    query_output_filename = Path(args.query_output)
-    subject_output_filename = Path(args.subject_output)
+    query_output_filename = Path(args.query_transcripts)
+    subject_output_filename = Path(args.subject_transcripts)
+    query_unaligned_filename = Path(args.query_unaligned)
+    subject_unaligned_filename = Path(args.subject_unaligned)
     pval_treshold = args.threshold
 
     with open(alignments_filename, 'r') as infile:
@@ -726,25 +738,29 @@ def refine_alignments():
 
     background_data = np.load(background_filename)
 
-    if fitting_type == 'histogram':
+    if fitting_type == 'hist':
         fitter = HistogramFitter
-    elif fitting_type == 'kernel':
+    elif fitting_type == 'kde':
         fitter = KernelFitter
 
     background = fitter(background_data)
     score_threshold = background.isf(pval_treshold)
     query_transcripts = list()
     subject_transcripts = list()
+    query_unaligned = list()
+    subject_unaligned = list()
 
     for alignment in alignment_data:
         alignment.filter_by_score(score_threshold)
+        alignment.srange.name = 'ortho_' + alignment.qrange.name
         transcript = alignment.best_transcript()
         try:
             record = transcript.to_bed12(mode='str')
             query_transcripts.append(record[0])
             subject_transcripts.append(record[1])
         except ValueError:
-            print(transcript.qrange)
+            query_unaligned.append(alignment.qrange.to_dict())
+            subject_unaligned.append(alignment.srange.to_dict())
 
     with open(query_output_filename, 'w') as outfile:
         for record in query_transcripts:
@@ -752,6 +768,10 @@ def refine_alignments():
     with open(subject_output_filename, 'w') as outfile:
         for record in subject_transcripts:
             outfile.write(record + "\n")
+    with open(query_unaligned_filename, 'w') as outfile:
+        json.dump(query_unaligned, outfile)
+    with open(subject_unaligned_filename, 'w') as outfile:
+        json.dump(subject_unaligned, outfile)
 
 
 def ortho2align():

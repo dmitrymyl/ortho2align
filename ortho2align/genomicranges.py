@@ -507,6 +507,10 @@ class GenomicRange:
             return self.sequence_header
         return self._name
 
+    @name.setter
+    def name(self, value):
+        self._name = value
+
     def distance(self, other):
         """Calculates distance between two genomic ranges.
 
@@ -1516,7 +1520,7 @@ class GenomicRangesList(SortedKeyList):
                 self._name_mapping[grange.name].append(grange)
         return self._name_mapping
 
-    def merge(self, distance=0):
+    def merge(self, distance=0, verbose=False):
         """Merges genomic ranges on the given distance.
 
         If the distance between two genomic ranges
@@ -1538,7 +1542,7 @@ class GenomicRangesList(SortedKeyList):
         if len(self) == 0:
             return new_range_list
         new_range_list.add(self[0])
-        for grange in tqdm(self[1:]):
+        for grange in tqdm(self[1:], disable=not verbose):
             try:
                 if abs(new_range_list[-1].distance(grange)) <= distance:
                     old_range = new_range_list.pop()
@@ -1549,7 +1553,7 @@ class GenomicRangesList(SortedKeyList):
                 new_range_list.add(grange)
         return new_range_list
 
-    def inter_ranges(self, distance=0):
+    def inter_ranges(self, distance=0, verbose=False):
         """Returns inner genomic regions covered with no genomic ranges.
 
         First merges all genomic ranges provided
@@ -1570,7 +1574,7 @@ class GenomicRangesList(SortedKeyList):
         """
         merged = self.merge(distance)
         inverted_granges = list()
-        for i in tqdm(range(len(merged) - 1)):
+        for i in tqdm(range(len(merged) - 1), disable=not verbose):
             if merged[i].chrom == merged[i + 1].chrom:
                 new_chrom = merged[i].chrom
                 new_start = merged[i].end
@@ -1584,7 +1588,7 @@ class GenomicRangesList(SortedKeyList):
                                                      genome=new_genome))
         return GenomicRangesList(inverted_granges, self.sequence_file_path)
 
-    def get_neighbours(self, other, distance=0, relation='neighbours'):
+    def get_neighbours(self, other, distance=0, relation='neighbours', verbose=False):
         """Finds all neighbours of self in other at the given distance.
 
         For each genomic range in self finds all ranges in other
@@ -1604,11 +1608,11 @@ class GenomicRangesList(SortedKeyList):
         Returns:
             None.
         """
-        for grange in tqdm(self):
+        for grange in tqdm(self, disable=not verbose):
             grange.relations[relation] = grange.find_neighbours(other,
                                                                 distance=distance)
 
-    def flank(self, distance=0, check_boundaries=True):
+    def flank(self, distance=0, check_boundaries=True, verbose=False):
         """Flanks all genomic ranges in the list with given distance.
 
         Allows correction of new start and end coordinates in case
@@ -1629,7 +1633,7 @@ class GenomicRangesList(SortedKeyList):
         """
         new_grangelist = GenomicRangesList([],
                                            sequence_file_path=self.sequence_file_path)
-        for grange in tqdm(self):
+        for grange in tqdm(self, disable=not verbose):
             new_grange = grange.flank(distance)
             if check_boundaries:
                 new_grange.start = max(0, new_grange.start)
@@ -1638,7 +1642,7 @@ class GenomicRangesList(SortedKeyList):
             new_grangelist.add(new_grange)
         return new_grangelist
 
-    def get_fasta(self, outfileprefix, mode='split'):
+    def get_fasta(self, outfileprefix, mode='split', verbose=False):
         """Extracts sequences of genomic ranges.
 
         Can extract sequences of all genomic ranges
@@ -1662,7 +1666,7 @@ class GenomicRangesList(SortedKeyList):
         if mode == 'split':
             with self.sequence_file:
                 filenames = list()
-                for grange in tqdm(self):
+                for grange in tqdm(self, disable=not verbose):
                     grange.sequence_file_path = (str(outfileprefix) +
                                                  grange.sequence_header +
                                                  '.fasta')
@@ -1681,7 +1685,7 @@ class GenomicRangesList(SortedKeyList):
                              f"one of ['split', 'bulk'].")
         return filenames
 
-    def relation_mapping(self, other, mapping, relation):
+    def relation_mapping(self, other, mapping, relation, verbose=False):
         """Maps relations of two genomic ranges lists.
 
         Provided with the map of genomic ranges names in
@@ -1701,7 +1705,7 @@ class GenomicRangesList(SortedKeyList):
         Returns:
             None
         """
-        for grange in tqdm(self):
+        for grange in tqdm(self, disable=not verbose):
             if grange.relations.get(relation) is None:
                 grange.relations[relation] = GenomicRangesList([],
                                                                other.sequence_file_path)

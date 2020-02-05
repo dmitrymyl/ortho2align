@@ -88,8 +88,8 @@ class HSP:
         self.send = send
         self.score = score
         self.kwargs = kwargs
-        self.qstrand = self.qend - self.qstart >= 0
-        self.sstrand = self.send - self.sstart >= 0
+        self.qstrand = self.qend - self.qstart > 0
+        self.sstrand = self.send - self.sstart > 0
         self.orientation = self.orientation_dict.get((self.qstrand,
                                                       self.sstrand))
 
@@ -435,14 +435,17 @@ class Alignment:
 
         """
         self._all_HSPs = HSPs
-        self.HSPs = HSPs.copy() if filtered_HSPs is None else filtered_HSPs
+        self.HSPs = [hsp.copy() for hsp in HSPs] if filtered_HSPs is None else filtered_HSPs
         self.qlen = (max(self._all_HSPs,
-                         key=lambda hsp: hsp.qend).qend + 1
+                         key=lambda hsp: hsp.qend,
+                         default=HSPVertex(0, 0, 0, 0, 0)).qend + 1
                      if qlen is None else qlen)
         self.slen = (max(max(self._all_HSPs,
-                             key=lambda hsp: hsp.sstart).sstart + 1,
+                             key=lambda hsp: hsp.sstart,
+                             default=HSPVertex(0, 0, 0, 0, 0)).sstart + 1,
                          max(self._all_HSPs,
-                             key=lambda hsp: hsp.send).send + 1)
+                             key=lambda hsp: hsp.send,
+                             default=HSPVertex(0, 0, 0, 0, 0)).send + 1)
                      if slen is None else slen)
         self.filtered = False if filtered_HSPs is None else True
 
@@ -465,16 +468,18 @@ class Alignment:
     def transcript_class(self):
         return Transcript
 
-    def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None):
+    def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None, main_color='black', all_color='grey'):
         """Plots alignment map."""
-        for hsp in self._all_HSPs:
-            plt.plot([hsp.qstart, hsp.qend],
-                     [hsp.sstart, hsp.send],
-                     color='grey')
-        for hsp in self.HSPs:
-            plt.plot([hsp.qstart, hsp.qend],
-                     [hsp.sstart, hsp.send],
-                     color='black')
+        if self.filtered:
+            hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
+                          for hsp in self._all_HSPs)
+            qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
+            plt.plot([qstarts, qends], [sstarts, sends], color=all_color)
+
+        hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
+                      for hsp in self.HSPs)
+        qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
+        plt.plot([qstarts, qends], [sstarts, sends], color=main_color)
         plt.xlim(qleft, qright)
         plt.ylim(sleft, sright)
         plt.xlabel("Query")
@@ -524,7 +529,7 @@ class Alignment:
             if line.startswith("# Fields:"):
                 break
         else:
-            return cls([HSPVertex(0, 0, 0, 0, 0)],
+            return cls([],
                        **kwargs)
 
         fields = line.lstrip("# Fields: ").rstrip("\n").split(", ")
@@ -648,7 +653,7 @@ class Alignment:
 
     def reset_filter_by_score(self):
         """Resets HSP filtering by score."""
-        self.HSPs = [hsp for hsp in self._all_HSPs]
+        self.HSPs = [hsp.copy() for hsp in self._all_HSPs]
         self.filtered = False
 
     def _cut_hsps(self, qleft=None, qright=None, sleft=None, sright=None):
@@ -720,8 +725,8 @@ class Alignment:
                     new_hsps.append(hsp)
                 elif hsp.sstart <= sright and hsp.orientation == 'reverse':
                     new_hsps.append(hsp)
-        if len(hsps) == 0:
-            hsps.append(HSPVertex(0, 0, 0, 0, 0))
+        # if len(hsps) == 0:
+        #     hsps.append(HSPVertex(0, 0, 0, 0, 0))
         return hsps
 
     def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
@@ -1049,12 +1054,16 @@ class Transcript:
             None
         """
         self.alignment.plot_alignment()
-        for hsp in self.HSPs:
-            plt.plot([hsp.qstart, hsp.qend],
-                     [hsp.sstart, hsp.send],
-                     color=color)
-        for i in range(len(self.HSPs) - 1):
-            plt.plot([self.HSPs[i].qend, self.HSPs[i + 1].qstart],
-                     [self.HSPs[i].send, self.HSPs[i + 1].sstart],
-                     color=link_color,
-                     linestyle='dashed')
+        hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
+                      for hsp in self.HSPs)
+        qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
+        plt.plot([qstarts, qends], [sstarts, sends], color=color)
+        link_coords = ((self.HSPs[i].qend,
+                        self.HSPs[i + 1].qstart,
+                        self.HSPs[i].send,
+                        self.HSPs[i + 1].sstart)
+                       for i in range(len(self.HSPs) - 1))
+        lqstarts, lqends, lsstarts, lsends = list(zip(*link_coords))
+        plt.plot([lqstarts, lqends], [lsstarts, lsends],
+                 color=link_color,
+                 linestyle='dashed')

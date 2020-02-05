@@ -87,7 +87,7 @@ class NonExceptionalProcessPool:
     @property
     def pbar(self):
         if self._pbar is None:
-            self._pbar = tqdm()
+            self._pbar = tqdm(disable=not self.verbose)
         return self._pbar
 
     def __enter__(self):
@@ -98,6 +98,7 @@ class NonExceptionalProcessPool:
         """Context manager exit."""
         self.pbar.close()
         self.shutdown(wait=True)
+        self._pbar = None
         return False
 
     def shutdown(self, wait=True):
@@ -149,8 +150,7 @@ class NonExceptionalProcessPool:
         while futures:
             future = futures.popleft()
             if future.done():
-                if self.verbose:
-                    self.pbar.update()
+                self.pbar.update()
                 try:
                     futures.append(self.executor.submit(exec_func,
                                                         next(collection)))
