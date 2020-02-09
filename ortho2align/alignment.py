@@ -67,6 +67,8 @@ class HSP:
     """
     orientation_dict = {(True, True): 'direct',
                         (True, False): 'reverse'}
+    __slots__ = ('qstart', 'qend', 'sstart', 'send', 'score',
+                 'kwargs', 'qstrand', 'sstrand', 'orientation')
 
     def __init__(self, qstart, qend, sstart, send, score, **kwargs):
         """Initializes HSP class.
@@ -196,7 +198,13 @@ class HSP:
 
     def to_dict(self):
         """Returns a dict representation."""
-        return self.__dict__
+        # return self.__dict__
+        return {'qstart': self.qstart,
+                'qend': self.qend,
+                'sstart': self.sstart,
+                'send': self.send,
+                'score': self.score,
+                'kwargs': self.kwargs}
 
     @classmethod
     def from_dict(cls, dict_):
@@ -290,6 +298,7 @@ class HSPVertex(HSP):
     """An extension of HSP class for handling graph
     operations (contains a list of neighbours).
     """
+    __slots__ = ('next_vertices', 'total_score', 'best_prev')
 
     def __init__(self, qstart, qend, sstart, send, score, **kwargs):
         """Inits HSPVertex class.
@@ -406,6 +415,7 @@ class Alignment:
                     's. end': 'send',
                     'query length': 'qlen',
                     'subject length': 'slen'}
+    __slots__ = ('_all_HSPs', 'HSPs', 'qlen', 'slen', 'filtered')
 
     def __init__(self,
                  HSPs,
@@ -964,6 +974,7 @@ class Transcript:
             penalties (see `set_score` and
             `HSP.distance` methods for definition).
     """
+    __slots__ = ('HSPs', 'alignment', '_score')
 
     def __init__(self, HSPs, alignment, score=None):
         """Inits Transcript class.

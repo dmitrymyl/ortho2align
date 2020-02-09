@@ -87,7 +87,9 @@ class NonExceptionalProcessPool:
     @property
     def pbar(self):
         if self._pbar is None:
-            self._pbar = tqdm(disable=not self.verbose)
+            self._pbar = tqdm(desc=f'Running in parallel with {self.max_workers} workers',
+                              unit='task',
+                              disable=not self.verbose)
         return self._pbar
 
     def __enter__(self):

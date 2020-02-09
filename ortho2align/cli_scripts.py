@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import textwrap
+from tqdm import tqdm
 
 
 class CLIVerbose:
@@ -10,14 +11,15 @@ class CLIVerbose:
     of some commands.
     """
 
-    def __init__(self, messages, target=sys.stdout):
+    def __init__(self, inmessage, outmessage, target=sys.stdout):
         """
         Args:
-            messages (list): list with 2 items containing start message
-                and finish message.
+            inmessange (str): enter message.
+            outmessage (str): exit message.
             target (fp): where to print messages (default: sys.stdout).
         """
-        self.inmessage, self.outmessage = messages
+        self.inmessage = inmessage
+        self.outmessage = outmessage
         self.target = target
 
     def __enter__(self):
@@ -182,236 +184,291 @@ def get_orthodb_map():
     with open(query_genes, 'r') as infile:
         query_accessions = {line.strip() for line in infile}
 
-    # Load xrefs of query genes from cached file.
-    gene_xrefs_colnames = ['odb_gene_id',
-                           'external_gene_id',
-                           'external_db']
-    query_cache_filename = query_cached_odb_file("gene_xrefs.tab",
-                                                 orthodb_path,
-                                                 orthodb_prefix,
-                                                 'external_db',
-                                                 query_db,
-                                                 gene_xrefs_colnames,
-                                                 cache_path)
-    query_xref_filename = tmp_proc.joinpath('query_xref.tab')
+    cmd_hints = ['loading xrefs of query genes from cached file...',
+                 'levelling OGs...',
+                 'finding OGs for query genes...',
+                 'getting OrthoDB IDs for subject species...',
+                 'getting subject species genes...',
+                 'getting subject species genes in leveled OGs...',
+                 'finding orthologs for query genes...',
+                 'getting odb_gene_id for subject xref db...',
+                 'filtering subject xref db with found orthologs...',
+                 'finding xref for orthologs of query genes...',
+                 'saving to file...',
+                 'removing temporary files and directories...',
+                 'finished']
+    cmd_point = 0
+    with tqdm(total=(len(cmd_hints) - 1),
+              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
+              postfix=cmd_hints[cmd_point]) as pbar:
 
-    query_xref_colnames = ['odb_gene_id',
-                           'query_xref_id']
-    query_xref_dtypes = {'odb_gene_id': 'str',
-                         'query_xref_id': 'str'}
-
-    with open(query_cache_filename, 'r') as infile:
-        with open(query_xref_filename, 'w') as outfile:
-            filter_table(infile,
-                         outfile,
-                         'query_xref_id',
-                         query_accessions,
-                         query_xref_colnames,
-                         '\t')
-    query_genes_with_odb_id = load_table(query_xref_filename,
-                                         query_xref_colnames,
-                                         query_xref_dtypes)
-
-    # Leveling OGs.
-    OGs_colnames = ['og_id',
-                    'level_taxid',
-                    'og_name']
-
-    leveled_ogs_filename = query_cached_odb_file('OGs.tab',
-                                                 orthodb_path,
-                                                 orthodb_prefix,
-                                                 'level_taxid',
-                                                 level_taxid,
-                                                 OGs_colnames,
-                                                 tmp_proc)
-
-    leveled_OGs_colnames = ['og_id',
-                            'og_name']
-    leveled_OGs_dtypes = {'og_id': 'str',
-                          'og_name': 'str'}
-    leveled_OGs = load_table(leveled_ogs_filename,
-                             leveled_OGs_colnames,
-                             leveled_OGs_dtypes,
-                             usecols=['og_id'])
-
-    # Finding OGs for query genes.
-    OG2genes_colnames = ['og_id',
-                         'odb_gene_id']
-    OG2genes_dtypes = {'og_id': 'category',
-                       'odb_gene_id': 'category'}
-    genes_in_leveled_OGs_filename = filter_odb_file('OG2genes.tab',
-                                                    orthodb_path,
-                                                    orthodb_prefix,
-                                                    'og_id',
-                                                    set(leveled_OGs['og_id']),
-                                                    OG2genes_colnames,
-                                                    tmp_proc,
-                                                    'leveled_OGs')
-
-    OGs_for_query_genes_filename = tmp_proc.joinpath('query_genes_OGs.tab')
-    with open(genes_in_leveled_OGs_filename, 'r') as infile:
-        with open(OGs_for_query_genes_filename, 'w') as outfile:
-            filter_table(infile,
-                         outfile,
-                         'odb_gene_id',
-                         set(query_genes_with_odb_id['odb_gene_id']),
-                         OG2genes_colnames,
-                         '\t')
-
-    OGs_for_query_genes = load_table(OGs_for_query_genes_filename,
-                                     OG2genes_colnames,
-                                     OG2genes_dtypes)
-    OGs_for_query_genes = pd.merge(OGs_for_query_genes,
-                                   query_genes_with_odb_id,
-                                   on='odb_gene_id')
-
-    # Getting OrthoDB IDs for subject species.
-    species_colnames = ['ncbi_tax_id',
-                        'odb_species_id',
-                        'name',
-                        'genome_assembly_id',
-                        'clustered_count',
-                        'OG_count',
-                        'mapping']
-    species_dtypes = {'ncbi_tax_id': 'str',
-                      'ob_species_id': 'str',
-                      'name': 'str',
-                      'genome_assembly_id': 'str',
-                      'clustered_count': 'int',
-                      'OG_count': 'int',
-                      'mapping': 'category'}
-    odb_subject_species_ids_filename = filter_odb_file('species.tab',
-                                                       orthodb_path,
-                                                       orthodb_prefix,
-                                                       'ncbi_tax_id',
-                                                       subject_taxids,
-                                                       species_colnames,
-                                                       tmp_proc,
-                                                       'species')
-    odb_subject_species_ids = load_table(odb_subject_species_ids_filename,
-                                         species_colnames,
-                                         species_dtypes,
-                                         usecols=['ncbi_tax_id',
-                                                  'odb_species_id'])
-
-    # Getting subject species genes.
-    genes_colnames = ['odb_gene_id',
-                      'odb_species_id',
-                      'protein_seq_id',
-                      'synonyms',
-                      'UniProt',
-                      'ENSEMBL',
-                      'NCBIgid',
-                      'description']
-    genes_dtypes = {'odb_gene_id': 'str',
-                    'odb_species_id': 'category',
-                    'protein_seq_id': 'str',
-                    'synonyms': 'str',
-                    'UniProt': 'str',
-                    'ENSEMBL': 'str',
-                    'NCBIgid': 'str',
-                    'description': 'str'}
-
-    subject_species_genes_filename = filter_odb_file('genes.tab',
+        # Load xrefs of query genes from cached file.
+        gene_xrefs_colnames = ['odb_gene_id',
+                               'external_gene_id',
+                               'external_db']
+        query_cache_filename = query_cached_odb_file("gene_xrefs.tab",
                                                      orthodb_path,
                                                      orthodb_prefix,
-                                                     'odb_species_id',
-                                                     set(odb_subject_species_ids['odb_species_id']),
-                                                     genes_colnames,
-                                                     tmp_proc,
-                                                     'species')
-    subject_species_genes = load_table(subject_species_genes_filename,
-                                       genes_colnames,
-                                       genes_dtypes,
-                                       usecols=['odb_gene_id',
-                                                'odb_species_id'])
+                                                     'external_db',
+                                                     query_db,
+                                                     gene_xrefs_colnames,
+                                                     cache_path)
+        query_xref_filename = tmp_proc.joinpath('query_xref.tab')
 
-    # Getting subject species genes in leveled OGs.
-    subject_genes_in_leveled_OGs_filename = tmp_proc.joinpath('subject_genes_in_leveled_OGs.tab')
-    with open(genes_in_leveled_OGs_filename, 'r') as infile:
-        with open(subject_genes_in_leveled_OGs_filename, 'w') as outfile:
-            filter_table(infile,
-                         outfile,
-                         'odb_gene_id',
-                         set(subject_species_genes['odb_gene_id']),
-                         OG2genes_colnames,
-                         '\t')
-    subject_genes_in_leveled_OGs = load_table(subject_genes_in_leveled_OGs_filename,
-                                              OG2genes_colnames,
-                                              OG2genes_dtypes)
-    subject_genes_in_leveled_OGs = pd.merge(subject_genes_in_leveled_OGs,
-                                            subject_species_genes,
-                                            on='odb_gene_id')
+        query_xref_colnames = ['odb_gene_id',
+                               'query_xref_id']
+        query_xref_dtypes = {'odb_gene_id': 'str',
+                             'query_xref_id': 'str'}
 
-    # Finding orthologs for query genes.
-    orthologs_for_query_genes = pd.merge(OGs_for_query_genes,
-                                         subject_genes_in_leveled_OGs,
-                                         on='og_id',
-                                         suffixes=('', '_ortholog'))
+        with open(query_cache_filename, 'r') as infile:
+            with open(query_xref_filename, 'w') as outfile:
+                filter_table(infile,
+                             outfile,
+                             'query_xref_id',
+                             query_accessions,
+                             query_xref_colnames,
+                             '\t')
+        query_genes_with_odb_id = load_table(query_xref_filename,
+                                             query_xref_colnames,
+                                             query_xref_dtypes)
 
-    # Getting odb_gene_id for subject xref db.
-    subject_cache_filename = query_cached_odb_file("gene_xrefs.tab",
-                                                   orthodb_path,
-                                                   orthodb_prefix,
-                                                   'external_db',
-                                                   subject_db,
-                                                   gene_xrefs_colnames,
-                                                   cache_path)
+        # Leveling OGs.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        OGs_colnames = ['og_id',
+                        'level_taxid',
+                        'og_name']
 
-    # Filtering subject xref db with found orthologs.
-    subject_xref_colnames = ['odb_gene_id',
-                             'subject_xref_id']
-    subject_xref_dtypes = {'odb_gene_id': 'str',
-                           'subject_xref_id': 'str'}
-    orthologs_xrefs_filename = tmp_proc.joinpath('orthologs_xrefs.tab')
+        leveled_ogs_filename = query_cached_odb_file('OGs.tab',
+                                                     orthodb_path,
+                                                     orthodb_prefix,
+                                                     'level_taxid',
+                                                     level_taxid,
+                                                     OGs_colnames,
+                                                     tmp_proc)
 
-    with open(subject_cache_filename, 'r') as infile:
-        with open(orthologs_xrefs_filename, 'w') as outfile:
-            filter_table(infile,
-                         outfile,
-                         'odb_gene_id',
-                         set(orthologs_for_query_genes['odb_gene_id_ortholog']),
-                         subject_xref_colnames,
-                         '\t')
+        leveled_OGs_colnames = ['og_id',
+                                'og_name']
+        leveled_OGs_dtypes = {'og_id': 'str',
+                              'og_name': 'str'}
+        leveled_OGs = load_table(leveled_ogs_filename,
+                                 leveled_OGs_colnames,
+                                 leveled_OGs_dtypes,
+                                 usecols=['og_id'])
 
-    orthologs_xrefs = load_table(orthologs_xrefs_filename,
-                                 subject_xref_colnames,
-                                 subject_xref_dtypes)
+        # Finding OGs for query genes.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        OG2genes_colnames = ['og_id',
+                             'odb_gene_id']
+        OG2genes_dtypes = {'og_id': 'category',
+                           'odb_gene_id': 'category'}
+        genes_in_leveled_OGs_filename = filter_odb_file('OG2genes.tab',
+                                                        orthodb_path,
+                                                        orthodb_prefix,
+                                                        'og_id',
+                                                        set(leveled_OGs['og_id']),
+                                                        OG2genes_colnames,
+                                                        tmp_proc,
+                                                        'leveled_OGs')
 
-    # Finding xref for orthologs of query genes.
-    orthologs_with_xrefs = pd.merge(orthologs_for_query_genes,
-                                    orthologs_xrefs,
-                                    left_on='odb_gene_id_ortholog',
-                                    right_on='odb_gene_id',
-                                    suffixes=("", "_ortholog"))
-    # Saving to file.
-    species_dict = {item['odb_species_id']: item['ncbi_tax_id']
-                    for item in odb_subject_species_ids.to_dict('record')}
-    orthologs_with_xrefs = orthologs_with_xrefs.assign(ncbi_tax_id=lambda x: x['odb_species_id'].map(species_dict))
-    report_df = (orthologs_with_xrefs.drop_duplicates(subset=['query_xref_id',
-                                                             'subject_xref_id',
-                                                             'odb_species_id'])
-                                     .drop(['odb_gene_id_ortholog',
-                                            'odb_gene_id',
-                                            'odb_species_id'],
-                                           axis=1))
-    map_df = (report_df.drop(['og_id'], axis=1)
-                       .groupby(['query_xref_id', 'ncbi_tax_id'])
-                       .agg(list)
-                       .applymap(lambda x: x if isinstance(x, list) else []))
-    json_map = defaultdict(dict)
-    for key, value in map_df.to_dict()['subject_xref_id'].items():
-        subject_xref_id = key[0]
-        ncbi_tax_id = key[1]
-        json_map[subject_xref_id][ncbi_tax_id] = value
+        OGs_for_query_genes_filename = tmp_proc.joinpath('query_genes_OGs.tab')
+        with open(genes_in_leveled_OGs_filename, 'r') as infile:
+            with open(OGs_for_query_genes_filename, 'w') as outfile:
+                filter_table(infile,
+                             outfile,
+                             'odb_gene_id',
+                             set(query_genes_with_odb_id['odb_gene_id']),
+                             OG2genes_colnames,
+                             '\t')
 
-    with open(output_json_file, 'w') as outfile:
-        json.dump(json_map, outfile)
+        OGs_for_query_genes = load_table(OGs_for_query_genes_filename,
+                                         OG2genes_colnames,
+                                         OG2genes_dtypes)
+        OGs_for_query_genes = pd.merge(OGs_for_query_genes,
+                                       query_genes_with_odb_id,
+                                       on='odb_gene_id')
 
-    # Remove temporary files and directories.
-    for file in tmp_proc.glob("*"):
-        os.remove(file)
-    os.rmdir(tmp_proc)
+        # Getting OrthoDB IDs for subject species.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        species_colnames = ['ncbi_tax_id',
+                            'odb_species_id',
+                            'name',
+                            'genome_assembly_id',
+                            'clustered_count',
+                            'OG_count',
+                            'mapping']
+        species_dtypes = {'ncbi_tax_id': 'str',
+                          'ob_species_id': 'str',
+                          'name': 'str',
+                          'genome_assembly_id': 'str',
+                          'clustered_count': 'int',
+                          'OG_count': 'int',
+                          'mapping': 'category'}
+        odb_subject_species_ids_filename = filter_odb_file('species.tab',
+                                                           orthodb_path,
+                                                           orthodb_prefix,
+                                                           'ncbi_tax_id',
+                                                           subject_taxids,
+                                                           species_colnames,
+                                                           tmp_proc,
+                                                           'species')
+        odb_subject_species_ids = load_table(odb_subject_species_ids_filename,
+                                             species_colnames,
+                                             species_dtypes,
+                                             usecols=['ncbi_tax_id',
+                                                      'odb_species_id'])
+
+        # Getting subject species genes.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        genes_colnames = ['odb_gene_id',
+                          'odb_species_id',
+                          'protein_seq_id',
+                          'synonyms',
+                          'UniProt',
+                          'ENSEMBL',
+                          'NCBIgid',
+                          'description']
+        genes_dtypes = {'odb_gene_id': 'str',
+                        'odb_species_id': 'category',
+                        'protein_seq_id': 'str',
+                        'synonyms': 'str',
+                        'UniProt': 'str',
+                        'ENSEMBL': 'str',
+                        'NCBIgid': 'str',
+                        'description': 'str'}
+
+        subject_species_genes_filename = filter_odb_file('genes.tab',
+                                                         orthodb_path,
+                                                         orthodb_prefix,
+                                                         'odb_species_id',
+                                                         set(odb_subject_species_ids['odb_species_id']),
+                                                         genes_colnames,
+                                                         tmp_proc,
+                                                         'species')
+        subject_species_genes = load_table(subject_species_genes_filename,
+                                           genes_colnames,
+                                           genes_dtypes,
+                                           usecols=['odb_gene_id',
+                                                    'odb_species_id'])
+
+        # Getting subject species genes in leveled OGs.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        subject_genes_in_leveled_OGs_filename = tmp_proc.joinpath('subject_genes_in_leveled_OGs.tab')
+        with open(genes_in_leveled_OGs_filename, 'r') as infile:
+            with open(subject_genes_in_leveled_OGs_filename, 'w') as outfile:
+                filter_table(infile,
+                             outfile,
+                             'odb_gene_id',
+                             set(subject_species_genes['odb_gene_id']),
+                             OG2genes_colnames,
+                             '\t')
+        subject_genes_in_leveled_OGs = load_table(subject_genes_in_leveled_OGs_filename,
+                                                  OG2genes_colnames,
+                                                  OG2genes_dtypes)
+        subject_genes_in_leveled_OGs = pd.merge(subject_genes_in_leveled_OGs,
+                                                subject_species_genes,
+                                                on='odb_gene_id')
+
+        # Finding orthologs for query genes.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        orthologs_for_query_genes = pd.merge(OGs_for_query_genes,
+                                             subject_genes_in_leveled_OGs,
+                                             on='og_id',
+                                             suffixes=('', '_ortholog'))
+
+        # Getting odb_gene_id for subject xref db.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        subject_cache_filename = query_cached_odb_file("gene_xrefs.tab",
+                                                       orthodb_path,
+                                                       orthodb_prefix,
+                                                       'external_db',
+                                                       subject_db,
+                                                       gene_xrefs_colnames,
+                                                       cache_path)
+
+        # Filtering subject xref db with found orthologs.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        subject_xref_colnames = ['odb_gene_id',
+                                 'subject_xref_id']
+        subject_xref_dtypes = {'odb_gene_id': 'str',
+                               'subject_xref_id': 'str'}
+        orthologs_xrefs_filename = tmp_proc.joinpath('orthologs_xrefs.tab')
+
+        with open(subject_cache_filename, 'r') as infile:
+            with open(orthologs_xrefs_filename, 'w') as outfile:
+                filter_table(infile,
+                             outfile,
+                             'odb_gene_id',
+                             set(orthologs_for_query_genes['odb_gene_id_ortholog']),
+                             subject_xref_colnames,
+                             '\t')
+
+        orthologs_xrefs = load_table(orthologs_xrefs_filename,
+                                     subject_xref_colnames,
+                                     subject_xref_dtypes)
+
+        # Finding xref for orthologs of query genes.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        orthologs_with_xrefs = pd.merge(orthologs_for_query_genes,
+                                        orthologs_xrefs,
+                                        left_on='odb_gene_id_ortholog',
+                                        right_on='odb_gene_id',
+                                        suffixes=("", "_ortholog"))
+        # Saving to file.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        species_dict = {item['odb_species_id']: item['ncbi_tax_id']
+                        for item in odb_subject_species_ids.to_dict('record')}
+        orthologs_with_xrefs = orthologs_with_xrefs.assign(ncbi_tax_id=lambda x: x['odb_species_id'].map(species_dict))
+        report_df = (orthologs_with_xrefs.drop_duplicates(subset=['query_xref_id',
+                                                                 'subject_xref_id',
+                                                                 'odb_species_id'])
+                                         .drop(['odb_gene_id_ortholog',
+                                                'odb_gene_id',
+                                                'odb_species_id'],
+                                               axis=1))
+        map_df = (report_df.drop(['og_id'], axis=1)
+                           .groupby(['query_xref_id', 'ncbi_tax_id'])
+                           .agg(list)
+                           .applymap(lambda x: x if isinstance(x, list) else []))
+        json_map = defaultdict(dict)
+        for key, value in map_df.to_dict()['subject_xref_id'].items():
+            subject_xref_id = key[0]
+            ncbi_tax_id = key[1]
+            json_map[subject_xref_id][ncbi_tax_id] = value
+
+        with open(output_json_file, 'w') as outfile:
+            json.dump(json_map, outfile)
+
+        # Remove temporary files and directories.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+        for file in tmp_proc.glob("*"):
+            os.remove(file)
+        os.rmdir(tmp_proc)
+        # Finished.
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
 
 def align_two_ranges_blast(query, subject, **kwargs):
@@ -482,39 +539,76 @@ def estimate_background():
     output_filename = args.output
     cores = args.cores
 
-    with open(query_genes_filename, 'r') as infile:
-        query_genes = GenomicRangesList.parse_annotation(infile,
-                                                         fileformat=query_genes_filetype,
-                                                         sequence_file_path=query_genome_filename)
-    with open(subject_genes_filename, 'r') as infile:
-        subject_genes = GenomicRangesList.parse_annotation(infile,
-                                                           fileformat=subject_genes_filetype,
-                                                           sequence_file_path=subject_genome_filename)
-    subject_genes = subject_genes.inter_ranges()
-    query_samples = GenomicRangesList([random.choice(query_genes) for _ in range(observations)],
-                                      query_genes.sequence_file_path)
-    subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
-                                         subject_genes.sequence_file_path)
-    query_samples.get_fasta('query_')
-    subject_samples.get_fasta('subject_')
-    sample_pairs = zip(query_samples, subject_samples)
+    cmd_hints = ['reading annotations...',
+                 'getting intergenic ranges of subject genes...',
+                 'sampling pairs for background estimation...',
+                 'getting sample sequences...',
+                 'aligning samples...',
+                 'saving to file...',
+                 'finished.']
+    cmd_point = 0
+    with tqdm(total=(len(cmd_hints) - 1),
+              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
+              postfix=cmd_hints[cmd_point]) as pbar:
 
-    with NonExceptionalProcessPool(cores) as p:
-        alignments, exceptions = p.starmap_async(align_two_ranges_blast, sample_pairs)
+        with open(query_genes_filename, 'r') as infile:
+            query_genes = GenomicRangesList.parse_annotation(infile,
+                                                             fileformat=query_genes_filetype,
+                                                             sequence_file_path=query_genome_filename)
+        with open(subject_genes_filename, 'r') as infile:
+            subject_genes = GenomicRangesList.parse_annotation(infile,
+                                                               fileformat=subject_genes_filetype,
+                                                               sequence_file_path=subject_genome_filename)
 
-    if len(exceptions) > 0:
-        print('Exceptions occured: ')
-        for exception in exceptions:
-            print(exception)
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
-    scores = [hsp.score for alignment in alignments for hsp in alignment.HSPs]
-    with open(output_filename, 'wb') as outfile:
-        np.save(outfile, scores, allow_pickle=False)
+        subject_genes = subject_genes.inter_ranges()
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        query_samples = GenomicRangesList([random.choice(query_genes) for _ in range(observations)],
+                                          query_genes.sequence_file_path)
+        subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
+                                             subject_genes.sequence_file_path)
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        query_samples.get_fasta('query_')
+        subject_samples.get_fasta('subject_')
+        sample_pairs = zip(query_samples, subject_samples)
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        with NonExceptionalProcessPool(cores) as p:
+            alignments, exceptions = p.starmap_async(align_two_ranges_blast, sample_pairs)
+
+        if len(exceptions) > 0:
+            print('Exceptions occured: ')
+            for exception in exceptions:
+                print(exception)
+
+        scores = [hsp.score for alignment in alignments for hsp in alignment.HSPs]
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        with open(output_filename, 'wb') as outfile:
+            np.save(outfile, scores, allow_pickle=False)
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
 
 def align_syntenies(grange):
-    grange.relations['neighbours'].get_fasta('neigh_')
-    grange.relations['syntenies'].get_fasta('synt_')
     neighbourhood = grange.relations['neighbours'][0]
     alignments = list()
     for synteny in grange.relations['syntenies']:
@@ -645,11 +739,10 @@ def get_alignments():
         query_gene.relations['syntenies'] = query_gene.relations['syntenies'] \
                                                       .flank(flank_dist) \
                                                       .merge(merge_dist)
-        # query_gene.relations['neighbours'] = query_gene.relations['neighbours'] \
-        #                                                .merge(2 * neighbour_dist
-        #                                                       + query_gene.end
-        #                                                       - query_gene.start)
+
         query_gene.relations['neighbours'] = query_gene.relations['neighbours'].merge(float('inf'))
+        query_gene.relations['neighbours'].get_fasta('neigh_')
+        query_gene.relations['syntenies'].get_fasta('synt_')
 
     with NonExceptionalProcessPool(cores, verbose=True) as p:
         alignments, exceptions = p.map_async(align_syntenies, query_genes)
