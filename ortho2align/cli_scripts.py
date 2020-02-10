@@ -60,7 +60,6 @@ def cache_orthodb_xrefs():
                         nargs='?',
                         default='gene_xrefs.tab',
                         help='Suffix of OrthoDB cross-references file.')
-
     args = parser.parse_args(sys.argv[2:])
     orthodb_path = Path(args.orthodb_path)
     cache_path = Path(args.cache_path)
@@ -162,6 +161,9 @@ def get_orthodb_map():
                         nargs='?',
                         default='.tmp/',
                         help='Where to put temporary files.')
+    parser.add_argument('--silent',
+                        action='store_true',
+                        help='silent CLI if included.')
 
     args = parser.parse_args(sys.argv[2:])
     query_genes = Path(args.query_genes)
@@ -173,6 +175,7 @@ def get_orthodb_map():
     orthodb_path = Path(args.orthodb_path)
     cache_path = Path(args.cache_path)
     orthodb_prefix = args.orthodb_prefix
+    silent = args.silent
     tmp_path = Path(args.tmp_path)
     process_id = os.getpid()
 
@@ -200,7 +203,8 @@ def get_orthodb_map():
     cmd_point = 0
     with tqdm(total=(len(cmd_hints) - 1),
               bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
-              postfix=cmd_hints[cmd_point]) as pbar:
+              postfix=cmd_hints[cmd_point],
+              disable=silent) as pbar:
 
         # Load xrefs of query genes from cached file.
         gene_xrefs_colnames = ['odb_gene_id',
@@ -524,6 +528,9 @@ def estimate_background():
                         nargs='?',
                         default=123,
                         help='random seed number for sampling query genes and subject intergenic regions.')
+    parser.add_argument('--silent',
+                        action='store_true',
+                        help='silent CLI if included.')
 
     args = parser.parse_args(sys.argv[2:])
 
@@ -538,6 +545,7 @@ def estimate_background():
     observations = args.observations
     output_filename = args.output
     cores = args.cores
+    silent = args.silent
 
     cmd_hints = ['reading annotations...',
                  'getting intergenic ranges of subject genes...',
@@ -549,7 +557,8 @@ def estimate_background():
     cmd_point = 0
     with tqdm(total=(len(cmd_hints) - 1),
               bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
-              postfix=cmd_hints[cmd_point]) as pbar:
+              postfix=cmd_hints[cmd_point],
+              disable=silent) as pbar:
 
         with open(query_genes_filename, 'r') as infile:
             query_genes = GenomicRangesList.parse_annotation(infile,
@@ -586,7 +595,7 @@ def estimate_background():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        with NonExceptionalProcessPool(cores) as p:
+        with NonExceptionalProcessPool(cores, verbose=not silent) as p:
             alignments, exceptions = p.starmap_async(align_two_ranges_blast, sample_pairs)
 
         if len(exceptions) > 0:
@@ -633,21 +642,21 @@ def get_alignments():
                         nargs='?',
                         required=True,
                         help='query genes annotation filename')
-    parser.add_argument('-query_proteins',
+    parser.add_argument('-query_anchors',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='query proteins annotation filename')
+                        help='query anchors annotation filename')
     parser.add_argument('-query_genome',
                         type=str,
                         nargs='?',
                         required=True,
                         help='query species genome filename (fasta)')
-    parser.add_argument('-subject_proteins',
+    parser.add_argument('-subject_anchors',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='subject proteins annotation filename')
+                        help='subject anchors annotation filename')
     parser.add_argument('-subject_genome',
                         type=str,
                         nargs='?',
@@ -677,7 +686,7 @@ def get_alignments():
                         type=int,
                         nargs='?',
                         default=0,
-                        help='distance to seek protein neighbours of query genes')
+                        help='distance to seek anchor neighbours of query genes')
     parser.add_argument('-flank_dist',
                         type=int,
                         nargs='?',
@@ -687,17 +696,20 @@ def get_alignments():
                         type=int,
                         nargs='?',
                         default=0,
-                        help='how distant two subject proteins can be to be merged into one syntenic region')
+                        help='how distant two subject anchors can be to be merged into one syntenic region')
+    parser.add_argument('--silent',
+                        action='store_true',
+                        help='silent CLI if included.')
 
     args = parser.parse_args(sys.argv[2:])
 
     query_genes_filename = args.query_genes
     query_genes_filetype = query_genes_filename.split('.')[-1]
     query_genome_filename = args.query_genome
-    query_proteins_filename = args.query_proteins
-    query_proteins_filetype = query_proteins_filename.split('.')[-1]
-    subject_proteins_filename = args.subject_proteins
-    subject_proteins_filetype = subject_proteins_filename.split('.')[-1]
+    query_anchors_filename = args.query_anchors
+    query_anchors_filetype = query_anchors_filename.split('.')[-1]
+    subject_anchors_filename = args.subject_anchors
+    subject_anchors_filetype = subject_anchors_filename.split('.')[-1]
     subject_genome_filename = args.subject_genome
     ortho_map_filename = args.ortho_map
     output_filename = args.output
@@ -706,58 +718,92 @@ def get_alignments():
     neighbour_dist = args.neighbour_dist
     merge_dist = args.merge_dist
     flank_dist = args.flank_dist
+    silent = args.silent
 
-    with open(query_genes_filename, 'r') as infile:
-        query_genes = GenomicRangesList.parse_annotation(infile,
-                                                         fileformat=query_genes_filetype,
-                                                         sequence_file_path=query_genome_filename)
-    with open(query_proteins_filename, 'r') as infile:
-        query_proteins = GenomicRangesList.parse_annotation(infile,
-                                                            fileformat=query_proteins_filetype,
-                                                            sequence_file_path=query_genome_filename)
-    with open(subject_proteins_filename, 'r') as infile:
-        subject_proteins = GenomicRangesList.parse_annotation(infile,
-                                                              fileformat=subject_proteins_filetype,
-                                                              sequence_file_path=subject_genome_filename)
-    with open(ortho_map_filename, 'r') as mapfile:
-        ortho_map = json.load(mapfile)
+    cmd_hints = ['reading annotations...',
+                 'mapping orthology and neighbour relations...',
+                 'composing syntenies and getting sequences...',
+                 'getting alignments...',
+                 'saving alignments...',
+                 'finished.']
+    cmd_point = 0
+    with tqdm(total=(len(cmd_hints) - 1),
+              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
+              postfix=cmd_hints[cmd_point],
+              disable=silent) as pbar:
 
-    ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
-    query_proteins.relation_mapping(subject_proteins,
-                                    ortho_map,
-                                    'orthologs')
-    query_genes.get_neighbours(query_proteins,
-                               neighbour_dist,
-                               'neighbours')
-    for query_gene in query_genes:
-        query_gene.relations['syntenies'] = GenomicRangesList([],
-                                                              sequence_file_path=subject_genome_filename)
+        with open(query_genes_filename, 'r') as infile:
+            query_genes = GenomicRangesList.parse_annotation(infile,
+                                                             fileformat=query_genes_filetype,
+                                                             sequence_file_path=query_genome_filename)
+        with open(query_anchors_filename, 'r') as infile:
+            query_anchors = GenomicRangesList.parse_annotation(infile,
+                                                                fileformat=query_anchors_filetype,
+                                                                sequence_file_path=query_genome_filename)
+        with open(subject_anchors_filename, 'r') as infile:
+            subject_anchors = GenomicRangesList.parse_annotation(infile,
+                                                                  fileformat=subject_anchors_filetype,
+                                                                  sequence_file_path=subject_genome_filename)
+        with open(ortho_map_filename, 'r') as mapfile:
+            ortho_map = json.load(mapfile)
 
-        for neighbour in query_gene.relations['neighbours']:
-            query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
-        query_gene.relations['syntenies'] = query_gene.relations['syntenies'] \
-                                                      .flank(flank_dist) \
-                                                      .merge(merge_dist)
+        ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
+        query_anchors.relation_mapping(subject_anchors,
+                                       ortho_map,
+                                       'orthologs')
+        query_genes.get_neighbours(query_anchors,
+                                   neighbour_dist,
+                                   'neighbours')
 
-        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].merge(float('inf'))
-        query_gene.relations['neighbours'].get_fasta('neigh_')
-        query_gene.relations['syntenies'].get_fasta('synt_')
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
-    with NonExceptionalProcessPool(cores, verbose=True) as p:
-        alignments, exceptions = p.map_async(align_syntenies, query_genes)
+        for query_gene in query_genes:
+            query_gene.relations['syntenies'] = GenomicRangesList([],
+                                                                  sequence_file_path=subject_genome_filename)
 
-    if len(exceptions) > 0:
-        print('Exceptions occured:')
-        for exception in exceptions:
-            print(exception)
+            for neighbour in query_gene.relations['neighbours']:
+                query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
 
-    alignments = [alignment.to_dict()
-                  for group in alignments
-                  for alignment in group]
+            query_gene.relations['syntenies'] = query_gene.relations['syntenies'] \
+                                                          .flank(flank_dist) \
+                                                          .merge(merge_dist)
 
-    with open(output_filename, 'w') as outfile:
-        json.dump(alignments, outfile)
+            query_gene.relations['neighbours'] = query_gene.relations['neighbours'].merge(float('inf'))
+            query_gene.relations['neighbours'].get_fasta('neigh_')
+            query_gene.relations['syntenies'].get_fasta('synt_')
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        with NonExceptionalProcessPool(cores, verbose=not silent) as p:
+            alignments, exceptions = p.map_async(align_syntenies, query_genes)
+
+        if len(exceptions) > 0:
+            print('Exceptions occured:')
+            for exception in exceptions:
+                print(exception)
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        alignments = [[alignment.to_dict()
+                       for alignment in query_gene_alignments]
+                      for query_gene_alignments in alignments]
+
+        with open(output_filename, 'w') as outfile:
+            json.dump(alignments, outfile)
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
 
 def refine_alignments():
@@ -806,11 +852,9 @@ def refine_alignments():
                         nargs='?',
                         required=True,
                         help='output filename for unaligned query ranges.')
-    parser.add_argument('-subject_unaligned',
-                        type=str,
-                        nargs='?',
-                        required=True,
-                        help='output filename for unaligned subject ranges.')
+    parser.add_argument('--silent',
+                        action='store_true',
+                        help='silent CLI if included.')
 
     args = parser.parse_args(sys.argv[2:])
 
@@ -820,51 +864,81 @@ def refine_alignments():
     query_output_filename = Path(args.query_transcripts)
     subject_output_filename = Path(args.subject_transcripts)
     query_unaligned_filename = Path(args.query_unaligned)
-    subject_unaligned_filename = Path(args.subject_unaligned)
     pval_treshold = args.threshold
+    silent = args.silent
 
-    with open(alignments_filename, 'r') as infile:
-        alignment_data = json.load(infile)
+    cmd_hints = ['reading alignments...',
+                 'getting background...',
+                 'refining alignments and calling transcripts...',
+                 'saving to files...',
+                 'finished.']
+    cmd_point = 0
+    with tqdm(total=(len(cmd_hints) - 1),
+              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
+              postfix=cmd_hints[cmd_point],
+              disable=silent) as pbar:
 
-    alignment_data = [GenomicRangesAlignment.from_dict(item)
-                      for item in alignment_data]
+        with open(alignments_filename, 'r') as infile:
+            alignment_data = json.load(infile)
 
-    background_data = np.load(background_filename)
+        alignment_data = [[GenomicRangesAlignment.from_dict(alignment)
+                           for alignment in query_gene_alignments]
+                          for query_gene_alignments in alignment_data]
 
-    if fitting_type == 'hist':
-        fitter = HistogramFitter
-    elif fitting_type == 'kde':
-        fitter = KernelFitter
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
-    background = fitter(background_data)
-    score_threshold = background.isf(pval_treshold)
-    query_transcripts = list()
-    subject_transcripts = list()
-    query_unaligned = list()
-    subject_unaligned = list()
+        background_data = np.load(background_filename)
 
-    for alignment in alignment_data:
-        alignment.filter_by_score(score_threshold)
-        alignment.srange.name = 'ortho_' + alignment.qrange.name
-        transcript = alignment.best_transcript()
-        try:
-            record = transcript.to_bed12(mode='str')
-            query_transcripts.append(record[0])
-            subject_transcripts.append(record[1])
-        except ValueError:
-            query_unaligned.append(alignment.qrange.to_dict())
-            subject_unaligned.append(alignment.srange.to_dict())
+        if fitting_type == 'hist':
+            fitter = HistogramFitter
+        elif fitting_type == 'kde':
+            fitter = KernelFitter
 
-    with open(query_output_filename, 'w') as outfile:
-        for record in query_transcripts:
-            outfile.write(record + "\n")
-    with open(subject_output_filename, 'w') as outfile:
-        for record in subject_transcripts:
-            outfile.write(record + "\n")
-    with open(query_unaligned_filename, 'w') as outfile:
-        json.dump(query_unaligned, outfile)
-    with open(subject_unaligned_filename, 'w') as outfile:
-        json.dump(subject_unaligned, outfile)
+        background = fitter(background_data)
+        score_threshold = background.isf(pval_treshold)
+        query_transcripts = list()
+        subject_transcripts = list()
+        query_unaligned = list()
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        for query_gene_alignments in alignment_data:
+            aligned = False
+            unaligned_qranges = list()
+            for alignment in query_gene_alignments:
+                alignment.filter_by_score(score_threshold)
+                alignment.srange.name = 'ortho_' + alignment.qrange.name
+                transcript = alignment.best_transcript()
+                try:
+                    record = transcript.to_bed12(mode='str')
+                    query_transcripts.append(record[0])
+                    subject_transcripts.append(record[1])
+                    aligned = True
+                except ValueError:
+                    unaligned_qranges.append(alignment.qrange.to_dict())
+            if not aligned:
+                query_unaligned.append(unaligned_qranges[0])
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        with open(query_output_filename, 'w') as outfile:
+            for record in query_transcripts:
+                outfile.write(record + "\n")
+        with open(subject_output_filename, 'w') as outfile:
+            for record in subject_transcripts:
+                outfile.write(record + "\n")
+        with open(query_unaligned_filename, 'w') as outfile:
+            json.dump(query_unaligned, outfile)
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
 
 
 def ortho2align():
