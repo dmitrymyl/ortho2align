@@ -528,6 +528,11 @@ def estimate_background():
                         nargs='?',
                         default=123,
                         help='random seed number for sampling query genes and subject intergenic regions.')
+    parser.add_argument('-bed',
+                        type=str,
+                        nargs='?',
+                        default='6',
+                        help='specific bed format (3, 6 or 12).')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -538,8 +543,12 @@ def estimate_background():
 
     query_genes_filename = args.query_genes
     query_genes_filetype = query_genes_filename.split('.')[-1]
+    if query_genes_filetype == 'bed':
+        query_genes_filetype += args.bed
     subject_genes_filename = args.subject_genes
     subject_genes_filetype = subject_genes_filename.split('.')[-1]
+    if subject_genes_filetype == 'bed':
+        subject_genes_filetype += args.bed
     query_genome_filename = args.query_genome
     subject_genome_filename = args.subject_genome
     observations = args.observations
@@ -701,6 +710,11 @@ def get_alignments():
                         nargs='?',
                         default=0,
                         help='how distant two subject anchors can be to be merged into one syntenic region')
+    parser.add_argument('-bed',
+                        type=str,
+                        nargs='?',
+                        default='6',
+                        help='specific bed format (3, 6 or 12).')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -709,11 +723,17 @@ def get_alignments():
 
     query_genes_filename = args.query_genes
     query_genes_filetype = query_genes_filename.split('.')[-1]
+    if query_genes_filetype == 'bed':
+        query_genes_filetype += args.bed
     query_genome_filename = args.query_genome
     query_anchors_filename = args.query_anchors
     query_anchors_filetype = query_anchors_filename.split('.')[-1]
+    if query_anchors_filetype == 'bed':
+        query_anchors_filetype += args.bed
     subject_anchors_filename = args.subject_anchors
     subject_anchors_filetype = subject_anchors_filename.split('.')[-1]
+    if subject_anchors_filetype == 'bed':
+        subject_anchors_filetype += args.bed
     subject_genome_filename = args.subject_genome
     ortho_map_filename = args.ortho_map
     output_filename = args.output
