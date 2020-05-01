@@ -481,7 +481,7 @@ def align_two_ranges_blast(query, subject, **kwargs):
 
 def estimate_background():
     import random
-    import numpy as np
+    import json
     from .genomicranges import GenomicRangesList
     from .parallel import NonExceptionalProcessPool
 
@@ -549,7 +549,7 @@ def estimate_background():
 
     cmd_hints = ['reading annotations...',
                  'getting intergenic ranges of subject genes...',
-                 'sampling pairs for background estimation...',
+                 'getting pairs for background estimation...',
                  'getting sample sequences...',
                  'aligning samples...',
                  'saving to file...',
@@ -579,38 +579,42 @@ def estimate_background():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        query_samples = GenomicRangesList([random.choice(query_genes) for _ in range(observations)],
-                                          query_genes.sequence_file_path)
         subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
                                              subject_genes.sequence_file_path)
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        query_samples.get_fasta('query_')
-        subject_samples.get_fasta('subject_')
-        sample_pairs = zip(query_samples, subject_samples)
+        query_genes.get_fasta('query_')
+        subject_samples.get_fasta('subject')
+        all_scores = list()
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        with NonExceptionalProcessPool(cores, verbose=not silent) as p:
-            alignments, exceptions = p.starmap_async(align_two_ranges_blast, sample_pairs)
-
-        if len(exceptions) > 0:
-            print('Exceptions occured: ')
-            for exception in exceptions:
-                print(exception)
-
-        scores = [hsp.score for alignment in alignments for hsp in alignment.HSPs]
+        for query in tqdm(query_genes, disable=silent, position=1):
+            sample_pairs = zip((query
+                                for _ in range(observations)),
+                               subject_samples)
+            with NonExceptionalProcessPool(cores, verbose=False) as p:
+                alignments, exceptions = p.starmap_async(align_two_ranges_blast,
+                                                         sample_pairs)
+            if len(exceptions) > 0:
+                print('Exceptions occured: ')
+                for exception in exceptions:
+                    print(exception)
+            scores = [hsp.score
+                      for alignment in alignments
+                      for hsp in alignment.HSPs]
+            all_scores.append(scores)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        with open(output_filename, 'wb') as outfile:
-            np.save(outfile, scores, allow_pickle=False)
+        with open(output_filename, 'w') as outfile:
+            json.dump(all_scores, outfile)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -738,12 +742,12 @@ def get_alignments():
                                                              sequence_file_path=query_genome_filename)
         with open(query_anchors_filename, 'r') as infile:
             query_anchors = GenomicRangesList.parse_annotation(infile,
-                                                                fileformat=query_anchors_filetype,
-                                                                sequence_file_path=query_genome_filename)
+                                                               fileformat=query_anchors_filetype,
+                                                               sequence_file_path=query_genome_filename)
         with open(subject_anchors_filename, 'r') as infile:
             subject_anchors = GenomicRangesList.parse_annotation(infile,
-                                                                  fileformat=subject_anchors_filetype,
-                                                                  sequence_file_path=subject_genome_filename)
+                                                                 fileformat=subject_anchors_filetype,
+                                                                 sequence_file_path=subject_genome_filename)
         with open(ortho_map_filename, 'r') as mapfile:
             ortho_map = json.load(mapfile)
 
@@ -811,6 +815,7 @@ def refine_alignments():
     import json
     import numpy as np
     from pathlib import Path
+    from scipy.stats import rankdata
     from .genomicranges import GenomicRangesAlignment
     from .fitting import HistogramFitter, KernelFitter
 
@@ -852,6 +857,9 @@ def refine_alignments():
                         nargs='?',
                         required=True,
                         help='output filename for unaligned query ranges.')
+    parser.add_argument('--fdr',
+                        action='store_true',
+                        help='use FDR correction for HSP scores.')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -864,8 +872,9 @@ def refine_alignments():
     query_output_filename = Path(args.query_transcripts)
     subject_output_filename = Path(args.subject_transcripts)
     query_unaligned_filename = Path(args.query_unaligned)
-    pval_treshold = args.threshold
+    pval_threshold = args.threshold
     silent = args.silent
+    fdr = args.fdr
 
     cmd_hints = ['reading alignments...',
                  'getting background...',
@@ -889,15 +898,14 @@ def refine_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        background_data = np.load(background_filename)
+        with open(background_filename, 'r') as infile:
+            background_data = json.load(infile)
 
         if fitting_type == 'hist':
             fitter = HistogramFitter
         elif fitting_type == 'kde':
             fitter = KernelFitter
 
-        background = fitter(background_data)
-        score_threshold = background.isf(pval_treshold)
         query_transcripts = list()
         subject_transcripts = list()
         query_unaligned = list()
@@ -906,11 +914,20 @@ def refine_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        for query_gene_alignments in alignment_data:
+        for query_gene_alignments, query_bg in zip(alignment_data,
+                                                   background_data):
+            background = fitter(query_bg)
+            score_threshold = background.isf(pval_threshold)
             aligned = False
             unaligned_qranges = list()
             for alignment in query_gene_alignments:
-                alignment.filter_by_score(score_threshold)
+                if fdr:
+                    pvals = background.sf([hsp.score
+                                           for hsp in alignment.HSPs])
+                    qvals = list(pvals * len(pvals) / rankdata(pvals))
+                    alignment.filter_by_array(qvals, pval_threshold, side='l')
+                else:
+                    alignment.filter_by_score(score_threshold)
                 alignment.srange.name = 'ortho_' + alignment.qrange.name
                 transcript = alignment.best_transcript()
                 try:

@@ -661,6 +661,38 @@ class Alignment:
                      if compare(function(hsp.score), score, side)]
         self.filtered = True
 
+    def filter_by_array(self, array, score, side='g'):
+        """Filters HSPs by corresponding values in array.
+
+        There is a corresponding value in `array` for 
+        every HSP in `self.HSPs`. The method filters only
+        those HSPs, which corresponding value is greater/less/e.t.c.
+        than the `score` (the type of comparison is specified by `side`).
+
+        Args:
+            self: Alignment instance;
+            array (list, tuple, e.t.c.): a sequence of corresponding
+                values to `self.HSPs`.
+            score (int): score to filter by.
+            side (str): a side to compare score and function results
+                by. One of:
+                'g' for greater (HSP.score > score)
+                'l' for less (HSP.score < score)
+                'eq' for equal (HSP.score == score)
+                'neq' for not equal (HSP.score != score)
+                'geq' for greater or equal (HSP.score >= score)
+                'leq' for less or equal (HSP.score <= score)
+                Default: 'g'.
+        Raises:
+            ValueError: in case `len(array) != len(self.HSPs)`.
+        """
+        if len(array) != len(self.HSPs):
+            raise ValueError(f'Length of provided array is not equal to the '\
+                             f'amount of HSPs: {len(array)} vs {len(self.HSPs)}.')
+        self.HSPs = [hsp
+                     for hsp, value in zip(self.HSPs, array)
+                     if compare(value, score, side)]
+
     def reset_filter_by_score(self):
         """Resets HSP filtering by score."""
         self.HSPs = [hsp.copy() for hsp in self._all_HSPs]
