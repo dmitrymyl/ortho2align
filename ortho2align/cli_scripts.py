@@ -482,6 +482,7 @@ def align_two_ranges_blast(query, subject, **kwargs):
 def estimate_background():
     import random
     import json
+    from functools import partial
     from .genomicranges import GenomicRangesList
     from .parallel import NonExceptionalProcessPool
 
@@ -533,6 +534,11 @@ def estimate_background():
                         nargs='?',
                         default='6',
                         help='specific bed format (3, 6 or 12).')
+    parser.add_argument('-word_size',
+                        type=int,
+                        nargs='?',
+                        default=6,
+                        help='-word_size argument to use in blastn search.')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -554,6 +560,7 @@ def estimate_background():
     observations = args.observations
     output_filename = args.output
     cores = args.cores
+    word_size = args.word_size
     silent = args.silent
 
     cmd_hints = ['reading annotations...',
@@ -602,12 +609,15 @@ def estimate_background():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
+        align_two_ranges_blast_word_size = partial(align_two_ranges_blast,
+                                                   word_size=word_size)
+
         for query in tqdm(query_genes, disable=silent, position=1):
             sample_pairs = zip((query
                                 for _ in range(observations)),
                                subject_samples)
             with NonExceptionalProcessPool(cores, verbose=False) as p:
-                alignments, exceptions = p.starmap_async(align_two_ranges_blast,
+                alignments, exceptions = p.starmap_async(align_two_ranges_blast_word_size,
                                                          sample_pairs)
             if len(exceptions) > 0:
                 print('Exceptions occured: ')
@@ -630,11 +640,11 @@ def estimate_background():
         pbar.update()
 
 
-def align_syntenies(grange):
+def align_syntenies(grange, **kwargs):
     neighbourhood = grange.relations['neighbours'][0]
     alignments = list()
     for synteny in grange.relations['syntenies']:
-        alignment = neighbourhood.align_blast(synteny)
+        alignment = neighbourhood.align_blast(synteny, **kwargs)
         alignment.to_genomic()
         alignment = alignment.cut_coordinates(qleft=grange.start,
                                               qright=grange.end)
@@ -645,6 +655,7 @@ def align_syntenies(grange):
 
 def get_alignments():
     import json
+    from functools import partial
     from .parallel import NonExceptionalProcessPool
     from .genomicranges import GenomicRangesList, extract_taxid_mapping
 
@@ -710,6 +721,11 @@ def get_alignments():
                         nargs='?',
                         default=0,
                         help='how distant two subject anchors can be to be merged into one syntenic region')
+    parser.add_argument('-word_size',
+                        type=int,
+                        nargs='?',
+                        default=6,
+                        help='-word_size parameter to use in blastn.')
     parser.add_argument('-bed',
                         type=str,
                         nargs='?',
@@ -742,6 +758,7 @@ def get_alignments():
     neighbour_dist = args.neighbour_dist
     merge_dist = args.merge_dist
     flank_dist = args.flank_dist
+    word_size = args.word_size
     silent = args.silent
 
     cmd_hints = ['reading annotations...',
@@ -806,8 +823,10 @@ def get_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
+        align_syntenies_word_size = partial(align_syntenies, word_size=word_size)
+
         with NonExceptionalProcessPool(cores, verbose=not silent) as p:
-            alignments, exceptions = p.map_async(align_syntenies, query_genes)
+            alignments, exceptions = p.map_async(align_syntenies_word_size, query_genes)
 
         if len(exceptions) > 0:
             print('Exceptions occured:')
