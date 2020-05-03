@@ -829,9 +829,11 @@ def get_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
+        query_chromsizes = query_genes.sequence_file.chromsizes
+
         for query_gene in tqdm(query_genes):
-            query_gene.relations['neighbours'].get_fasta('neigh_')
-            query_gene.relations['syntenies'].get_fasta('synt_')
+            query_gene.relations['neighbours'].get_fasta('neigh_', chromsizes=query_chromsizes)
+            query_gene.relations['syntenies'].get_fasta('synt_', chromsizes=subject_chromsizes)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]

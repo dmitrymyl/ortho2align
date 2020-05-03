@@ -1064,7 +1064,7 @@ class FastaSeqFile:
         """
         self._file_obj.seek(chrom_start + coord + coord // self.line_length)
 
-    def get_fasta_by_coord(self, grange, outfile, linewidth=60):
+    def get_fasta_by_coord(self, grange, outfile, chromsizes=None, linewidth=60):
         """Writes sequence of the genomic range in fasta file.
 
         Writes full fasta record of the given genomic range
@@ -1088,15 +1088,17 @@ class FastaSeqFile:
                 the given genomic range is not presented
                 in FastaSeqFile instance.
         """
+        if chromsizes is None:
+            chromsizes = self.chromsizes
         try:
-            chrom_size, chrom_start = self.chromsizes[grange.chrom]
+            chrom_size, chrom_start = chromsizes[grange.chrom]
         except KeyError:
             raise ChromosomeNotFoundError(grange.chrom,
                                           self.sequence_file_path,
-                                          self.chromsizes.keys())
+                                          chromsizes.keys())
         if grange.end > chrom_size:
             raise GenomicCoordinatesError(grange,
-                                          self.chromsizes[grange.chrom])
+                                          chromsizes[grange.chrom])
         self.locate_coordinate(chrom_start, grange.start)
         if grange.strand == '-':
             reverse = True
@@ -1105,12 +1107,6 @@ class FastaSeqFile:
             reverse = False
             complement = False
         outfile.write(">" + grange.sequence_header + "\n")
-        # fasta_extractor(self._file_obj,
-        #                 outfile,
-        #                 total=(grange.end - grange.start),
-        #                 linewidth=linewidth,
-        #                 reverse=reverse,
-        #                 complement=complement)
         lines_before_start = grange.start // self.line_length
         lines_before_end = grange.end // self.line_length
         lines_inside = lines_before_end - lines_before_start
@@ -1559,7 +1555,7 @@ class GenomicRangesList(SortedKeyList):
         return GenomicRangesList(new_list,
                                  sequence_file_path=self.sequence_file_path)
 
-    def get_fasta(self, outfileprefix, mode='split', verbose=False):
+    def get_fasta(self, outfileprefix, mode='split', chromsizes=None, verbose=False):
         """Extracts sequences of genomic ranges.
 
         Can extract sequences of all genomic ranges
@@ -1591,14 +1587,14 @@ class GenomicRangesList(SortedKeyList):
                                                  grange.sequence_header +
                                                  '.fasta')
                     with open(grange.sequence_file_path, 'w') as output:
-                        self.sequence_file.get_fasta_by_coord(grange, output)
+                        self.sequence_file.get_fasta_by_coord(grange, output, chromsizes=chromsizes)
                     filenames.append(grange.sequence_file_path)
         elif mode == 'bulk':
             with self.sequence_file:
                 outfilename = str(outfileprefix) + '.fasta'
                 with open(outfilename, 'w') as output:
                     for grange in self:
-                        self.sequence_file.get_fasta_by_coord(grange, output)
+                        self.sequence_file.get_fasta_by_coord(grange, output, chromsizes=chromsizes)
                 filenames = [outfilename]
         else:
             raise ValueError(f"get_fasta mode {mode} not "
