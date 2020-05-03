@@ -779,15 +779,23 @@ def get_alignments():
                                                              fileformat=query_genes_filetype,
                                                              sequence_file_path=query_genome_filename)
         with open(query_anchors_filename, 'r') as infile:
+            if query_anchors_filetype == 'gtf':
+                name_pattern = r'GeneID:(\d+)'
+            else:
+                name_pattern = None
             query_anchors = GenomicRangesList.parse_annotation(infile,
                                                                fileformat=query_anchors_filetype,
                                                                sequence_file_path=query_genome_filename,
-                                                               name_pattern=r'GeneID:(\d+)')
+                                                               name_pattern=name_pattern)
         with open(subject_anchors_filename, 'r') as infile:
+            if query_anchors_filetype == 'gtf':
+                name_pattern = r'GeneID:(\d+)'
+            else:
+                name_pattern = None
             subject_anchors = GenomicRangesList.parse_annotation(infile,
                                                                  fileformat=subject_anchors_filetype,
                                                                  sequence_file_path=subject_genome_filename,
-                                                                 name_pattern=r'GeneID:(\d+)')
+                                                                 name_pattern=name_pattern)
         with open(ortho_map_filename, 'r') as mapfile:
             ortho_map = json.load(mapfile)
 
