@@ -781,11 +781,13 @@ def get_alignments():
         with open(query_anchors_filename, 'r') as infile:
             query_anchors = GenomicRangesList.parse_annotation(infile,
                                                                fileformat=query_anchors_filetype,
-                                                               sequence_file_path=query_genome_filename)
+                                                               sequence_file_path=query_genome_filename,
+                                                               name_pattern=r'GeneID:(\d+)')
         with open(subject_anchors_filename, 'r') as infile:
             subject_anchors = GenomicRangesList.parse_annotation(infile,
                                                                  fileformat=subject_anchors_filetype,
-                                                                 sequence_file_path=subject_genome_filename)
+                                                                 sequence_file_path=subject_genome_filename,
+                                                                 name_pattern=r'GeneID:(\d+)')
         with open(ortho_map_filename, 'r') as mapfile:
             ortho_map = json.load(mapfile)
 
