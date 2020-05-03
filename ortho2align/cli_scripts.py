@@ -602,7 +602,7 @@ def estimate_background():
         pbar.update()
 
         query_genes.get_fasta('query_')
-        subject_samples.get_fasta('subject')
+        subject_samples.get_fasta('subject_')
         all_scores = list()
 
         cmd_point += 1
@@ -763,7 +763,8 @@ def get_alignments():
 
     cmd_hints = ['reading annotations...',
                  'mapping orthology and neighbour relations...',
-                 'composing syntenies and getting sequences...',
+                 'composing syntenies...',
+                 'getting sequences...',
                  'getting alignments...',
                  'saving alignments...',
                  'finished.']
@@ -805,17 +806,31 @@ def get_alignments():
         pbar.update()
 
         for query_gene in query_genes:
-            query_gene.relations['syntenies'] = GenomicRangesList([],
-                                                                  sequence_file_path=subject_genome_filename)
 
-            for neighbour in query_gene.relations['neighbours']:
-                query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
+            # query_gene.relations['syntenies'] = GenomicRangesList([],
+            #                                                       sequence_file_path=subject_genome_filename)
+
+            # for neighbour in query_gene.relations['neighbours']:
+            #     query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
+
+            syntenies = [grange
+                         for neighbour in query_gene.relations['neighbours']
+                         for grange in neighbour.relations['orthologs']]
+
+            query_gene.relations['syntenies'] = GenomicRangesList(syntenies,
+                                                                  sequence_file_path=subject_genome_filename)
 
             query_gene.relations['syntenies'] = query_gene.relations['syntenies'] \
                                                           .flank(flank_dist) \
                                                           .merge(merge_dist)
 
             query_gene.relations['neighbours'] = query_gene.relations['neighbours'].merge(float('inf'))
+
+        cmd_point += 1
+        pbar.postfix = cmd_hints[cmd_point]
+        pbar.update()
+
+        for query_gene in query_genes:
             query_gene.relations['neighbours'].get_fasta('neigh_')
             query_gene.relations['syntenies'].get_fasta('synt_')
 

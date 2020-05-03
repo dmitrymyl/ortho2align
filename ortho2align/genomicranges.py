@@ -595,14 +595,13 @@ class GenomicRange:
             (GenomicRangesList) genomic ranges list with all
             neighbours of self in other_list at given distance.
         """
-        neighbours = GenomicRangesList([],
-                                       sequence_file_path=other_list.sequence_file_path)
+        neighbours = list()
         index = other_list.bisect_left(self)
         left_index = index - 1
         right_index = index
         try:
             while abs(self.distance(other_list[left_index])) <= distance:
-                neighbours.add(other_list[left_index])
+                neighbours.append(other_list[left_index])
                 left_index -= 1
         except InconsistentChromosomesError:
             pass
@@ -610,13 +609,14 @@ class GenomicRange:
             pass
         try:
             while abs(self.distance(other_list[right_index])) <= distance:
-                neighbours.add(other_list[right_index])
+                neighbours.append(other_list[right_index])
                 right_index += 1
         except InconsistentChromosomesError:
             pass
         except IndexError:
             pass
-        return neighbours
+        return GenomicRangesList(neighbours,
+                                 sequence_file_path=other_list.sequence_file_path)
 
     def align_blast(self, other, program='blastn', task='blastn', **kwargs):
         """Aligns two genomic ranges with BLAST.
@@ -1581,17 +1581,21 @@ class GenomicRangesList(SortedKeyList):
                            desc='Mapping relations',
                            unit='grange',
                            disable=not verbose):
-            if grange.relations.get(relation) is None:
-                grange.relations[relation] = GenomicRangesList([],
-                                                               other.sequence_file_path)
+            relating_granges = list()
             if grange.name in mapping.keys():
                 values = mapping[grange.name]
                 for code in values:
                     try:
                         other_granges = other.name_mapping[code]
-                        grange.relations[relation].update(other_granges)
+                        #grange.relations[relation].update(other_granges)
+                        relating_granges += [i for i in other_granges]
                     except KeyError:
                         continue
+            if grange.relations.get(relation) is None:
+                grange.relations[relation] = GenomicRangesList(relating_granges,
+                                                               other.sequence_file_path)
+            else:
+                grange.relations[relation].update(relating_granges)
 
     @classmethod
     def parse_annotation(cls,
