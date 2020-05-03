@@ -816,13 +816,6 @@ def get_alignments():
         pbar.update()
 
         for query_gene in tqdm(query_genes):
-
-            # query_gene.relations['syntenies'] = GenomicRangesList([],
-            #                                                       sequence_file_path=subject_genome_filename)
-
-            # for neighbour in query_gene.relations['neighbours']:
-            #     query_gene.relations['syntenies'].update(neighbour.relations['orthologs'])
-
             syntenies = [grange
                          for neighbour in query_gene.relations['neighbours']
                          for grange in neighbour.relations['orthologs']]
@@ -831,10 +824,10 @@ def get_alignments():
                                                                   sequence_file_path=subject_genome_filename)
 
             query_gene.relations['syntenies'] = query_gene.relations['syntenies'] \
-                                                          .flank(flank_dist) \
-                                                          .merge(merge_dist)
+                                                          .merge(merge_dist) \
+                                                          .flank(flank_dist)
 
-            query_gene.relations['neighbours'] = query_gene.relations['neighbours'].merge(float('inf'))
+            query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]

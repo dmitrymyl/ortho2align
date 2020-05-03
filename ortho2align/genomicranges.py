@@ -1413,6 +1413,51 @@ class GenomicRangesList(SortedKeyList):
                 new_list.append(grange)
         return GenomicRangesList(new_list, self.sequence_file_path)
 
+    def close_merge(self, distance=0, verbose=False):
+        """Merges dense genomic ranges on the given distance.
+
+        If the distance between two genomic ranges
+        is smaller then the provided value, they are
+        merged via GenomicRange.merge and added to
+        the new GenomicRangesList instance. This method
+        is fast if there are a lot of dense genomic ranges
+        and slow in case of sparse genomic ranges compared to
+        conventional `merge`.
+
+        Args:
+            distance: distance to merge proximal
+                genomic ranges (default: 0).
+
+        Returns:
+            (GenomicRangeList) new genomic ranges list
+                with all proximal genomic ranges merged.
+                If the initial genomic ranges list is empty,
+                returns empty genomic ranges list.
+        """
+        new_list = list()
+        if len(self) == 0:
+            return GenomicRangesList(new_list, self.sequence_file_path)
+        new_list.append(self[0])
+        prev_grange = self[0]
+        for grange in tqdm(self[1:],
+                           desc='Merging genomic ranges',
+                           unit='grange',
+                           disable=not verbose):
+            try:
+                if abs(prev_grange.distance(grange)) > distance:
+                    old_range = new_list.pop()
+                    new_list.append(old_range.merge(prev_grange))
+                    new_list.append(grange)
+            except InconsistentChromosomesError:
+                old_range = new_list.pop()
+                new_list.append(old_range.merge(prev_grange))
+                new_list.append(grange)
+            prev_grange = grange
+        # in case there were no last merge in loop
+        old_range = new_list.pop()
+        new_list.append(old_range.merge(prev_grange))
+        return GenomicRangesList(new_list, self.sequence_file_path)
+
     def inter_ranges(self, distance=0, verbose=False):
         """Returns inner genomic regions covered with no genomic ranges.
 
