@@ -596,14 +596,14 @@ def estimate_background():
         pbar.update()
 
         subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
-                                             subject_genes.sequence_file_path)
+                                            subject_genes.sequence_file_path)
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
         query_genes.get_fasta('query_')
         subject_samples.get_fasta('subject_')
-        all_scores = list()
+        all_scores = dict()
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -626,7 +626,7 @@ def estimate_background():
             scores = [hsp.score
                       for alignment in alignments
                       for hsp in alignment.HSPs]
-            all_scores.append(scores)
+            all_scores[query.name] = scores
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -650,7 +650,7 @@ def align_syntenies(grange, **kwargs):
                                               qright=grange.end)
         alignment.qrange = grange
         alignments.append(alignment)
-    return alignments
+    return grange.name, alignments
 
 
 def get_alignments():
@@ -853,9 +853,9 @@ def get_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        alignments = [[alignment.to_dict()
-                       for alignment in query_gene_alignments]
-                      for query_gene_alignments in alignments]
+        alignments = {query: [alignment.to_dict()
+                              for alignment in query_gene_alignments]
+                      for query, query_gene_alignments in alignments}
 
         with open(output_filename, 'w') as outfile:
             json.dump(alignments, outfile)
@@ -868,7 +868,6 @@ def get_alignments():
 def refine_alignments():
 
     import json
-    import numpy as np
     from pathlib import Path
     from scipy.stats import rankdata
     from .genomicranges import GenomicRangesAlignment
@@ -945,9 +944,12 @@ def refine_alignments():
         with open(alignments_filename, 'r') as infile:
             alignment_data = json.load(infile)
 
-        alignment_data = [[GenomicRangesAlignment.from_dict(alignment)
-                           for alignment in query_gene_alignments]
-                          for query_gene_alignments in alignment_data]
+        # alignment_data = [[GenomicRangesAlignment.from_dict(alignment)
+        #                    for alignment in query_gene_alignments]
+        #                   for query_gene_alignments in alignment_data]
+        alignment_data = {query: [GenomicRangesAlignment.from_dict(alignment)
+                                  for alignment in group]
+                          for query, group in alignment_data.items()}
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -969,8 +971,8 @@ def refine_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        for query_gene_alignments, query_bg in zip(alignment_data,
-                                                   background_data):
+        for query_name, query_gene_alignments in alignment_data.items():
+            query_bg = background_data.get(query_name, [])
             background = fitter(query_bg)
             score_threshold = background.isf(pval_threshold)
             aligned = False

@@ -94,6 +94,7 @@ class NonExceptionalProcessPool:
 
     def __enter__(self):
         """Context manager enter."""
+        pbar = self.pbar
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
