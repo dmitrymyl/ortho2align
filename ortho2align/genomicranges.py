@@ -573,11 +573,9 @@ class GenomicRange:
             raise ValueError(f"Flank distance value {flank_distance} "
                              "is negative and greater than the "
                              "half-length of the genomic range.")
-        start = self.start - flank_distance
-        end = self.end + flank_distance
         return GenomicRange(chrom=self.chrom,
-                            start=start,
-                            end=end,
+                            start=self.start - flank_distance,
+                            end=self.end + flank_distance,
                             strand=".",
                             genome=self.genome)
 
@@ -1523,7 +1521,7 @@ class GenomicRangesList(SortedKeyList):
             grange.relations[relation] = grange.find_neighbours(other,
                                                                 distance=distance)
 
-    def flank(self, distance=0, check_boundaries=True, verbose=False):
+    def flank(self, distance=0, check_boundaries=True, chromsizes=None, verbose=False):
         """Flanks all genomic ranges in the list with given distance.
 
         Allows correction of new start and end coordinates in case
@@ -1537,12 +1535,17 @@ class GenomicRangesList(SortedKeyList):
                 and new end coordinates are not greater than
                 corresponding chromosome sizes. If True, corrects
                 coordinates (default: False).
+            chromsizes (dict): a dict of ChromosomeLocation tuples
+                derived from self.sequence_file.chromsizes. If None,
+                estimates itself, may affect performance (default: None).
 
         Returns:
             (GenomicRangesList) new genomic ranges list with flanked
                 and corrected genomic ranges.
         """
         new_list = list()
+        if chromsizes is None:
+            chromsizes = self.sequence_file.chromsizes
         for grange in tqdm(self,
                            desc='Flanking genomic ranges',
                            unit='grange',
@@ -1550,7 +1553,7 @@ class GenomicRangesList(SortedKeyList):
             new_grange = grange.flank(distance)
             if check_boundaries:
                 new_grange.start = max(0, new_grange.start)
-                new_grange.end = min(self.sequence_file.chromsizes[new_grange.chrom].size,
+                new_grange.end = min(chromsizes[new_grange.chrom].size,
                                      new_grange.end)
             new_list.append(new_grange)
         return GenomicRangesList(new_list,
