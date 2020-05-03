@@ -815,7 +815,7 @@ def get_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        for query_gene in query_genes:
+        for query_gene in tqdm(query_genes):
 
             # query_gene.relations['syntenies'] = GenomicRangesList([],
             #                                                       sequence_file_path=subject_genome_filename)
@@ -840,7 +840,7 @@ def get_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        for query_gene in query_genes:
+        for query_gene in tqdm(query_genes):
             query_gene.relations['neighbours'].get_fasta('neigh_')
             query_gene.relations['syntenies'].get_fasta('synt_')
 
