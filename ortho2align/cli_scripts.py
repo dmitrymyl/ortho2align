@@ -3,6 +3,7 @@ import sys
 import argparse
 import textwrap
 from tqdm import tqdm
+from scipy.stats import rankdata
 
 
 class CLIVerbose:
@@ -865,13 +866,46 @@ def get_alignments():
         pbar.update()
 
 
+def refine(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
+    background = fitter(query_bg)
+    score_threshold = background.isf(pval_threshold)
+    aligned = False
+    # unaligned_qranges = list()
+    query_transcripts = list()
+    subject_transcripts = list()
+    # query_unaligned = list()
+    for alignment in query_gene_alignments:
+        if fdr:
+            pvals = background.sf([hsp.score
+                                   for hsp in alignment.HSPs])
+            qvals = list(pvals * len(pvals) / rankdata(pvals))
+            alignment.filter_by_array(qvals, pval_threshold, side='l')
+        else:
+            alignment.filter_by_score(score_threshold)
+        alignment.srange.name = 'ortho_' + alignment.qrange.name
+        transcript = alignment.best_transcript()
+        try:
+            record = transcript.to_bed12(mode='str')
+            query_transcripts.append(record[0])
+            subject_transcripts.append(record[1])
+            aligned = True
+        except ValueError:
+            query_unaligned = [alignment.qrange.to_dict()]
+            #unaligned_qranges.append(alignment.qrange.to_dict())
+    if aligned:
+        query_unaligned = list()
+    return query_transcripts, subject_transcripts, query_unaligned
+
+
 def refine_alignments():
 
     import json
     from pathlib import Path
+    from functools import partial
     from scipy.stats import rankdata
     from .genomicranges import GenomicRangesAlignment
     from .fitting import HistogramFitter, KernelFitter
+    from .parallel import NonExceptionalProcessPool
 
     parser = argparse.ArgumentParser(description='',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -896,6 +930,9 @@ def refine_alignments():
                         nargs='?',
                         default=0.05,
                         help='p-value threshold to filter HSPs by score.')
+    parser.add_argument('--fdr',
+                        action='store_true',
+                        help='use FDR correction for HSP scores.')
     parser.add_argument('-query_transcripts',
                         type=str,
                         nargs='?',
@@ -911,9 +948,11 @@ def refine_alignments():
                         nargs='?',
                         required=True,
                         help='output filename for unaligned query ranges.')
-    parser.add_argument('--fdr',
-                        action='store_true',
-                        help='use FDR correction for HSP scores.')
+    parser.add_argument('-cores',
+                        type=int,
+                        nargs='?',
+                        default=1,
+                        help='Number of cores to use for refinement multiprocessing.')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -927,8 +966,10 @@ def refine_alignments():
     subject_output_filename = Path(args.subject_transcripts)
     query_unaligned_filename = Path(args.query_unaligned)
     pval_threshold = args.threshold
-    silent = args.silent
     fdr = args.fdr
+    cores = args.cores
+    silent = args.silent
+    
 
     cmd_hints = ['reading alignments...',
                  'getting background...',
@@ -968,35 +1009,52 @@ def refine_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        for query_name, query_gene_alignments in tqdm(alignment_data.items()):
-            query_bg = background_data.get(query_name, [])
-            background = fitter(query_bg)
-            score_threshold = background.isf(pval_threshold)
-            aligned = False
-            unaligned_qranges = list()
-            for alignment in query_gene_alignments:
-                if fdr:
-                    pvals = background.sf([hsp.score
-                                           for hsp in alignment.HSPs])
-                    qvals = list(pvals * len(pvals) / rankdata(pvals))
-                    alignment.filter_by_array(qvals, pval_threshold, side='l')
-                else:
-                    alignment.filter_by_score(score_threshold)
-                alignment.srange.name = 'ortho_' + alignment.qrange.name
-                transcript = alignment.best_transcript()
-                try:
-                    record = transcript.to_bed12(mode='str')
-                    query_transcripts.append(record[0])
-                    subject_transcripts.append(record[1])
-                    aligned = True
-                except ValueError:
-                    unaligned_qranges.append(alignment.qrange.to_dict())
-            if not aligned:
-                query_unaligned.append(unaligned_qranges[0])
+        # for query_name, query_gene_alignments in tqdm(alignment_data.items()):
+        #     query_bg = background_data.get(query_name, [])
+        #     background = fitter(query_bg)
+        #     score_threshold = background.isf(pval_threshold)
+        #     aligned = False
+        #     unaligned_qranges = list()
+        #     for alignment in query_gene_alignments:
+        #         if fdr:
+        #             pvals = background.sf([hsp.score
+        #                                    for hsp in alignment.HSPs])
+        #             qvals = list(pvals * len(pvals) / rankdata(pvals))
+        #             alignment.filter_by_array(qvals, pval_threshold, side='l')
+        #         else:
+        #             alignment.filter_by_score(score_threshold)
+        #         alignment.srange.name = 'ortho_' + alignment.qrange.name
+        #         transcript = alignment.best_transcript()
+        #         try:
+        #             record = transcript.to_bed12(mode='str')
+        #             query_transcripts.append(record[0])
+        #             subject_transcripts.append(record[1])
+        #             aligned = True
+        #         except ValueError:
+        #             unaligned_qranges.append(alignment.qrange.to_dict())
+        #     if not aligned:
+        #         query_unaligned.append(unaligned_qranges[0])
+
+        refine_partial = partial(refine, fitter=fitter, fdr=fdr, pval_threshold=pval_threshold)
+        data_for_refinement = ((query_gene_alignments, background_data.get(query_name, []))
+                               for query_name, query_gene_alignments in alignment_data.items())
+        with NonExceptionalProcessPool(cores, verbose=not silent) as p:
+            transcripts, exceptions = p.starmap_async(refine_partial, data_for_refinement)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
+
+        query_transcripts, subject_transcripts, query_unaligned = zip(*transcripts)
+        query_transcripts = [transcript
+                             for group in query_transcripts
+                             for transcript in group]
+        subject_transcripts = [transcript
+                               for group in subject_transcripts
+                               for transcript in group]
+        query_unaligned = [grange
+                           for group in query_unaligned
+                           for grange in group]
 
         with open(query_output_filename, 'w') as outfile:
             for record in query_transcripts:
