@@ -944,9 +944,6 @@ def refine_alignments():
         with open(alignments_filename, 'r') as infile:
             alignment_data = json.load(infile)
 
-        # alignment_data = [[GenomicRangesAlignment.from_dict(alignment)
-        #                    for alignment in query_gene_alignments]
-        #                   for query_gene_alignments in alignment_data]
         alignment_data = {query: [GenomicRangesAlignment.from_dict(alignment)
                                   for alignment in group]
                           for query, group in alignment_data.items()}
@@ -971,7 +968,7 @@ def refine_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        for query_name, query_gene_alignments in alignment_data.items():
+        for query_name, query_gene_alignments in tqdm(alignment_data.items()):
             query_bg = background_data.get(query_name, [])
             background = fitter(query_bg)
             score_threshold = background.isf(pval_threshold)

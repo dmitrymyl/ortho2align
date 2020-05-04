@@ -103,111 +103,9 @@ class SequenceFileNotFoundError(GenomicException):
                          f"for {self.instance} doesn't exist.")
 
 
-# def sequence_getter(infile, total=None):
-#     """Gets a genomic sequence from the file object.
-
-#     Gets at most `total` sequence characters from the
-#     fasta `infile` excluding line breaks. If `total` is
-#     None, than reads infinite number of characters up to
-#     EOF or next record in fasta file.
-
-#     Args:
-#         infile (fileobj): input file object to read
-#             characters from.
-#         total (int): a total number of characters to read
-#             (default: None; means to read characters up to EOF
-#             or next record in fasta file).
-
-#     Returns:
-#         (str) a string with read characters.
-#     """
-#     # In case user wants to extract all sequence till its end.
-#     if total is None:
-#         total = float('inf')
-#     # Initial assignments.
-#     line = infile.readline().rstrip()
-#     record = ''
-#     # A loop for reading the record from infile.
-#     while len(record) < total and line != '' and not line.startswith('>'):
-#         record += line
-#         line = infile.readline().rstrip()
-#     # Record trimming.
-#     if len(record) > total:
-#         record = record[:total]
-#     return record
-
-
-# def wrap_generator(line, width):
-#     """Generator that wraps line.
-
-#     A generator that given a string
-#     yields its slices of given width.
-
-#     Args:
-#         line (str): a string to wrap.
-#         width (int): a length of yielded
-#             slices.
-#     Yields:
-#         (str): one string slice of given length
-#             at a time.
-#     """
-#     if len(line) <= width:
-#         yield line
-#     else:
-#         for i in range(0, len(line) - width, width):
-#             yield line[i: i + width]
-#         i += width
-#         if i < len(line):
-#             yield line[i:]
-
-
 from_line = 'AaTtGgCc'
 to_line = 'TtAaCcGg'
 trans_map = str.maketrans(from_line, to_line)
-
-
-# def fasta_extractor(infile, outfile, total=None, linewidth=60, reverse=False,
-#                     complement=False, header=False):
-#     """Reformats fasta file.
-
-#     Allows one to reformat existing sequence in
-#     fasta format to the specified linewidth. If `header`
-#     is `False` (default), the pointer in the infile
-#     must be put at the beginning of the desired sequence.
-
-#     Args:
-#         infile (fileobj): input fasta file with cursor set
-#             at the start of sequence fragment.
-#         outfile (fileobj): output fasta file.
-#         total (int): number of symbols to read (default: None;
-#             means to read all sequence up to EOF or next record).
-#         linewidth (int): linewidth of new sequence
-#             (default: 60).
-#         reverse (bool): if True, takes sequence backwards
-#             (default: False).
-#         complement (bool): if True, returns complement
-#             nucleotide sequence (default: False).
-#         header (bool): if True, writes fasta record header from `infile`
-#             to `outfile` (default: False).
-#     Returns:
-#         None
-#     """
-#     # In case user wants to reformat fasta file and retain its header.
-#     if header:
-#         line = infile.readline()
-#         while not line.startswith('>'):
-#             line = infile.readline()
-#         outfile.write(line)
-#     # Getting the record.
-#     record = sequence_getter(infile, total)
-#     # Processing the recod.
-#     if complement:
-#         record = record.translate(trans_map)
-#     if reverse:
-#         record = record[::-1]
-#     # A loop for writing record to the file.
-#     for line in wrap_generator(record, linewidth):
-#         outfile.write(line + '\n')
 
 
 def fasta_getter(infile, outfile, total=None, linewidth=60,
@@ -1077,6 +975,9 @@ class FastaSeqFile:
                 sequence write to file.
             outfile (fileobj): file object to which write fasta
                 sequence.
+            chromsizes (dict): a dict of ChromosomeLocation tuples
+                derived from self.chromsizes. If None,
+                estimates itself, may affect performance (default: None).
             linewidth (int): line length of fasta sequence to write
                 (default: 60).
 
@@ -1568,6 +1469,11 @@ class GenomicRangesList(SortedKeyList):
                 output file(s).
             mode (str): the mode to extract sequences,
                 one of 'split', 'bulk' (default: 'split').
+            chromsizes (dict): a dict of ChromosomeLocation tuples
+                derived from self.sequence_file.chromsizes. If None,
+                estimates itself, may affect performance (default: None).
+            verbose (bool): if True, prints progressbar of processing granges
+                in split mode.
 
         Returns:
             None
