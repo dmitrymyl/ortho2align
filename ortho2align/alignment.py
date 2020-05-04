@@ -198,7 +198,6 @@ class HSP:
 
     def to_dict(self):
         """Returns a dict representation."""
-        # return self.__dict__
         return {'qstart': self.qstart,
                 'qend': self.qend,
                 'sstart': self.sstart,
@@ -767,8 +766,6 @@ class Alignment:
                     new_hsps.append(hsp)
                 elif hsp.sstart <= sright and hsp.orientation == 'reverse':
                     new_hsps.append(hsp)
-        # if len(hsps) == 0:
-        #     hsps.append(HSPVertex(0, 0, 0, 0, 0))
         return hsps
 
     def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
@@ -794,7 +791,7 @@ class Alignment:
             Alignment instance with new HSP coordinates
             and new qlen and slen.
         """
-        # TODO: deal with reverse-derived sequences and their representation.
+        # Not dealing with reversed sequences, but ok.
         qlen = self.qlen + qzero
         slen = self.slen + szero
         HSPs = list()

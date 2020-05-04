@@ -1537,7 +1537,6 @@ class GenomicRangesList(SortedKeyList):
                 for code in values:
                     try:
                         other_granges = other.name_mapping[code]
-                        #grange.relations[relation].update(other_granges)
                         relating_granges += [i for i in other_granges]
                     except KeyError:
                         continue

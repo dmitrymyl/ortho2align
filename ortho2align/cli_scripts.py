@@ -870,15 +870,13 @@ def refine(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
     background = fitter(query_bg)
     score_threshold = background.isf(pval_threshold)
     aligned = False
-    # unaligned_qranges = list()
     query_transcripts = list()
     subject_transcripts = list()
-    # query_unaligned = list()
     for alignment in query_gene_alignments:
         if fdr:
             pvals = background.sf([hsp.score
                                    for hsp in alignment.HSPs])
-            qvals = list(pvals * len(pvals) / rankdata(pvals))
+            qvals = pvals * len(pvals) / rankdata(pvals)
             alignment.filter_by_array(qvals, pval_threshold, side='l')
         else:
             alignment.filter_by_score(score_threshold)
@@ -891,7 +889,6 @@ def refine(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
             aligned = True
         except ValueError:
             query_unaligned = [alignment.qrange.to_dict()]
-            #unaligned_qranges.append(alignment.qrange.to_dict())
     if aligned:
         query_unaligned = list()
     return query_transcripts, subject_transcripts, query_unaligned
@@ -902,7 +899,6 @@ def refine_alignments():
     import json
     from pathlib import Path
     from functools import partial
-    from scipy.stats import rankdata
     from .genomicranges import GenomicRangesAlignment
     from .fitting import HistogramFitter, KernelFitter
     from .parallel import NonExceptionalProcessPool
@@ -969,7 +965,6 @@ def refine_alignments():
     fdr = args.fdr
     cores = args.cores
     silent = args.silent
-    
 
     cmd_hints = ['reading alignments...',
                  'getting background...',
@@ -1001,43 +996,16 @@ def refine_alignments():
         elif fitting_type == 'kde':
             fitter = KernelFitter
 
-        query_transcripts = list()
-        subject_transcripts = list()
-        query_unaligned = list()
-
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        # for query_name, query_gene_alignments in tqdm(alignment_data.items()):
-        #     query_bg = background_data.get(query_name, [])
-        #     background = fitter(query_bg)
-        #     score_threshold = background.isf(pval_threshold)
-        #     aligned = False
-        #     unaligned_qranges = list()
-        #     for alignment in query_gene_alignments:
-        #         if fdr:
-        #             pvals = background.sf([hsp.score
-        #                                    for hsp in alignment.HSPs])
-        #             qvals = list(pvals * len(pvals) / rankdata(pvals))
-        #             alignment.filter_by_array(qvals, pval_threshold, side='l')
-        #         else:
-        #             alignment.filter_by_score(score_threshold)
-        #         alignment.srange.name = 'ortho_' + alignment.qrange.name
-        #         transcript = alignment.best_transcript()
-        #         try:
-        #             record = transcript.to_bed12(mode='str')
-        #             query_transcripts.append(record[0])
-        #             subject_transcripts.append(record[1])
-        #             aligned = True
-        #         except ValueError:
-        #             unaligned_qranges.append(alignment.qrange.to_dict())
-        #     if not aligned:
-        #         query_unaligned.append(unaligned_qranges[0])
-
-        refine_partial = partial(refine, fitter=fitter, fdr=fdr, pval_threshold=pval_threshold)
-        data_for_refinement = ((query_gene_alignments, background_data.get(query_name, []))
+        refine_partial = partial(refine, fitter=fitter,
+                                 fdr=fdr, pval_threshold=pval_threshold)
+        data_for_refinement = ((query_gene_alignments,
+                                background_data.get(query_name, []))
                                for query_name, query_gene_alignments in alignment_data.items())
+
         with NonExceptionalProcessPool(cores, verbose=not silent) as p:
             transcripts, exceptions = p.starmap_async(refine_partial, data_for_refinement)
 
