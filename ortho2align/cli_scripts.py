@@ -901,7 +901,8 @@ def refine_alignments():
     from functools import partial
     from .genomicranges import GenomicRangesAlignment
     from .fitting import HistogramFitter, KernelFitter
-    from .parallel import NonExceptionalProcessPool
+    #from .parallel import NonExceptionalProcessPool
+    from .parallel import TimeoutProcessPool
 
     parser = argparse.ArgumentParser(description='',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -949,6 +950,11 @@ def refine_alignments():
                         nargs='?',
                         default=1,
                         help='Number of cores to use for refinement multiprocessing.')
+    parser.add_argument('-timeout',
+                        type=int,
+                        nargs='?',
+                        default=None,
+                        help='Time in seconds to terminate a single process of refinement of a single alignment.')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -964,6 +970,7 @@ def refine_alignments():
     pval_threshold = args.threshold
     fdr = args.fdr
     cores = args.cores
+    timeout = args.timeout
     silent = args.silent
 
     cmd_hints = ['reading alignments...',
@@ -1006,8 +1013,17 @@ def refine_alignments():
                                 background_data.get(query_name, []))
                                for query_name, query_gene_alignments in alignment_data.items())
 
-        with NonExceptionalProcessPool(cores, verbose=not silent) as p:
-            transcripts, exceptions = p.starmap_async(refine_partial, data_for_refinement)
+        # with NonExceptionalProcessPool(cores, verbose=not silent) as p:
+        #     transcripts, exceptions = p.starmap_async(refine_partial, data_for_refinement)
+        with TimeoutProcessPool(cores, verbose=not silent) as p:
+            transcripts, exceptions = p.starmap(refine_partial,
+                                                data_for_refinement,
+                                                timeout)
+
+        if len(exceptions) > 0:
+            print('Exceptions occured:')
+            for exception in exceptions:
+                print(exception)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
