@@ -872,6 +872,7 @@ def refine(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
     aligned = False
     query_transcripts = list()
     subject_transcripts = list()
+    query_unaligned = list()
     for alignment in query_gene_alignments:
         if fdr:
             pvals = background.sf([hsp.score
