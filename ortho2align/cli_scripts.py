@@ -840,7 +840,8 @@ def get_alignments():
             query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
             neighbourhood = query_gene.relations['neighbours'][0]
             if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
-                query_gene.relations['neighbours'][0] = neighbourhood.merge(query_gene)
+                query_gene.relations['neighbours'] = GenomicRangesList([neighbourhood.merge(query_gene)],
+                                                                       sequence_file_path=query_genome_filename)
                 query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
                                                                                             chromsizes=subject_chromsizes)
             query_prepared.append(query_gene)
