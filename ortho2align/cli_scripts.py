@@ -701,7 +701,12 @@ def get_alignments():
                         type=str,
                         nargs='?',
                         required=True,
-                        help='output filename')
+                        help='alignment output filename')
+    parser.add_argument('-unalignable',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='unalignable genomic ranges filename')
     parser.add_argument('-cores',
                         type=int,
                         nargs='?',
@@ -754,6 +759,7 @@ def get_alignments():
     subject_genome_filename = args.subject_genome
     ortho_map_filename = args.ortho_map
     output_filename = args.output
+    unalignable_filename = args.unalignable
     subject_taxid = args.subject_taxid
     cores = args.cores
     neighbour_dist = args.neighbour_dist
@@ -817,22 +823,40 @@ def get_alignments():
         pbar.update()
 
         subject_chromsizes = subject_anchors.sequence_file.chromsizes
+        query_unalignable = list()
+        query_prepared = list()
 
         for query_gene in tqdm(query_genes):
+            if len(query_gene.relations['neighbours']) == 0:
+                query_unalignable.append(query_gene)
+                continue
             syntenies = [grange
                          for neighbour in query_gene.relations['neighbours']
                          for grange in neighbour.relations['orthologs']]
-            synteny_list = GenomicRangesList(syntenies, sequence_file_path=subject_genome_filename)
-            query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist, chromsizes=subject_chromsizes)
+            synteny_list = GenomicRangesList(syntenies,
+                                             sequence_file_path=subject_genome_filename)
+            query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+                                                                                           chromsizes=subject_chromsizes)
             query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+            neighbourhood = query_gene.relations['neighbours'][0]
+            if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+                query_gene.relations['neighbours'][0] = neighbourhood.merge(query_gene)
+                query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+                                                                                            chromsizes=subject_chromsizes)
+            query_prepared.append(query_gene)
+
+        query_prepared_genes = GenomicRangesList(query_prepared,
+                                                 sequence_file_path=query_genome_filename)
+        query_unalignable_genes = GenomicRangesList(query_unalignable,
+                                                    sequence_file_path=query_genome_filename)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        query_chromsizes = query_genes.sequence_file.chromsizes
+        query_chromsizes = query_prepared_genes.sequence_file.chromsizes
 
-        for query_gene in tqdm(query_genes):
+        for query_gene in tqdm(query_prepared_genes):
             query_gene.relations['neighbours'].get_fasta('neigh_', chromsizes=query_chromsizes)
             query_gene.relations['syntenies'].get_fasta('synt_', chromsizes=subject_chromsizes)
 
@@ -843,7 +867,7 @@ def get_alignments():
         align_syntenies_word_size = partial(align_syntenies, word_size=word_size)
 
         with NonExceptionalProcessPool(cores, verbose=not silent) as p:
-            alignments, exceptions = p.map_async(align_syntenies_word_size, query_genes)
+            alignments, exceptions = p.map_async(align_syntenies_word_size, query_prepared_genes)
 
         if len(exceptions) > 0:
             print('Exceptions occured:')
@@ -860,6 +884,9 @@ def get_alignments():
 
         with open(output_filename, 'w') as outfile:
             json.dump(alignments, outfile)
+
+        with open(unalignable_filename, 'w') as outfile:
+            query_unalignable_genes.to_bed6(outfile)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]

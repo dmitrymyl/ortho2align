@@ -1671,6 +1671,15 @@ class GenomicRangesList(SortedKeyList):
         return cls(collection=grange_list,
                    sequence_file_path=sequence_file_path)
 
+    def to_bed6(self, fileobj):
+        for grange in self:
+            fileobj.write('\t'.join([grange.chrom,
+                                     str(grange.start),
+                                     str(grange.end),
+                                     str(grange.name),
+                                     '.',
+                                     grange.strand]) + '\n')
+
 
 def extract_taxid_mapping(mapping, taxid):
     """Extracts mapping of orthologs for one taxid.
