@@ -1,6 +1,7 @@
 import abc
 import numpy as np
 from scipy.stats import rv_histogram, gaussian_kde
+from scipy.optimize import brentq
 
 
 class AbstractFitter(metaclass=abc.ABCMeta):
@@ -51,7 +52,7 @@ class AbstractFitter(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def ppf(self, data):
         """Returns percent point function of the items in data.
-        
+
         Args:
             data (number or iterable): data to estiamate
                 ppf with fitted empirical distribution.
@@ -63,7 +64,7 @@ class AbstractFitter(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def isf(self, data):
         """Returns inverse survival function of the items in data.
-        
+
         Args:
             data (number or iterable): data to estiamate
                 isf with fitted empirical distribution.
@@ -85,12 +86,12 @@ class AbstractFitter(metaclass=abc.ABCMeta):
 
 def inverse_approximator(value, function, left, right, epsilon, increasing=True, iterations=100):
     """Finds argument of monotonic function given its result.
-    
+
     Utilizes binary search algorithm to find the best argument
     so that the function result of it is the closest to the
     providied value. Search range is provided; function must
     be monotonic on this search range.
-    
+
     Args:
         value (int, float): result of function.
         function (callable): function to calculate value.
@@ -103,10 +104,10 @@ def inverse_approximator(value, function, left, right, epsilon, increasing=True,
             search range or not (default: True).
         iterations (int): number of search iterations to perform
             until halt (default: 100).
-    
+
     Returns:
         (int, float) the best argument found.
-    
+
     """
     if right <= left:
         raise ValueError(f"`right` must be greater than `left`.")
@@ -130,7 +131,7 @@ def inverse_approximator(value, function, left, right, epsilon, increasing=True,
 
 class HistogramFitter(AbstractFitter):
     """Fits empirical data with histogram and produces continuous distribution.
-    
+
     Attributes:
         data (collection): numerical data used to fit distribution.
         estimator (scipy.rv_histogram) histogram instance used to calculate
@@ -192,7 +193,7 @@ class HistogramFitter(AbstractFitter):
 
     def ppf(self, data):
         """Returns percent point function of the items in data.
-        
+
         Args:
             data (number or iterable): data to estiamate
                 ppf with fitted empirical distribution.
@@ -203,7 +204,7 @@ class HistogramFitter(AbstractFitter):
 
     def isf(self, data):
         """Returns inverse survival function of the items in data.
-        
+
         Args:
             data (number or iterable): data to estiamate
                 isf with fitted empirical distribution.
@@ -213,9 +214,36 @@ class HistogramFitter(AbstractFitter):
         return self.estimator.isf(data)
 
 
+def inverse_approximate_collection(function, collection, a, b):
+    """Finds approximation of function arguments for given collection of results.
+
+    For each value in collection finds a root x of function(x) - value
+    on the sign changing interval [a, b].
+
+    Args:
+        function (callable): a function which is being optimized.
+        collection (iterable): a collection of function results
+            arguments are being found for.
+        a (int, float): left boundary of the interval of possible
+            arguments.
+        b (int, float): right boundary of the interval of possible
+            arguments.
+
+    Returns:
+        (list) A list of found approximated arguments.
+    """
+    results = list()
+    for value in collection:
+        try:
+            results.append(brentq(lambda x: function(x) - value, a, b))
+        except ValueError:
+            results.append(b if abs(function(b) - value) < abs(function(a) - value) else a)
+    return results
+
+
 class KernelFitter(AbstractFitter):
     """Fits empirical data with KDE and produces continuous distribution.
-    
+
     Attributes:
         data (collection): numerical data used to fit distribution.
         estimator (scipy.gaussian_kde) KDE instance used to calculate
@@ -224,10 +252,10 @@ class KernelFitter(AbstractFitter):
 
     def __init__(self, data):
         """Initializes KernelFitter instance.
-        
+
         Args:
             data (collection): numerical data to be fitted.
-        
+
         Returns:
             None
         """
@@ -275,67 +303,44 @@ class KernelFitter(AbstractFitter):
         """
         return 1 - self.cdf(data)
 
-    def ppf(self, data, epsilon='auto'):
+    def ppf(self, data):
         """Returns percent point function of the items in data.
-        
-        Utilizes binary search to find ppf of values in data.
-        
+
+        Utilizes brentq method to find ppf of values in data.
+
         Args:
             data (number or iterable): data to estiamate
                 ppf with fitted empirical distribution.
-            epsilon (int, float, str): the maximum difference between data and ppf(points)
-                during the search to stop it. If 'auto', than selects average size
-                between data points used to fit distribution (default: 'auto').
         Returns:
             (number or np.array) ppf values of the items in data.
         """
         if isinstance(data, int) or isinstance(data, float):
             data = [data]
-        points = list()
-        if epsilon == 'auto':
-            epsilon = (max(self.data) - min(self.data)) / self.estimator.n
-        elif not (isinstance(epsilon, int) or isinstance(epsilon, float)):
-            raise ValueError('Provided epsilon is not an "auto", int or float instance.')
-        for p in data:
-            point = inverse_approximator(p,
-                                         self.cdf,
-                                         min(self.data),
-                                         max(self.data),
-                                         epsilon)
-            points.append(point)
+        points = inverse_approximate_collection(self.cdf,
+                                                data,
+                                                a=min(self.data),
+                                                b=max(self.data))
         if len(points) == 1:
             return points[0]
         return np.array(points)
 
-    def isf(self, data, epsilon='auto'):
+    def isf(self, data):
         """Returns inverse survival function of the items in data.
-        
-        Utilizes binary search to find isf of values in data.
-        
+
+        Utilizes brentq method to find isf of values in data.
+
         Args:
             data (number or iterable): data to estiamate
                 isf with fitted empirical distribution.
-            epsilon (int, float, str): the maximum difference between data and isf(points)
-                during the search to stop it. If 'auto', than selects average size
-                between data points used to fit distribution (default: 'auto').
         Returns:
             (number or np.array) isf values of the items in data.
         """
         if isinstance(data, int) or isinstance(data, float):
             data = [data]
-        points = list()
-        if epsilon == 'auto':
-            epsilon = (max(self.data) - min(self.data)) / self.estimator.n
-        elif not (isinstance(epsilon, int) or isinstance(epsilon, float)):
-            raise ValueError('Provided epsilon is not an "auto", int or float instance.')
-        for p in data:
-            point = inverse_approximator(p,
-                                         self.sf,
-                                         min(self.data),
-                                         max(self.data),
-                                         epsilon,
-                                         increasing=False)
-            points.append(point)
+        points = inverse_approximate_collection(self.sf,
+                                                data,
+                                                a=min(self.data),
+                                                b=max(self.data))
         if len(points) == 1:
             return points[0]
         return np.array(points)
