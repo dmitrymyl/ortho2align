@@ -1,6 +1,7 @@
 import abc
 import numpy as np
 from scipy.stats import rv_histogram, gaussian_kde
+from scipy.special import ndtr
 from scipy.optimize import brentq
 
 
@@ -288,9 +289,11 @@ class KernelFitter(AbstractFitter):
             (number or np.array) cdf values of the items in data.
         """
         if isinstance(data, int) or isinstance(data, float):
-            return self.estimator.integrate_box_1d(np.NINF, data)
-        return np.array([self.estimator.integrate_box_1d(np.NINF, x)
-                         for x in data])
+            data = [data]
+        cdf = ndtr(np.subtract.outer(data, self.estimator.dataset[0]) / self.estimator.factor).mean(axis=1)
+        if len(cdf) == 1:
+            return cdf[0]
+        return cdf
 
     def sf(self, data):
         """Returns survival function of the items in data.

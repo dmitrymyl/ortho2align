@@ -383,6 +383,9 @@ class GenomicRange:
     def name(self, value):
         self._name = value
 
+    def __len__(self):
+        return self.end - self.start
+
     def distance(self, other):
         """Calculates distance between two genomic ranges.
 
@@ -416,6 +419,73 @@ class GenomicRange:
         if other.end < self.start:
             return other.end - self.start
         return 0
+
+    def intersect(self, other):
+        """Intersect two genomic ranges together.
+
+        First, check for distance between two genomic ranges.
+        In case it's 0, returns non-strand-specific intersection
+        of two genomic ranges, otherwise returns None.
+
+        Args:
+            other (GenomicRange): genomic range which is intersected
+                with self.
+
+        Returns:
+            (GenomicRange): an intersection of two genomic ranges.
+            None: in case two genomic ranges do not intersect each other.
+
+        Raises:
+            InconsistentGenomesError in case of inconsistent
+                genomes (via distance).
+            InconsistentChromosomesError in case of inconsistent
+                chromosomes (via distance).
+        """
+        if self.distance(other) == 0:
+            if self.start < other.start < self.end:
+                start = other.start
+            else:
+                start = self.start
+            if self.start < other.end < self.end:
+                end = other.end
+            else:
+                end = self.end
+            return GenomicRange(chrom=self.chrom,
+                                start=start,
+                                end=end,
+                                strand='.',
+                                genome=self.genome)
+        return None
+
+    def calc_JI(self, other):
+        """Calculates Jaccard index."""
+        try:
+            intersection = self.intersect(other)
+            if intersection is None:
+                return 0
+            return len(intersection) / (len(self) + len(other) - len(intersection))
+        except GenomicException:
+            return 0
+
+    def calc_OC(self, other):
+        """Calculates overlap coefficient."""
+        try:
+            intersection = self.intersect(other)
+            if intersection is None:
+                return 0
+            return len(intersection) / min(len(self), len(other))
+        except GenomicException:
+            return 0
+
+    def calc_fraction(self, other):
+        """Calculates fraction of self overlapped with other."""
+        try:
+            intersection = self.intersect(other)
+            if intersection is None:
+                return 0
+            return len(intersection) / len(self)
+        except GenomicException:
+            return 0
 
     def merge(self, other):
         """Merges two genomic ranges together.
