@@ -86,9 +86,11 @@ def calc_ortholog_metrics(granges_list, found_relname='found', real_relname='rea
     metrics = {name: list() for name in metric_names}
     for grange in granges_list:
         tp, tn, fp, fn, ji, oc, qf, ff, rf = [0 for _ in range(9)]
-        if len(grange.relations[found_relname]) == 0 and len(grange.relations[real_relname]) == 0:
+        if len(grange.relations[found_relname]) == 0 and \
+           len(grange.relations[real_relname]) == 0:
             tn = 1
-        elif len(grange.relations[found_relname]) > 0 and len(grange.relations[real_relname]) > 0:
+        elif len(grange.relations[found_relname]) > 0 and \
+             len(grange.relations[real_relname]) > 0:
             tp = sum([len(found_grange.relations['trace'])
                       for found_grange in grange.relations[found_relname]])
             fp = len([found_grange

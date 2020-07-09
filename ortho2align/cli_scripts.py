@@ -6,30 +6,6 @@ from tqdm import tqdm
 from scipy.stats import rankdata
 
 
-class CLIVerbose:
-    """
-    A context manager for verbosity before and after execution
-    of some commands.
-    """
-
-    def __init__(self, inmessage, outmessage, target=sys.stdout):
-        """
-        Args:
-            inmessange (str): enter message.
-            outmessage (str): exit message.
-            target (fp): where to print messages (default: sys.stdout).
-        """
-        self.inmessage = inmessage
-        self.outmessage = outmessage
-        self.target = target
-
-    def __enter__(self):
-        print(self.inmessage, file=self.target)
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        print(self.outmessage, file=self.target)
-
-
 def cache_orthodb_xrefs():
 
     from pathlib import Path
@@ -930,7 +906,6 @@ def refine_alignments():
     from functools import partial
     from .genomicranges import GenomicRangesAlignment
     from .fitting import HistogramFitter, KernelFitter
-    #from .parallel import NonExceptionalProcessPool
     from .parallel import TimeoutProcessPool
 
     parser = argparse.ArgumentParser(description='',
@@ -1042,8 +1017,6 @@ def refine_alignments():
                                 background_data.get(query_name, []))
                                for query_name, query_gene_alignments in alignment_data.items())
 
-        # with NonExceptionalProcessPool(cores, verbose=not silent) as p:
-        #     transcripts, exceptions = p.starmap_async(refine_partial, data_for_refinement)
         with TimeoutProcessPool(cores, verbose=not silent) as p:
             transcripts, exceptions = p.starmap(refine_partial,
                                                 data_for_refinement,
@@ -1083,6 +1056,191 @@ def refine_alignments():
         pbar.update()
 
 
+def best_orthologs():
+    from pathlib import Path
+
+
+    parser = argparse.ArgumentParser(description='',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-query_transcripts',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='query orthologs bed12 file.')
+    parser.add_argument('-subject_transcripts',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='subject orthologs bed12 file.')
+    parser.add_argument('-value',
+                        type=str,
+                        nargs='?',
+                        choices=['total_length', 'block_count', 'block_length', 'weight'],
+                        required=True,
+                        help='which value of orthologs to use in case of multiple orthologs.')
+    parser.add_argument('-function',
+                        type=str,
+                        nargs='?',
+                        choices=['max', 'min'],
+                        required=True,
+                        help='orthologs with which value to select in case of multiple orthologs.')
+    parser.add_argument('-outfile_query',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename for query orthologs.')
+    parser.add_argument('-outfile_subject',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output filename for subject orthologs.')
+
+    args = parser.parse_args(sys.argv[2:])
+    query_filename = Path(args.query_transcripts)
+    subject_filename = Path(args.subject_transcripts)
+    value_name = args.value
+    func_name = args.function
+    query_output_filename = Path(args.outfile_query)
+    subject_output_filename = Path(args.outfile_subject)
+
+    value_extraction = {'total_length': lambda line: int(line.strip().split('\t')[2]) - \
+                                                     int(line.strip().split('\t')[1]),
+                        'block_count': lambda line: int(line.strip().split('\t')[9]),
+                        'block_length': lambda line: sum([int(i)
+                                                          for i in line.strip().split('\t')[10].split(',')]),
+                        'weight': lambda line: float(line.strip().split('\t')[4]),
+                        'name': lambda line: line.strip().split('\t')[3]}
+    func_to_apply = {'min': min,
+                     'max': max}
+
+    with open(query_filename, 'r') as query_in, \
+         open(subject_filename, 'r') as subject_in, \
+         open(query_output_filename, 'w') as query_out, \
+         open(subject_output_filename, 'w') as subject_out:
+        purge = list()
+        for query_line, subject_line in zip(query_in, subject_in):
+            if len(purge) == 0:
+                purge.append((query_line, subject_line))
+            elif value_extraction['name'](purge[-1][0]) == value_extraction['name'](query_line):
+                purge.append((query_line, subject_line))
+            else:
+                best_ortholog = func_to_apply[func_name](purge, key=lambda i: value_extraction[value_name](i[0]))
+                query_out.write(best_ortholog[0])
+                subject_out.write(best_ortholog[1])
+                purge = list()
+                purge.append((query_line, subject_line))
+
+
+
+def benchmark_orthologs():
+    import json
+    from pathlib import Path
+    from .genomicranges import GenomicRangesList
+    from .benchmark import trace_orthologs, calc_ortholog_metrics
+
+
+    parser = argparse.ArgumentParser(description='',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-query_genes',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='query genomic ranges.')
+    parser.add_argument('-found_subject',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='found orthologs of query genomic ranges in subject genome.')
+    parser.add_argument('-real_subject',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='real orthologs of query genomic ranges in subject genome.')
+    parser.add_argument('-real_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json map linking query genes names and names of corresponding real orthologs.')
+    parser.add_argument('-ortho_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json map linking query genes names and names of corresponding found orthologs.')
+    parser.add_argument('-outfile',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json output filename.')
+    parser.add_argument('-bed',
+                        type=str,
+                        nargs='?',
+                        default='6',
+                        help='specific bed format (3, 6 or 12).')
+
+    args = parser.parse_args(sys.argv[2:])
+    query_genes_filename = Path(args.query_genes)
+    found_subject_filename = Path(args.found_subject)
+    real_subject_filename = Path(args.real_subject)
+    real_map_filename = Path(args.real_map)
+    ortho_map_filename = Path(args.ortho_map)
+    out_filename = Path(args.outfile)
+    bed_format = args.bed
+
+    query_genes_fileformat = query_genes_filename.split('.')[-1]
+    if query_genes_fileformat == 'bed':
+        query_genes_fileformat += bed_format
+
+    found_subject_fileformat = found_subject_filename.split('.')[-1]
+    if found_subject_fileformat == 'bed':
+        found_subject_fileformat += bed_format
+
+    real_subject_fileformat = real_subject_filename.split('.')[-1]
+    if real_subject_fileformat == 'bed':
+        real_subject_fileformat += bed_format
+
+    with open(query_genes_filename, 'r') as infile:
+        if query_genes_fileformat == 'gtf':
+            name_pattern = r'GeneID:(\d+)'
+        else:
+            name_pattern = None
+        query_genes = GenomicRangesList.parse_annotation(infile,
+                                                         fileformat=query_genes_fileformat,
+                                                         name_pattern=name_pattern)
+
+    with open(found_subject_filename, 'r') as infile:
+        if found_subject_fileformat == 'gtf':
+            name_pattern = r'GeneID:(\d+)'
+        else:
+            name_pattern = None
+        found_subject_genes = GenomicRangesList.parse_annotation(infile,
+                                                                 fileformat=found_subject_fileformat,
+                                                                 name_pattern=name_pattern)
+
+    with open(real_subject_filename, 'r') as infile:
+        if real_subject_fileformat == 'gtf':
+            name_pattern = r'GeneID:(\d+)'
+        else:
+            name_pattern = None
+        real_subject_genes = GenomicRangesList.parse_annotation(infile,
+                                                                fileformat=real_subject_fileformat,
+                                                                name_pattern=name_pattern)
+
+    with open(real_map_filename, 'r') as infile:
+        real_map = json.load(infile)
+
+    with open(ortho_map_filename, 'r') as infile:
+        ortho_map = json.load(infile)
+
+    query_genes.relation_mapping(found_subject_genes, ortho_map, 'found')
+    query_genes.relation_mapping(real_subject_genes, real_map, 'real')
+
+    trace_orthologs(query_genes)
+    metrics = calc_ortholog_metrics(query_genes)
+
+    with open(out_filename, 'w') as outfile:
+        json.dump(metrics, outfile)
+
+
 def ortho2align():
     usage = '''\
     ortho2align <command> [options]
@@ -1104,13 +1262,21 @@ def ortho2align():
         refine_alignments       Refine alignments based on chosen strategy and
                                 build final orthologous transcripts.
 
+        best_orthologs          Select only one ortholog for each query gene based
+                                on provided variety of strategies.
+
+        benchmark_orthologs     Compare found orthologs against real orthologs and
+                                calculate several performance metrics.
+
     Run ortho2align <command> -h for help on a specific command.
     '''
     commands = {'cache_orthodb_xrefs': cache_orthodb_xrefs,
                 'get_orthodb_map': get_orthodb_map,
                 'estimate_background': estimate_background,
                 'get_alignments': get_alignments,
-                'refine_alignments': refine_alignments}
+                'refine_alignments': refine_alignments,
+                'best_orthologs': best_orthologs,
+                'benchmark_orthologs': benchmark_orthologs}
     parser = argparse.ArgumentParser(description='ortho2align set of programms.',
                                      usage=textwrap.dedent(usage))
     parser.add_argument('command',
