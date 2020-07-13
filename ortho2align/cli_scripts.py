@@ -452,6 +452,64 @@ def get_orthodb_map():
         pbar.update()
 
 
+def get_liftover_map():
+    import json
+    from pathlib import Path
+    from collections import namedtuple, defaultdict
+
+
+    parser = argparse.ArgumentParser(description='Retrieve mapping and annotation of syntenic regions from liftOver chain file.',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-chain_file',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Input liftOver chain file.')
+    parser.add_argument('-liftover_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Output json map file.')
+    parser.add_argument('-query_anchors',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output query anchors bed file.')
+    parser.add_argument('-subject_anchors',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output subject anchors bed file.')
+    args = parser.parse_args(sys.argv[2:])
+    chain_filename = Path(args.chain_file)
+    liftover_map_filename = Path(args.liftover_map)
+    query_anchors_filename = Path(args.query_anchors)
+    subject_anchors_filename = Path(args.subject_anchors)
+
+    Chain = namedtuple('Chain',
+                       'chain score qchrom qsize qstrand qstart qend schrom ssize sstrand sstart send name')
+    QueryBed = namedtuple('QueryBed',
+                          'qchrom qstart qend name score qstrand')
+    SubjectBed = namedtuple('SubjectBed',
+                            'schrom sstart send name score sstrand')
+    chain_map = defaultdict(list)
+
+    with open(chain_filename, 'r') as chainfile, \
+         open(query_anchors_filename, 'w') as qoutfile, \
+         open(subject_anchors_filename, 'w') as soutfile:
+        for line in chainfile:
+            if line.startswith('chain'):
+                chain = Chain(line)
+                query_bed = QueryBed(*(chain._asdict[k] for k in QueryBed._fields))
+                subject_bed = SubjectBed(*(chain._asdict[k] for k in SubjectBed._fields))
+                chain_map[chain.name].append(chain.name)
+                qoutfile.write('\t'.join(query_bed) + '\n')
+                soutfile.write('\t'.join(subject_bed) + '\n')
+
+    with open(liftover_map_filename, 'w') as outfile:
+        json.dump(chain_map, outfile)
+
+
 def align_two_ranges_blast(query, subject, **kwargs):
     return query.align_blast(subject, **kwargs)
 
@@ -636,8 +694,14 @@ def get_alignments():
     from .parallel import NonExceptionalProcessPool
     from .genomicranges import GenomicRangesList, extract_taxid_mapping
 
-    parser = argparse.ArgumentParser(description='Get alignments',
+    parser = argparse.ArgumentParser(description='Find orthologs of provided query genes in subject species.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-mode',
+                        type=str,
+                        nargs='?',
+                        choices=['orthodb_long', 'orthodb_short', 'liftover'],
+                        default='orthodb_long',
+                        help='type of orthology map and neighbourhood size.')
     parser.add_argument('-query_genes',
                         type=str,
                         nargs='?',
@@ -719,6 +783,7 @@ def get_alignments():
 
     args = parser.parse_args(sys.argv[2:])
 
+    program_mode = args.mode
     query_genes_filename = args.query_genes
     query_genes_filetype = query_genes_filename.split('.')[-1]
     if query_genes_filetype == 'bed':
@@ -786,7 +851,9 @@ def get_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
+        if program_mode.startswith('orthodb'):
+            ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
+        # orthodb specific pipeline. Needs refactoring with liftover.
         query_anchors.relation_mapping(subject_anchors,
                                        ortho_map,
                                        'orthologs')
@@ -908,7 +975,7 @@ def refine_alignments():
     from .fitting import HistogramFitter, KernelFitter
     from .parallel import TimeoutProcessPool
 
-    parser = argparse.ArgumentParser(description='',
+    parser = argparse.ArgumentParser(description='Refine alignments based on chosen strategy and build final orthologous transcripts.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-alignments',
                         type=str,
@@ -1060,7 +1127,7 @@ def best_orthologs():
     from pathlib import Path
 
 
-    parser = argparse.ArgumentParser(description='',
+    parser = argparse.ArgumentParser(description='Select only one ortholog for each query gene based on provided variety of strategies.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-query_transcripts',
                         type=str,
@@ -1131,7 +1198,6 @@ def best_orthologs():
                 purge.append((query_line, subject_line))
 
 
-
 def benchmark_orthologs():
     import json
     from pathlib import Path
@@ -1139,7 +1205,7 @@ def benchmark_orthologs():
     from .benchmark import trace_orthologs, calc_ortholog_metrics
 
 
-    parser = argparse.ArgumentParser(description='',
+    parser = argparse.ArgumentParser(description='Compare found orthologs against real orthologs and calculate several performance metrics.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-query_genes',
                         type=str,
@@ -1252,6 +1318,9 @@ def ortho2align():
         get_orthodb_map         Retrieve mapping of OrthoDB genes in query
                                 species to known orthologs in subject species.
 
+        get_liftover_map        Retrieve mapping and annotation of syntenic regions
+                                from liftOver chain file.
+
         estimate_background     Estimate background distribution of alignment scores
                                 between query genes and subject species intergenic
                                 regions.
@@ -1272,6 +1341,7 @@ def ortho2align():
     '''
     commands = {'cache_orthodb_xrefs': cache_orthodb_xrefs,
                 'get_orthodb_map': get_orthodb_map,
+                'get_liftover_map': get_liftover_map,
                 'estimate_background': estimate_background,
                 'get_alignments': get_alignments,
                 'refine_alignments': refine_alignments,
