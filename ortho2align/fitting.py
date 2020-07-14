@@ -288,12 +288,15 @@ class KernelFitter(AbstractFitter):
         Returns:
             (number or np.array) cdf values of the items in data.
         """
+        single_value = False
         if isinstance(data, int) or isinstance(data, float):
             data = [data]
+            single_value = True
         cdf = ndtr(np.subtract.outer(data, self.estimator.dataset[0]) / self.estimator.factor).mean(axis=1)
-        if len(cdf) == 1:
+        # cdf = [self.estimator.integrate_box_1d(np.NINF, value) for value in data]
+        if single_value:
             return cdf[0]
-        return cdf
+        return np.array(cdf)
 
     def sf(self, data):
         """Returns survival function of the items in data.
@@ -317,13 +320,15 @@ class KernelFitter(AbstractFitter):
         Returns:
             (number or np.array) ppf values of the items in data.
         """
+        single_value = False
         if isinstance(data, int) or isinstance(data, float):
             data = [data]
+            single_value = True
         points = inverse_approximate_collection(self.cdf,
                                                 data,
                                                 a=min(self.data),
                                                 b=max(self.data))
-        if len(points) == 1:
+        if single_value:
             return points[0]
         return np.array(points)
 
@@ -338,12 +343,14 @@ class KernelFitter(AbstractFitter):
         Returns:
             (number or np.array) isf values of the items in data.
         """
+        single_value = False
         if isinstance(data, int) or isinstance(data, float):
             data = [data]
+            single_value = True
         points = inverse_approximate_collection(self.sf,
                                                 data,
                                                 a=min(self.data),
                                                 b=max(self.data))
-        if len(points) == 1:
+        if single_value:
             return points[0]
         return np.array(points)

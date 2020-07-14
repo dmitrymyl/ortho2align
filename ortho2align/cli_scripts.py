@@ -499,9 +499,9 @@ def get_liftover_map():
          open(subject_anchors_filename, 'w') as soutfile:
         for line in chainfile:
             if line.startswith('chain'):
-                chain = Chain(line)
-                query_bed = QueryBed(*(chain._asdict[k] for k in QueryBed._fields))
-                subject_bed = SubjectBed(*(chain._asdict[k] for k in SubjectBed._fields))
+                chain = Chain(*line.strip().split())
+                query_bed = QueryBed(*(chain._asdict()[k] for k in QueryBed._fields))
+                subject_bed = SubjectBed(*(chain._asdict()[k] for k in SubjectBed._fields))
                 chain_map[chain.name].append(chain.name)
                 qoutfile.write('\t'.join(query_bed) + '\n')
                 soutfile.write('\t'.join(subject_bed) + '\n')
@@ -735,7 +735,6 @@ def get_alignments():
     parser.add_argument('-subject_taxid',
                         type=str,
                         nargs='?',
-                        required=True,
                         help='subject species NCBI taxid')
     parser.add_argument('-output',
                         type=str,
@@ -853,7 +852,7 @@ def get_alignments():
 
         if program_mode.startswith('orthodb'):
             ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
-        # orthodb specific pipeline. Needs refactoring with liftover.
+
         query_anchors.relation_mapping(subject_anchors,
                                        ortho_map,
                                        'orthologs')
@@ -887,6 +886,9 @@ def get_alignments():
                                                                        sequence_file_path=query_genome_filename)
                 query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
                                                                                             chromsizes=subject_chromsizes)
+            if program_mode in ['orthodb_short', 'liftover']:
+                query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+                                                                       sequence_file_path=query_genome_filename)
             query_prepared.append(query_gene)
 
         query_prepared_genes = GenomicRangesList(query_prepared,
@@ -939,7 +941,8 @@ def get_alignments():
 
 def refine(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
     background = fitter(query_bg)
-    score_threshold = background.isf(pval_threshold)
+    if not fdr:
+        score_threshold = background.isf(pval_threshold)
     aligned = False
     query_transcripts = list()
     subject_transcripts = list()
@@ -1196,6 +1199,11 @@ def best_orthologs():
                 subject_out.write(best_ortholog[1])
                 purge = list()
                 purge.append((query_line, subject_line))
+
+        if len(purge) > 0:
+            best_ortholog = func_to_apply[func_name](purge, key=lambda i: value_extraction[value_name](i[0]))
+            query_out.write(best_ortholog[0])
+            subject_out.write(best_ortholog[1])
 
 
 def benchmark_orthologs():
