@@ -566,8 +566,9 @@ class GenomicRange:
         left_index = index - 1
         right_index = index
         try:
-            while abs(self.distance(other_list[left_index])) <= distance:
-                neighbours.append(other_list[left_index])
+            while True:
+                if abs(self.distance(other_list[left_index])) <= distance:
+                    neighbours.append(other_list[left_index])
                 left_index -= 1
         except InconsistentChromosomesError:
             pass
