@@ -527,7 +527,7 @@ class Alignment:
 
         Raises:
             ValueError in case field 'score'
-            is not found in alignment fields.
+                is not found in alignment fields.
         """
         line = file_object.readline()
         if not line.startswith('#'):
