@@ -395,13 +395,13 @@ class BaseGenomicRange:
         Returns:
             BaseGenomicRange: restored genomic range.
         """
-        parse_dict = {'chrom': lambda i: i.get('chrom'),
-                      'start': lambda i: i.get('start'),
-                      'end': lambda i: i.get('end'),
-                      'strand': lambda i: i.get('strand'),
-                      'name': lambda i: i.get('name')}
+        parser_dict = {'chrom': lambda i: i.get('chrom'),
+                       'start': lambda i: i.get('start'),
+                       'end': lambda i: i.get('end'),
+                       'strand': lambda i: i.get('strand'),
+                       'name': lambda i: i.get('name')}
         return cls(**{attr: func(dict_)
-                      for attr, func in parse_dict.items()})
+                      for attr, func in parser_dict.items()})
 
     @property
     def sequence_header(self):
@@ -602,10 +602,11 @@ class BaseGenomicRange:
                 is negative and greater than the half-length
                 of the genomic range.
         """
-        if - flank_distance * 2 > len(self):
+        if - flank_distance * 2 >= len(self):
             raise ValueError(f"Flank distance value {flank_distance} "
-                             "is negative and greater than the "
-                             "half-length of the genomic range.")
+                             "is negative and its modulus is equal to "
+                             "or greater than the half-length of the "
+                             "genomic range.")
         used_args = {'chrom', 'start', 'end', 'strand', 'name'}
         kwargs = {attr: getattr(self, attr)
                   for attr in set(self.init_args) - used_args}
@@ -619,14 +620,13 @@ class BaseGenomicRange:
         """Finds neighbours of self in other list at given distance.
 
         Args:
-            other_list (BaseGenomicRangesList): other list to find
-                neighbours in.
-            distance (int, float): distance at which two
-                genomic ranges are considered neighbours
-                (default: 0).
+            other_list (BaseGenomicRangesList, GenomicRangesList): other list
+                to find neighbours in.
+            distance (int, float, default 0): distance at which two
+                genomic ranges are considered neighbours.
 
         Returns:
-            BaseGenomicRangesList: genomic ranges list with all
+            ``type(other_list)``: genomic ranges list with all
             neighbours of self in other_list at given distance.
         """
         neighbours = list()
@@ -656,85 +656,122 @@ class BaseGenomicRange:
         return other_list.__class__(neighbours, **kwargs)
 
 
-class GenomicRange:
-    """Represents one genomic range.
+class GenomicRange(BaseGenomicRange):
+    """Represents genomic range for real applications.
 
-    Genomic coordinates are 0-based exclusive:
-    * chromosome start coordinate is 0;
-    * character under genomic range coordinate
-        is not included into the sequence.
+    Inherits from `BaseGenomicRange` and extends its
+    slots with *genome*, *_sequence_file_path* and
+    *relations*.
 
     Attributes:
-        chrom (str): name of chromosome.
-        start (int): start of genomic range.
-        end (int): end of genomic range.
-        strand (str): genomic range strand. One of
-            "+", "-", "." (inessential strandness)
-            (default: ".").
-        name (str): name of genomic range (defalut: None).
-        genome (str): corresponding genome filename.
-        sequence_file_path: location of genomic range
-            sequence file.
-        relations (dict): a dictionary with related GenomicRangesList
-            instances.
+        chrom (str, int): Name of the chromosome.
+        start (int): Start of the genomic range.
+        end (int): End of the genomic range.
+        strand (str): Strand of the genomic range,
+            one of *"+"*, *"-"*, *"."*.
+        name (str, int): Name of the genomic range.
+        genome (str): Corresponding genome filename.
+        sequence_file_path (SequencePath, str): Location
+            of the genomic range sequence file.
+        relations (dict): A dictionary with related
+            `BaseGenomicRangesList` or `GenomicRangesList` instances.
+        init_args (tuple): Returns a tuple of essential *__init__* arguments.
+            This property is used for a convenient creation of
+            new instances of the class in inherited methods.
     """
-    __slots__ = ('chrom', 'start', 'end', 'strand', 'genome',
-                 '_sequence_file_path', '_name', 'relations')
 
-    def __init__(self, chrom, start, end, strand='.', name=None,
-                 genome=None, sequence_file_path=None, relations=None,
-                 **kwargs):
+    __slots__ = ('genome', '_sequence_file_path', 'relations')
+
+    def __init__(self, chrom, start, end, strand='.', name=None, genome=None,
+                 sequence_file_path=None, relations=None, **kwargs):
         """Initializes GenomicRange instance.
 
+        In practice, *genome*, *sequence_file_path* and *relations*
+        should be set to ``None``. *genome* is used when parsing
+        annotation files, *sequence_file_path* is used when
+        extracting sequences via `FastaSeqFile` with `GenomicRangesList`,
+        *relations* are used in several applications. *kwargs* is just
+        a convenient placeholder.
+
         Args:
-            chrom (str): name of chromosome.
-            start (int): start of genomic range.
-            end (int): end of genomic range.
-            strand (str): genomic range strand. One of
-                "+", "-", "." (inessential strandness)
-                (default: None).
-            name (str): name of genomic range (defalut: None).
-            genome (str): corresponding genome filename.
-            sequence_file_path: location of genomic range
-                sequence file.
-            relations (dict): a dictionary with related GenomicRangesList
-                instances.
-            kwargs (dict): other arguments.
+            chrom (str, int): Name of the chromosome.
+            start (int): Start of the genomic range.
+            end (int): End of the genomic range.
+            strand (str, default "."): Strand of the genomic range,
+                one of *"+"*, *"-"*, *"."*.
+            name (str, int, default None): Name of the genomic range.
+            genome (str, default None): Corresponding genome filename.
+            sequence_file_path (SequencePath, str, default None): Location
+                of the genomic range sequence file.
+            relations (dict, default None): A dictionary with related
+                BaseGenomicRangesList or GenomicRangesList instances.
+            kwargs (dict): Other arguments.
+
 
         Returns:
-            None.
+            None
         """
-        self.chrom = chrom
-        self.start = start
-        self.end = end
-        self.strand = strand
+        super().__init__(chrom=chrom,
+                         start=start,
+                         end=end,
+                         strand=strand,
+                         name=name)
+
         self.genome = genome
-        self._sequence_file_path = SequencePath(sequence_file_path)
-        self._name = None if name is None else name
+        self._sequence_file_path = (sequence_file_path
+                                    if isinstance(sequence_file_path,
+                                                  SequencePath)
+                                    else SequencePath(sequence_file_path))
         self.relations = dict() if relations is None else relations
 
+    @property
+    def init_args(self):
+        return 'chrom', 'start', 'end', 'strand', 'name', 'genome'
+
     def __repr__(self):
-        """GenomicRange instance representation."""
-        return f"GenomicRange({self.chrom}, {self.start}, " \
-               f"{self.end}, strand={self.strand}, name={self.name}, " \
-               f"genome={self.genome}, sequence_file_path=" \
-               f"{self.sequence_file_path}, relations={self.relations})"
+        """Returns code representation of the genomic range."""
+        attrs = ('chrom',
+                 'start',
+                 'end',
+                 'strand',
+                 'name',
+                 'genome',
+                 'sequence_file_path',
+                 'relations')
+        return f"GenomicRange({', '.join([repr(getattr(self, attr)) for attr in attrs])})"
 
     def __str__(self):
-        """GenomicRange instance string representation."""
-        return f"{self.chrom}\t{self.start}\t{self.end}\t{self.strand}\t" \
-               f"{self.name}\t{self.genome}"
+        """Returns tab-separated table representation of the genomic range."""
+        attrs = ('chrom',
+                 'start',
+                 'end',
+                 'name'
+                 'strand',
+                 'genome')
+        return "\t".join(str(getattr(self, attr))
+                         for attr in attrs)
 
     def __eq__(self, other):
-        """Equality magic method."""
-        return (self.chrom == other.chrom and self.start == other.start and
-                self.end == other.end and self.strand == other.strand and
-                self.genome == other.genome and
-                self.sequence_file_path == other.sequence_file_path and
-                self.name == other.name and self.relations == other.relations)
+        """Checks for equality of two genomic ranges."""
+        attrs = ('chrom',
+                 'start',
+                 'end',
+                 'strand',
+                 'name',
+                 'genome',
+                 'sequence_file_path',
+                 'relations')
+        return all(getattr(self, attr) == getattr(other, attr)
+                   for attr in attrs)
 
     def to_dict(self):
-        """Returns dict representation of the genomic range."""
+        """Returns dictionary representation of the genomic range.
+
+        Might be useful for saving to json file format.
+
+        Returns:
+            dict: Dictionary representation of the genomic range.
+        """
         return {'chrom': self.chrom,
                 'start': self.start,
                 'end': self.end,
@@ -743,265 +780,75 @@ class GenomicRange:
                 'sequence_file_path': self.sequence_file_path.to_dict(),
                 'name': self.name,
                 'relations': {key: value.to_dict()
-                              for key, value in self.relations.items()}}
+                              for key, value in self.relations.items()},
+                'relations_class': self.relations.values()[0].__class__.__name__ if len(self.relations) > 0 else None}
 
     @classmethod
     def from_dict(cls, dict_):
-        """Restores genomic range from dict representation.
+        """Gets genomic range from its dictionary representation.
 
         Args:
-            dict_: dict representation of GenomicRange
-                instance generated with `GenomicRange.to_dict()`.
+            dict_ (dict): A dictionary generated with
+                `GenomicRange.to_dict`.
 
         Returns:
-            (GenomicRange) restored GenomicRange instance.
+            GenomicRange: Restored genomic range.
+
+        Raises:
+            ValueError: An error in case key entry *relation_class* is not one
+                of `BaseGenomicRangesList`, `GenomicRangesList` or None.
+            ValueError: An error in case *dict_* does not contain any
+                one of necessary keys.
         """
-        keys = ['chrom',
-                'start',
-                'end',
-                'strand',
-                'name',
-                'genome',
-                'sequence_file_path',
-                'relations']
-        functions = [lambda i: i.get('chrom'),
-                     lambda i: i.get('start'),
-                     lambda i: i.get('end'),
-                     lambda i: i.get('strand'),
-                     lambda i: i.get('name'),
-                     lambda i: i.get('genome'),
-                     lambda i: SequencePath.from_dict(i.get('sequence_file_path', {'path': None})),
-                     lambda i: {key: GenomicRangesList.from_dict(value)
-                                for key, value in i.get('relations', {}).items()}]
-        kwargs = {key: function(dict_)
-                  for key, function in zip(keys, functions)}
-        return cls(**kwargs)
+        relations_class_name = dict_.get('relations_class')
+        if relations_class_name == 'BaseGenomicRangesList':
+            relations_class = BaseGenomicRangesList
+        elif relations_class_name == 'GenomicRangesList':
+            relations_class = GenomicRangesList
+        elif relations_class_name is None:
+            relations_class = GenomicRangesList
+        else:
+            raise ValueError("Provided relations_class value is not one of "
+                             "'BaseGenomicRangesList', 'GenomicRangesList', None.")
+        parser_dict = {'chrom': lambda i: i.get('chrom'),
+                       'start': lambda i: i.get('start'),
+                       'end': lambda i: i.get('end'),
+                       'strand': lambda i: i.get('strand'),
+                       'genome': lambda i: i.get('genome'),
+                       'name': lambda i: i.get('name'),
+                       'sequence_file_path': lambda i: SequencePath.from_dict(i.get('sequence_file_path', {'path': None})),
+                       'relations': lambda i: {key: relations_class.from_dict(value)
+                                               for key, value in i.get('relations', {}).items()}}
+        for key in parser_dict:
+            if key not in dict_:
+                raise ValueError(f"Provided dict_ does not contain {key} key.")
+        return cls(**{key: func(dict_) for key, func in parser_dict.items()})
 
     @property
     def sequence_file_path(self):
-        """`sequence_file_path` getter."""
         return self._sequence_file_path
 
     @sequence_file_path.setter
     def sequence_file_path(self, value):
-        """`sequence_file_path` setter."""
         self._sequence_file_path = SequencePath(value)
-
-    @property
-    def sequence_header(self):
-        return f"{self.chrom}:{self.start}-{self.end}{self.strand}"
-
-    @property
-    def name(self):
-        if self._name is None:
-            return self.sequence_header
-        return self._name
-
-    @name.setter
-    def name(self, value):
-        self._name = value
-
-    def __len__(self):
-        return self.end - self.start
 
     def distance(self, other):
         """Calculates distance between two genomic ranges.
 
-        In case of same genomes and chromosomes
-        the distance between two genomic ranges
-        can be calculated regardless of their
-        strandness. If two genomic ranges overlap,
-        the distance is zero. In case of inconsistent
-        chromosomes or genomes the distance is undefined.
+        In case chromosomes and genomes are consistent, returns distance
+        between two genomic ranges in strand-nonspecific way.
 
         Args:
-            other (GenomicRange): the genomic range
-                to which calculate the distance from
-                self.
-
-        Returns:
-            (int) distance, non-negative number.
+            other (BaseGenomicRange or children): The other genomic range
+                to calculate distance to *self*.
 
         Raises:
-            InconsistentGenomesError in case of inconsistent
-                genomes.
-            InconsistentChromosomesError in case of inconsistent
-                chromosomes.
+            InconsistentGenomesError: An error in case of inconsistent genomes.
+            InconsistentChromosomesError: An error in case of inconsistent chromosomes.
         """
         if hasattr(other, 'genome') and self.genome != other.genome:
             raise InconsistentGenomesError(self.genome, other.genome)
-        if self.chrom != other.chrom:
-            raise InconsistentChromosomesError(self.chrom, other.chrom)
-        if self.end < other.start:
-            return other.start - self.end
-        if other.end < self.start:
-            return other.end - self.start
-        return 0
-
-    def intersect(self, other):
-        """Intersect two genomic ranges together.
-
-        First, check for distance between two genomic ranges.
-        In case it's 0, returns non-strand-specific intersection
-        of two genomic ranges, otherwise returns None.
-
-        Args:
-            other (GenomicRange): genomic range which is intersected
-                with self.
-
-        Returns:
-            (GenomicRange): an intersection of two genomic ranges.
-            None: in case two genomic ranges do not intersect each other.
-
-        Raises:
-            InconsistentGenomesError in case of inconsistent
-                genomes (via distance).
-            InconsistentChromosomesError in case of inconsistent
-                chromosomes (via distance).
-        """
-        if self.distance(other) == 0:
-            if self.start < other.start < self.end:
-                start = other.start
-            else:
-                start = self.start
-            if self.start < other.end < self.end:
-                end = other.end
-            else:
-                end = self.end
-            return GenomicRange(chrom=self.chrom,
-                                start=start,
-                                end=end,
-                                strand='.',
-                                genome=self.genome)
-        return None
-
-    def calc_JI(self, other):
-        """Calculates Jaccard index."""
-        try:
-            intersection = self.intersect(other)
-            if intersection is None:
-                return 0
-            return len(intersection) / (len(self) + len(other) - len(intersection))
-        except GenomicException:
-            return 0
-
-    def calc_OC(self, other):
-        """Calculates overlap coefficient."""
-        try:
-            intersection = self.intersect(other)
-            if intersection is None:
-                return 0
-            return len(intersection) / min(len(self), len(other))
-        except GenomicException:
-            return 0
-
-    def calc_fraction(self, other):
-        """Calculates fraction of self overlapped with other."""
-        try:
-            intersection = self.intersect(other)
-            if intersection is None:
-                return 0
-            return len(intersection) / len(self)
-        except GenomicException:
-            return 0
-
-    def merge(self, other):
-        """Merges two genomic ranges together.
-
-        In case of the same genomes and chromosomes
-        two genomic ranges can be merged strand-nonspecifically
-        into one genomic range which starts where the closest to
-        the chromosome start genomic range starts and ends where
-        the closest to the chromosome end genomic range ends.
-
-        Args:
-            other (GenomicRange): genomic range which is merged
-                with self.
-
-        Returns:
-            (GenomicRange) new genomic range with "." strand and
-                the same genome.
-
-        Raises:
-            InconsistentGenomesError in case of inconsistent
-                genomes.
-            InconsistentChromosomesError in case of inconsistent
-                chromosomes.
-        """
-        if self.genome != other.genome:
-            raise InconsistentGenomesError(self.genome, other.genome)
-        if self.chrom != other.chrom:
-            raise InconsistentChromosomesError(self.chrom, other.chrom)
-        start = min(self.start, other.start)
-        end = max(self.end, other.end)
-        return GenomicRange(chrom=self.chrom,
-                            start=start,
-                            end=end,
-                            strand=".",
-                            genome=self.genome)
-
-    def flank(self, flank_distance=0):
-        """Flanks genomic range with the given distance.
-
-        Start coordinate is decreased and end
-        coordinate is increased by the flank distance.
-        Do not check if the start coordinate is negative or
-        the end coordinate exceeds chromosome size.
-
-        Args:
-            flank_distance (int): distance to flank
-                genomic range.
-
-        Returns:
-            (GenomicRange) flanked genomic range.
-        """
-        if - flank_distance * 2 > self.end - self.start:
-            raise ValueError(f"Flank distance value {flank_distance} "
-                             "is negative and greater than the "
-                             "half-length of the genomic range.")
-        return GenomicRange(chrom=self.chrom,
-                            start=self.start - flank_distance,
-                            end=self.end + flank_distance,
-                            strand=".",
-                            genome=self.genome)
-
-    def find_neighbours(self, other_list, distance=0):
-        """Finds neighbours of self in other list at given distance.
-
-        Args:
-            other_list (GenomicRangesList): other list to find
-                neighbours in.
-            distance (int, float): distance at which two
-                genomic ranges are considered neighbours
-                (default: 0).
-
-        Returns:
-            (GenomicRangesList) genomic ranges list with all
-            neighbours of self in other_list at given distance.
-        """
-        neighbours = list()
-        index = other_list.bisect_left(self)
-        left_index = index - 1
-        right_index = index
-        try:
-            while True and left_index >= 0:
-                if abs(self.distance(other_list[left_index])) <= distance:
-                    neighbours.append(other_list[left_index])
-                left_index -= 1
-        except InconsistentChromosomesError:
-            pass
-        except IndexError:
-            pass
-        try:
-            while abs(self.distance(other_list[right_index])) <= distance:
-                neighbours.append(other_list[right_index])
-                right_index += 1
-        except InconsistentChromosomesError:
-            pass
-        except IndexError:
-            pass
-        return GenomicRangesList(neighbours,
-                                 sequence_file_path=other_list.sequence_file_path)
+        return super().distance(other)
 
     def align_blast(self, other, program='blastn', task='blastn', **kwargs):
         """Aligns two genomic ranges with BLAST.
@@ -1014,25 +861,25 @@ class GenomicRange:
         manually.
 
         Args:
-            other (GenomicRange): genomic range to
+            other (GenomicRange): Genomic range to
                 align self with.
-            program (str): a program from Standalone
-                BLAST to use (default: 'blastn')
-            task (str): which task from a BLAST program
-                use (default: 'blastn')
-            kwargs (dict): any command line arguments
+            program (str, default "blastn"): A program name
+                from Standalone BLAST to use.
+            task (str, default "blastn"): Which task from a BLAST
+                program to use.
+            kwargs (dict): Any command line arguments
                 to blastn in the following scheme:
-                {'flag': 'value'}.
+                ``{'flag': 'value'}``.
 
         Returns:
-            (GenomicRangesAlignment): aligned range pair,
+            GenomicRangesAlignment: Aligned range pair,
                 which associates self and other
                 genomic ranges and their alignment.
 
         Raises:
-            FilePathNotSpecifiedError in case one or both
-            genomic ranges do not have separate
-            sequence files.
+            FilePathNotSpecifiedError: In case one or both
+                genomic ranges do not have separate
+                sequence files.
         """
         for grange in (self, other):
             grange.sequence_file_path.check_correct()
@@ -1056,6 +903,408 @@ class GenomicRange:
                                                                other)
             stream.close()
         return alignment
+
+
+# class GenomicRange:
+#     """Represents one genomic range.
+
+#     Genomic coordinates are 0-based exclusive:
+#     * chromosome start coordinate is 0;
+#     * character under genomic range coordinate
+#         is not included into the sequence.
+
+#     Attributes:
+#         chrom (str): name of chromosome.
+#         start (int): start of genomic range.
+#         end (int): end of genomic range.
+#         strand (str): genomic range strand. One of
+#             "+", "-", "." (inessential strandness)
+#             (default: ".").
+#         name (str): name of genomic range (defalut: None).
+#         genome (str): corresponding genome filename.
+#         sequence_file_path: location of genomic range
+#             sequence file.
+#         relations (dict): a dictionary with related GenomicRangesList
+#             instances.
+#     """
+#     __slots__ = ('chrom', 'start', 'end', 'strand', 'genome',
+#                  '_sequence_file_path', '_name', 'relations')
+
+#     def __init__(self, chrom, start, end, strand='.', name=None,
+#                  genome=None, sequence_file_path=None, relations=None,
+#                  **kwargs):
+#         """Initializes GenomicRange instance.
+
+#         Args:
+#             chrom (str): name of chromosome.
+#             start (int): start of genomic range.
+#             end (int): end of genomic range.
+#             strand (str): genomic range strand. One of
+#                 "+", "-", "." (inessential strandness)
+#                 (default: None).
+#             name (str): name of genomic range (defalut: None).
+#             genome (str): corresponding genome filename.
+#             sequence_file_path: location of genomic range
+#                 sequence file.
+#             relations (dict): a dictionary with related GenomicRangesList
+#                 instances.
+#             kwargs (dict): other arguments.
+
+#         Returns:
+#             None.
+#         """
+#         self.chrom = chrom
+#         self.start = start
+#         self.end = end
+#         self.strand = strand
+#         self.genome = genome
+#         self._sequence_file_path = SequencePath(sequence_file_path)
+#         self._name = None if name is None else name
+#         self.relations = dict() if relations is None else relations
+
+#     def __repr__(self):
+#         """GenomicRange instance representation."""
+#         return f"GenomicRange({self.chrom}, {self.start}, " \
+#                f"{self.end}, strand={self.strand}, name={self.name}, " \
+#                f"genome={self.genome}, sequence_file_path=" \
+#                f"{self.sequence_file_path}, relations={self.relations})"
+
+#     def __str__(self):
+#         """GenomicRange instance string representation."""
+#         return f"{self.chrom}\t{self.start}\t{self.end}\t{self.strand}\t" \
+#                f"{self.name}\t{self.genome}"
+
+#     def __eq__(self, other):
+#         """Equality magic method."""
+#         return (self.chrom == other.chrom and self.start == other.start and
+#                 self.end == other.end and self.strand == other.strand and
+#                 self.genome == other.genome and
+#                 self.sequence_file_path == other.sequence_file_path and
+#                 self.name == other.name and self.relations == other.relations)
+
+#     def to_dict(self):
+#         """Returns dict representation of the genomic range."""
+#         return {'chrom': self.chrom,
+#                 'start': self.start,
+#                 'end': self.end,
+#                 'strand': self.strand,
+#                 'genome': self.genome,
+#                 'sequence_file_path': self.sequence_file_path.to_dict(),
+#                 'name': self.name,
+#                 'relations': {key: value.to_dict()
+#                               for key, value in self.relations.items()}}
+
+#     @classmethod
+#     def from_dict(cls, dict_):
+#         """Restores genomic range from dict representation.
+
+#         Args:
+#             dict_: dict representation of GenomicRange
+#                 instance generated with `GenomicRange.to_dict()`.
+
+#         Returns:
+#             (GenomicRange) restored GenomicRange instance.
+#         """
+#         keys = ['chrom',
+#                 'start',
+#                 'end',
+#                 'strand',
+#                 'name',
+#                 'genome',
+#                 'sequence_file_path',
+#                 'relations']
+#         functions = [lambda i: i.get('chrom'),
+#                      lambda i: i.get('start'),
+#                      lambda i: i.get('end'),
+#                      lambda i: i.get('strand'),
+#                      lambda i: i.get('name'),
+#                      lambda i: i.get('genome'),
+#                      lambda i: SequencePath.from_dict(i.get('sequence_file_path', {'path': None})),
+#                      lambda i: {key: GenomicRangesList.from_dict(value)
+#                                 for key, value in i.get('relations', {}).items()}]
+#         kwargs = {key: function(dict_)
+#                   for key, function in zip(keys, functions)}
+#         return cls(**kwargs)
+
+#     @property
+#     def sequence_file_path(self):
+#         """`sequence_file_path` getter."""
+#         return self._sequence_file_path
+
+#     @sequence_file_path.setter
+#     def sequence_file_path(self, value):
+#         """`sequence_file_path` setter."""
+#         self._sequence_file_path = SequencePath(value)
+
+#     @property
+#     def sequence_header(self):
+#         return f"{self.chrom}:{self.start}-{self.end}{self.strand}"
+
+#     @property
+#     def name(self):
+#         if self._name is None:
+#             return self.sequence_header
+#         return self._name
+
+#     @name.setter
+#     def name(self, value):
+#         self._name = value
+
+#     def __len__(self):
+#         return self.end - self.start
+
+#     def distance(self, other):
+#         """Calculates distance between two genomic ranges.
+
+#         In case of same genomes and chromosomes
+#         the distance between two genomic ranges
+#         can be calculated regardless of their
+#         strandness. If two genomic ranges overlap,
+#         the distance is zero. In case of inconsistent
+#         chromosomes or genomes the distance is undefined.
+
+#         Args:
+#             other (GenomicRange): the genomic range
+#                 to which calculate the distance from
+#                 self.
+
+#         Returns:
+#             (int) distance, non-negative number.
+
+#         Raises:
+#             InconsistentGenomesError in case of inconsistent
+#                 genomes.
+#             InconsistentChromosomesError in case of inconsistent
+#                 chromosomes.
+#         """
+#         if hasattr(other, 'genome') and self.genome != other.genome:
+#             raise InconsistentGenomesError(self.genome, other.genome)
+#         if self.chrom != other.chrom:
+#             raise InconsistentChromosomesError(self.chrom, other.chrom)
+#         if self.end < other.start:
+#             return other.start - self.end
+#         if other.end < self.start:
+#             return other.end - self.start
+#         return 0
+
+#     def intersect(self, other):
+#         """Intersect two genomic ranges together.
+
+#         First, check for distance between two genomic ranges.
+#         In case it's 0, returns non-strand-specific intersection
+#         of two genomic ranges, otherwise returns None.
+
+#         Args:
+#             other (GenomicRange): genomic range which is intersected
+#                 with self.
+
+#         Returns:
+#             (GenomicRange): an intersection of two genomic ranges.
+#             None: in case two genomic ranges do not intersect each other.
+
+#         Raises:
+#             InconsistentGenomesError in case of inconsistent
+#                 genomes (via distance).
+#             InconsistentChromosomesError in case of inconsistent
+#                 chromosomes (via distance).
+#         """
+#         if self.distance(other) == 0:
+#             if self.start < other.start < self.end:
+#                 start = other.start
+#             else:
+#                 start = self.start
+#             if self.start < other.end < self.end:
+#                 end = other.end
+#             else:
+#                 end = self.end
+#             return GenomicRange(chrom=self.chrom,
+#                                 start=start,
+#                                 end=end,
+#                                 strand='.',
+#                                 genome=self.genome)
+#         return None
+
+#     def calc_JI(self, other):
+#         """Calculates Jaccard index."""
+#         try:
+#             intersection = self.intersect(other)
+#             if intersection is None:
+#                 return 0
+#             return len(intersection) / (len(self) + len(other) - len(intersection))
+#         except GenomicException:
+#             return 0
+
+#     def calc_OC(self, other):
+#         """Calculates overlap coefficient."""
+#         try:
+#             intersection = self.intersect(other)
+#             if intersection is None:
+#                 return 0
+#             return len(intersection) / min(len(self), len(other))
+#         except GenomicException:
+#             return 0
+
+#     def calc_fraction(self, other):
+#         """Calculates fraction of self overlapped with other."""
+#         try:
+#             intersection = self.intersect(other)
+#             if intersection is None:
+#                 return 0
+#             return len(intersection) / len(self)
+#         except GenomicException:
+#             return 0
+
+#     def merge(self, other):
+#         """Merges two genomic ranges together.
+
+#         In case of the same genomes and chromosomes
+#         two genomic ranges can be merged strand-nonspecifically
+#         into one genomic range which starts where the closest to
+#         the chromosome start genomic range starts and ends where
+#         the closest to the chromosome end genomic range ends.
+
+#         Args:
+#             other (GenomicRange): genomic range which is merged
+#                 with self.
+
+#         Returns:
+#             (GenomicRange) new genomic range with "." strand and
+#                 the same genome.
+
+#         Raises:
+#             InconsistentGenomesError in case of inconsistent
+#                 genomes.
+#             InconsistentChromosomesError in case of inconsistent
+#                 chromosomes.
+#         """
+#         if self.genome != other.genome:
+#             raise InconsistentGenomesError(self.genome, other.genome)
+#         if self.chrom != other.chrom:
+#             raise InconsistentChromosomesError(self.chrom, other.chrom)
+#         start = min(self.start, other.start)
+#         end = max(self.end, other.end)
+#         return GenomicRange(chrom=self.chrom,
+#                             start=start,
+#                             end=end,
+#                             strand=".",
+#                             genome=self.genome)
+
+#     def flank(self, flank_distance=0):
+#         """Flanks genomic range with the given distance.
+
+#         Start coordinate is decreased and end
+#         coordinate is increased by the flank distance.
+#         Do not check if the start coordinate is negative or
+#         the end coordinate exceeds chromosome size.
+
+#         Args:
+#             flank_distance (int): distance to flank
+#                 genomic range.
+
+#         Returns:
+#             (GenomicRange) flanked genomic range.
+#         """
+#         if - flank_distance * 2 > self.end - self.start:
+#             raise ValueError(f"Flank distance value {flank_distance} "
+#                              "is negative and greater than the "
+#                              "half-length of the genomic range.")
+#         return GenomicRange(chrom=self.chrom,
+#                             start=self.start - flank_distance,
+#                             end=self.end + flank_distance,
+#                             strand=".",
+#                             genome=self.genome)
+
+#     def find_neighbours(self, other_list, distance=0):
+#         """Finds neighbours of self in other list at given distance.
+
+#         Args:
+#             other_list (GenomicRangesList): other list to find
+#                 neighbours in.
+#             distance (int, float): distance at which two
+#                 genomic ranges are considered neighbours
+#                 (default: 0).
+
+#         Returns:
+#             (GenomicRangesList) genomic ranges list with all
+#             neighbours of self in other_list at given distance.
+#         """
+#         neighbours = list()
+#         index = other_list.bisect_left(self)
+#         left_index = index - 1
+#         right_index = index
+#         try:
+#             while True and left_index >= 0:
+#                 if abs(self.distance(other_list[left_index])) <= distance:
+#                     neighbours.append(other_list[left_index])
+#                 left_index -= 1
+#         except InconsistentChromosomesError:
+#             pass
+#         except IndexError:
+#             pass
+#         try:
+#             while abs(self.distance(other_list[right_index])) <= distance:
+#                 neighbours.append(other_list[right_index])
+#                 right_index += 1
+#         except InconsistentChromosomesError:
+#             pass
+#         except IndexError:
+#             pass
+#         return GenomicRangesList(neighbours,
+#                                  sequence_file_path=other_list.sequence_file_path)
+
+#     def align_blast(self, other, program='blastn', task='blastn', **kwargs):
+#         """Aligns two genomic ranges with BLAST.
+
+#         If both genomic ranges have their sequences
+#         stored in separate files, aligns them with
+#         standalone blastn and specified parameters.
+#         Alignment file format is "7 std score".
+#         Standalone blast package should be installed
+#         manually.
+
+#         Args:
+#             other (GenomicRange): genomic range to
+#                 align self with.
+#             program (str): a program from Standalone
+#                 BLAST to use (default: 'blastn')
+#             task (str): which task from a BLAST program
+#                 use (default: 'blastn')
+#             kwargs (dict): any command line arguments
+#                 to blastn in the following scheme:
+#                 {'flag': 'value'}.
+
+#         Returns:
+#             (GenomicRangesAlignment): aligned range pair,
+#                 which associates self and other
+#                 genomic ranges and their alignment.
+
+#         Raises:
+#             FilePathNotSpecifiedError in case one or both
+#             genomic ranges do not have separate
+#             sequence files.
+#         """
+#         for grange in (self, other):
+#             grange.sequence_file_path.check_correct()
+
+#         if program not in ['blastn', 'blastp']:
+#             raise ValueError("`program` attribute is not one of "
+#                              "['blastn', 'blastp']")
+
+#         command = [program,
+#                    '-task', task,
+#                    '-query', self.sequence_file_path,
+#                    '-subject', other.sequence_file_path,
+#                    '-outfmt', "7 std score"]
+#         add_args = sum((['-' + str(key), str(value)]
+#                         for key, value in kwargs.items()),
+#                        [])
+#         with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
+#             stream = TextIOWrapper(proc.stdout)
+#             alignment = GenomicRangesAlignment.from_file_blast(stream,
+#                                                                self,
+#                                                                other)
+#             stream.close()
+#         return alignment
 
 
 class GenomicRangesAlignment(Alignment):
