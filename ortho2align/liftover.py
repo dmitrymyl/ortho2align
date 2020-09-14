@@ -51,7 +51,7 @@ class InsideTheGapError(LiftOverException):
     def __init__(self, grange, chain):
         self.grange = grange
         self.chain = chain
-        super().__init__(f'Genomic range {self.range} fully lies within a gap inside a chain {self.chain}.')
+        super().__init__(f'Genomic range {self.grange} fully lies within a gap inside a chain {self.chain}.')
 
 
 # A convenient object for parsing liftOver chain files.
@@ -61,7 +61,7 @@ Chain = namedtuple('Chain',
 
 class LiftOverChain(BaseGenomicRange):
     """Class for representing one side of liftOver chain.
-    
+
     A child of BaseGenomicRange class extends its attributes
     with `chromsize`, `blocks`, `gaps`, `sister` via `__slots__`.
     Provides additional methods for liftOver process. Coordinates
@@ -189,17 +189,17 @@ class LiftOverChain(BaseGenomicRange):
         search_for_start = True
         for i, (block_size, gap_size) in enumerate(zip_longest(self.blocks, self.gaps)):
             if search_for_start:  # searcing for the grange_start
-                if gap_size is None:  # in practice, should never happen
-                    raise ValueError('Provided grange lies outside this chain.')
-                elif current_block_start + block_size >= grange_start:  # grange_start inside the block or in the previous gap
+                if current_block_start + block_size >= grange_start:  # grange_start inside the block or in the previous gap
                     start_index = i
                     start_offset = grange_start - current_block_start
                     search_for_start = False
+                elif gap_size is None: # in practice, should never happen
+                    raise ValueError('Provided grange lies outside this chain.')
 
             if not search_for_start:  # searching for the grange_end
-                if (current_block_start + block_size >= grange_end or 
-                    current_block_start + block_size + gap_size >= grange_end or
-                    gap_size is None):  # grange_end inside the block, the previous gap or downstream the end of the chain
+                if (gap_size is None or
+                    current_block_start + block_size >= grange_end or 
+                    current_block_start + block_size + gap_size >= grange_end):  # grange_end inside the block, the previous gap or downstream the end of the chain
                     end_index = i
                     end_offset = grange_end - current_block_start
                     break
@@ -245,6 +245,10 @@ class LiftOverChain(BaseGenomicRange):
         else:
             raise ValueError('The strand of the lift over chain is not one of "+", "-", ".".')
         return grange_start, grange_end
+
+
+LiftOverResults = namedtuple('LiftOverResults',
+                             'lifted deleted_in_new partially_deleted split_in_new duplicated_in_new inside_the_gap')
 
 
 class LiftOverChains:
@@ -333,10 +337,16 @@ class LiftOverChains:
                 blocks.append((int(i) for i in record))
 
                 if len(record) == 1:
-                    sizes, dqs, dss = (tuple(item
-                                             for item in group
-                                             if item is not None)
-                                       for group in zip_longest(*blocks))
+                    sizes, *gaps = (tuple(item
+                                          for item in group
+                                          if item is not None)
+                                    for group in zip_longest(*blocks))
+
+                    if len(gaps) == 0:
+                        dqs = []
+                        dss = []
+                    else:
+                        dqs, dss = gaps
 
                     qsize = int(chain_.qsize)
                     if chain_.qstrand == '-':
@@ -470,3 +480,69 @@ class LiftOverChains:
                                                    name=lifted_name,
                                                    **kwargs))
         return BaseGenomicRangesList(lifted_granges)
+
+    def lift_granges(self, granges_list, min_ratio, origin='query', allow_duplications=False):
+        """Lifts genomic ranges list.
+
+        Args:
+            granges_list (BaseGenomicRangeList or children): genomic range
+                to be lifted.
+            min_ratio (int, float): minimal fraction of the genomic
+                range overlapping with a chain to consider the latter
+                sufficient for lifting. The suggested value for intraspecies
+                liftOver is 0.95, for interspecies is 0.1.
+            origin (str, default "query"): which genome the genomic range
+                came from. Must be one of "query", "subject".
+            allow_duplications (bool, default False): if True, will allow
+                sufficient overlap with more than one chain.
+
+        Returns:
+            tuple of 6 granges_list.__class__ instances: A list of lifted
+            genomic ranges, a list of genomic ranges deleted in new genome,
+            a list of genomic ranges partially deleted in new genome,
+            a list of genomic ranges split in new genome,
+            a list of genomic ranges duplicated in new genome
+            and a list of genomic ranges found inside the gap
+            of liftOver chains.
+
+        Raises:
+            ValueError: An error in case *origin* is not one of *"query"*,
+                *"subject"*.
+        """
+
+        if origin not in ['query', 'subject']:
+            raise ValueError('origin is not one of "query", "subject".')
+        lifted = []
+        deleted_in_new = []
+        partially_deleted = []
+        split_in_new = []
+        duplicated_in_new = []
+        inside_the_gap = []
+
+        for grange in granges_list:
+            try:
+                lifted_granges = self.lift_grange(grange,
+                                                  min_ratio,
+                                                  origin,
+                                                  allow_duplications)
+                lifted += [new_grange for new_grange in lifted_granges]
+            except DeletedInNewError:
+                deleted_in_new.append(grange)
+            except PartiallyDeletedInNewError:
+                partially_deleted.append(grange)
+            except SplitInNewError:
+                split_in_new.append(grange)
+            except DuplicatedInNewError:
+                duplicated_in_new.append(grange)
+            except InsideTheGapError:
+                inside_the_gap.append(grange)
+        used_args = {'collection', }
+        kwargs = {attr: getattr(granges_list, attr)
+                  for attr in set(granges_list.init_args) - used_args}
+        return LiftOverResults(*map(lambda new_list: granges_list.__class__(new_list, **kwargs),
+                                    (lifted,
+                                     deleted_in_new,
+                                     partially_deleted,
+                                     split_in_new,
+                                     duplicated_in_new,
+                                     inside_the_gap)))

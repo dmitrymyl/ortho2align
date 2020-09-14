@@ -22,7 +22,7 @@ from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from tqdm import tqdm
-from .alignment import HSPVertex, Alignment, Transcript, nxor_strands
+from .alignment import HSPVertex, Alignment, Transcript, nxor_strands, numberize
 
 
 class GenomicException(Exception):
@@ -1787,13 +1787,13 @@ class GenomicRangesList(BaseGenomicRangesList):
                        int,
                        int,
                        str,
-                       int,
+                       numberize,
                        str],
               'bed12': [str,
                         int,
                         int,
                         str,
-                        int,
+                        numberize,
                         str,
                         int,
                         int,
