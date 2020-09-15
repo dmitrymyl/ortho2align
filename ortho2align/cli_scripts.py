@@ -452,11 +452,47 @@ def get_orthodb_map():
         pbar.update()
 
 
+def get_orthodb_by_taxid():
+    import json
+    from pathlib import Path
+    from .genomicranges import extract_taxid_mapping
+
+    parser = argparse.ArgumentParser(description='Retrieve OrthoDB mapping for specific taxid from bulk OrthoDB mapping produced with get_orthodb_map.',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-orthodb_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='OrthoDB mapping produced with get_orthodb_map')
+    parser.add_argument('-taxid',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='NCBI taxid to extract mapping for')
+    parser.add_argument('-output',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json output filename')
+
+    args = parser.parse_args(sys.argv[2:])
+    orthodb_map_filename = Path(args.orthodb_map)
+    taxid = args.taxid
+    output_filename = Path(args.output)
+
+    with open(orthodb_map_filename, 'r') as infile:
+        orthodb_map = json.read(infile)
+
+    taxid_map = extract_taxid_mapping(orthodb_map, taxid)
+
+    with open(output_filename, 'w') as outfile:
+        json.dump(taxid_map, outfile)
+
+
 def get_liftover_map():
     import json
     from pathlib import Path
     from collections import namedtuple, defaultdict
-
 
     parser = argparse.ArgumentParser(description='Retrieve mapping and annotation of syntenic regions from liftOver chain file.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -675,6 +711,166 @@ def estimate_background():
         pbar.update()
 
 
+def orthodb_long(query_genes, query_anchors, query_genome_filename,
+                 subject_anchors, subject_genome_filename, subject_chromsizes,
+                 ortho_map, neighbour_dist, merge_dist, flank_dist):
+    from .genomicranges import GenomicRangesList
+
+    query_anchors.relation_mapping(subject_anchors,
+                                   ortho_map,
+                                   'orthologs')
+    query_genes.get_neighbours(query_anchors,
+                               neighbour_dist,
+                               'neighbours')
+    query_unalignable = list()
+    query_prepared = list()
+
+    for query_gene in tqdm(query_genes):
+        if len(query_gene.relations['neighbours']) == 0:
+            query_unalignable.append(query_gene)
+            continue
+        syntenies = [grange
+                     for neighbour in query_gene.relations['neighbours']
+                     for grange in neighbour.relations['orthologs']]
+        synteny_list = GenomicRangesList(syntenies,
+                                         sequence_file_path=subject_genome_filename)
+        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+                                                                                       chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+        neighbourhood = query_gene.relations['neighbours'][0]
+        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+            query_gene.relations['neighbours'] = GenomicRangesList([neighbourhood.merge(query_gene)],
+                                                                   sequence_file_path=query_genome_filename)
+            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+                                                                                        chromsizes=subject_chromsizes)
+
+        query_prepared.append(query_gene)
+
+    query_prepared_genes = GenomicRangesList(query_prepared,
+                                             sequence_file_path=query_genome_filename)
+    query_unalignable_genes = GenomicRangesList(query_unalignable,
+                                                sequence_file_path=query_genome_filename)
+    return query_prepared_genes, query_unalignable_genes
+
+
+def orthodb_short(query_genes, query_anchors, query_genome_filename,
+                  subject_anchors, subject_genome_filename, subject_chromsizes,
+                  ortho_map, neighbour_dist, merge_dist, flank_dist):
+    from .genomicranges import GenomicRangesList
+
+    query_anchors.relation_mapping(subject_anchors,
+                                   ortho_map,
+                                   'orthologs')
+    query_genes.get_neighbours(query_anchors,
+                               neighbour_dist,
+                               'neighbours')
+    query_unalignable = list()
+    query_prepared = list()
+
+    for query_gene in tqdm(query_genes):
+        if len(query_gene.relations['neighbours']) == 0:
+            query_unalignable.append(query_gene)
+            continue
+        syntenies = [grange
+                     for neighbour in query_gene.relations['neighbours']
+                     for grange in neighbour.relations['orthologs']]
+        synteny_list = GenomicRangesList(syntenies,
+                                         sequence_file_path=subject_genome_filename)
+        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+                                                                                       chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+        neighbourhood = query_gene.relations['neighbours'][0]
+        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+                                                                                        chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+                                                               sequence_file_path=query_genome_filename)
+
+        query_prepared.append(query_gene)
+
+    query_prepared_genes = GenomicRangesList(query_prepared,
+                                             sequence_file_path=query_genome_filename)
+    query_unalignable_genes = GenomicRangesList(query_unalignable,
+                                                sequence_file_path=query_genome_filename)
+    return query_prepared_genes, query_unalignable_genes
+
+
+def liftover_long(query_genes, query_anchors, query_genome_filename,
+                  subject_anchors, subject_genome_filename, subject_chromsizes,
+                  ortho_map, neighbour_dist, merge_dist, flank_dist):
+    from .genomicranges import GenomicRangesList
+
+    query_anchors.relation_mapping(subject_anchors,
+                                   ortho_map,
+                                   'orthologs')
+    query_genes.get_neighbours(query_anchors,
+                               neighbour_dist,
+                               'neighbours')
+    query_unalignable = list()
+    query_prepared = list()
+
+    for query_gene in tqdm(query_genes):
+        if len(query_gene.relations['neighbours']) == 0:
+            query_unalignable.append(query_gene)
+            continue
+        syntenies = [grange
+                     for neighbour in query_gene.relations['neighbours']
+                     for grange in neighbour.relations['orthologs']]
+        synteny_list = GenomicRangesList(syntenies,
+                                         sequence_file_path=subject_genome_filename)
+        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+                                                                                       chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+        neighbourhood = query_gene.relations['neighbours'][0]
+        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+                                                                                        chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+                                                               sequence_file_path=query_genome_filename)
+
+        query_prepared.append(query_gene)
+
+    query_prepared_genes = GenomicRangesList(query_prepared,
+                                             sequence_file_path=query_genome_filename)
+    query_unalignable_genes = GenomicRangesList(query_unalignable,
+                                                sequence_file_path=query_genome_filename)
+    return query_prepared_genes, query_unalignable_genes
+
+
+def liftover_short(query_genes, query_genome_filename, subject_genome_filename,
+                   subject_chromsizes, liftover_chains, neighbour_dist,
+                   merge_dist, flank_dist, min_ratio=0.05, allow_duplications=True):
+    from .genomicranges import GenomicRangesList
+
+    query_unalignable = list()
+    query_prepared = list()
+
+    liftover_results = liftover_chains.lift_granges(query_genes,
+                                                    min_ratio=min_ratio,
+                                                    allow_duplications=allow_duplications)
+    lifted = liftover_results.lifted
+
+    for query_gene in tqdm(query_genes):
+        if lifted.name_mapping.get(query_gene.name) is None:
+            query_unalignable.append(query_gene)
+            continue
+        syntenies = [grange
+                     for grange in lifted.name_mapping.get(query_gene.name)]
+        synteny_list = GenomicRangesList(syntenies,
+                                         sequence_file_path=subject_genome_filename)
+        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+                                                                                       chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+                                                                       sequence_file_path=query_genome_filename)
+        query_prepared.append(query_gene)
+
+    query_prepared_genes = GenomicRangesList(query_prepared,
+                                             sequence_file_path=query_genome_filename)
+    query_unalignable_genes = GenomicRangesList(query_unalignable,
+                                                sequence_file_path=query_genome_filename)
+    return query_prepared_genes, query_unalignable_genes
+
+
 def align_syntenies(grange, **kwargs):
     neighbourhood = grange.relations['neighbours'][0]
     alignments = list()
@@ -692,14 +888,15 @@ def get_alignments():
     import json
     from functools import partial
     from .parallel import NonExceptionalProcessPool
-    from .genomicranges import GenomicRangesList, extract_taxid_mapping
+    from .genomicranges import GenomicRangesList, FastaSeqFile
+    from .liftover import LiftOverChains
 
     parser = argparse.ArgumentParser(description='Find orthologs of provided query genes in subject species.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-mode',
                         type=str,
                         nargs='?',
-                        choices=['orthodb_long', 'orthodb_short', 'liftover'],
+                        choices=['orthodb_long', 'orthodb_short', 'liftover_long', 'liftover_short'],
                         default='orthodb_long',
                         help='type of orthology map and neighbourhood size.')
     parser.add_argument('-query_genes',
@@ -710,7 +907,6 @@ def get_alignments():
     parser.add_argument('-query_anchors',
                         type=str,
                         nargs='?',
-                        required=True,
                         help='query anchors annotation filename')
     parser.add_argument('-query_genome',
                         type=str,
@@ -720,7 +916,6 @@ def get_alignments():
     parser.add_argument('-subject_anchors',
                         type=str,
                         nargs='?',
-                        required=True,
                         help='subject anchors annotation filename')
     parser.add_argument('-subject_genome',
                         type=str,
@@ -730,12 +925,11 @@ def get_alignments():
     parser.add_argument('-ortho_map',
                         type=str,
                         nargs='?',
-                        required=True,
                         help='orthology map filename')
-    parser.add_argument('-subject_taxid',
+    parser.add_argument('-liftover_chains',
                         type=str,
                         nargs='?',
-                        help='subject species NCBI taxid')
+                        help='liftover .chain filename')
     parser.add_argument('-output',
                         type=str,
                         nargs='?',
@@ -750,7 +944,12 @@ def get_alignments():
                         type=int,
                         nargs='?',
                         default=1,
-                        help='Number of cores to use for alignment multiprocessing.')
+                        help='Number of cores to use for alignment multiprocessing')
+    parser.add_argument('-min_ratio',
+                        type=float,
+                        nargs='?',
+                        default=0.05,
+                        help='minimal ratio of gene overlapping liftover chain to consider it for liftover')
     parser.add_argument('-neighbour_dist',
                         type=int,
                         nargs='?',
@@ -789,24 +988,30 @@ def get_alignments():
         query_genes_filetype += args.bed
     query_genome_filename = args.query_genome
     query_anchors_filename = args.query_anchors
-    query_anchors_filetype = query_anchors_filename.split('.')[-1]
-    if query_anchors_filetype == 'bed':
-        query_anchors_filetype += args.bed
     subject_anchors_filename = args.subject_anchors
-    subject_anchors_filetype = subject_anchors_filename.split('.')[-1]
-    if subject_anchors_filetype == 'bed':
-        subject_anchors_filetype += args.bed
     subject_genome_filename = args.subject_genome
     ortho_map_filename = args.ortho_map
+    liftover_chains_filename = args.liftover_chains
     output_filename = args.output
     unalignable_filename = args.unalignable
-    subject_taxid = args.subject_taxid
     cores = args.cores
+    min_ratio = args.min_ratio
     neighbour_dist = args.neighbour_dist
     merge_dist = args.merge_dist
     flank_dist = args.flank_dist
     word_size = args.word_size
     silent = args.silent
+
+    if program_mode == 'liftover_short' and liftover_chains_filename is None:
+        parser.error('You must supply -liftover_chains with -mode liftover_short.')
+
+    if program_mode in ['orthodb_long', 'orthodb_short', 'liftover_long']:
+        if query_anchors_filename is None:
+            parser.error(f'You must supply -query_anchors with -mode {program_mode}')
+        if subject_anchors_filename is None:
+            parser.error(f'You must supply -subject_anchors with -mode {program_mode}')
+        if ortho_map_filename is None:
+            parser.error(f'You must supply -ortho_map with -mode {program_mode}')
 
     cmd_hints = ['reading annotations...',
                  'mapping orthology and neighbour relations...',
@@ -825,76 +1030,71 @@ def get_alignments():
             query_genes = GenomicRangesList.parse_annotation(infile,
                                                              fileformat=query_genes_filetype,
                                                              sequence_file_path=query_genome_filename)
-        with open(query_anchors_filename, 'r') as infile:
-            if query_anchors_filetype == 'gtf':
-                name_pattern = r'GeneID:(\d+)'
+
+        subject_genome = FastaSeqFile(subject_genome_filename)
+        subject_chromsizes = subject_genome.chromsizes
+
+        if program_mode != 'liftover_short':
+            query_anchors_filetype = query_anchors_filename.split('.')[-1]
+            if query_anchors_filetype == 'bed':
+                query_anchors_filetype += args.bed
+
+            with open(query_anchors_filename, 'r') as infile:
+                if query_anchors_filetype == 'gtf':
+                    name_pattern = r'GeneID:(\d+)'
+                else:
+                    name_pattern = None
+                query_anchors = GenomicRangesList.parse_annotation(infile,
+                                                                   fileformat=query_anchors_filetype,
+                                                                   sequence_file_path=query_genome_filename,
+                                                                   name_pattern=name_pattern)
+
+            subject_anchors_filetype = subject_anchors_filename.split('.')[-1]
+            if subject_anchors_filetype == 'bed':
+                subject_anchors_filetype += args.bed
+
+            with open(subject_anchors_filename, 'r') as infile:
+                if query_anchors_filetype == 'gtf':
+                    name_pattern = r'GeneID:(\d+)'
+                else:
+                    name_pattern = None
+                subject_anchors = GenomicRangesList.parse_annotation(infile,
+                                                                     fileformat=subject_anchors_filetype,
+                                                                     sequence_file_path=subject_genome_filename,
+                                                                     name_pattern=name_pattern)
+            with open(ortho_map_filename, 'r') as mapfile:
+                ortho_map = json.load(mapfile)
+
+            cmd_point += 1
+            pbar.postfix = cmd_hints[cmd_point]
+            pbar.update()
+
+            process_args = [query_genes, query_anchors, query_genome_filename,
+                            subject_anchors, subject_genome_filename, subject_chromsizes,
+                            ortho_map, neighbour_dist, merge_dist, flank_dist]
+
+            if program_mode == 'orthodb_long':
+                query_prepared_genes, query_unalignable_genes = orthodb_long(*process_args)
+            elif program_mode == 'orthodb_short':
+                query_prepared_genes, query_unalignable_genes = orthodb_short(*process_args)
+            elif program_mode == 'liftover_long':
+                query_prepared_genes, query_unalignable_genes = liftover_long(*process_args)
             else:
-                name_pattern = None
-            query_anchors = GenomicRangesList.parse_annotation(infile,
-                                                               fileformat=query_anchors_filetype,
-                                                               sequence_file_path=query_genome_filename,
-                                                               name_pattern=name_pattern)
-        with open(subject_anchors_filename, 'r') as infile:
-            if query_anchors_filetype == 'gtf':
-                name_pattern = r'GeneID:(\d+)'
-            else:
-                name_pattern = None
-            subject_anchors = GenomicRangesList.parse_annotation(infile,
-                                                                 fileformat=subject_anchors_filetype,
-                                                                 sequence_file_path=subject_genome_filename,
-                                                                 name_pattern=name_pattern)
-        with open(ortho_map_filename, 'r') as mapfile:
-            ortho_map = json.load(mapfile)
+                raise ValueError("program_mode is not one of ['orthodb_long', 'orthodb_short', 'liftover_long', 'liftover_short']")
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
+        else:
+            with open(liftover_chains_filename, 'r') as infile:
+                liftover_chains = LiftOverChains.parse_chain_file(infile)
 
-        if program_mode.startswith('orthodb'):
-            ortho_map = extract_taxid_mapping(ortho_map, subject_taxid)
+            cmd_point += 1
+            pbar.postfix = cmd_hints[cmd_point]
+            pbar.update()
 
-        query_anchors.relation_mapping(subject_anchors,
-                                       ortho_map,
-                                       'orthologs')
-        query_genes.get_neighbours(query_anchors,
-                                   neighbour_dist,
-                                   'neighbours')
+            process_args = [query_genes, query_genome_filename, subject_genome_filename,
+                            subject_chromsizes, liftover_chains, neighbour_dist,
+                            merge_dist, flank_dist, min_ratio]
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-
-        subject_chromsizes = subject_anchors.sequence_file.chromsizes
-        query_unalignable = list()
-        query_prepared = list()
-
-        for query_gene in tqdm(query_genes):
-            if len(query_gene.relations['neighbours']) == 0:
-                query_unalignable.append(query_gene)
-                continue
-            syntenies = [grange
-                         for neighbour in query_gene.relations['neighbours']
-                         for grange in neighbour.relations['orthologs']]
-            synteny_list = GenomicRangesList(syntenies,
-                                             sequence_file_path=subject_genome_filename)
-            query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
-                                                                                           chromsizes=subject_chromsizes)
-            query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
-            neighbourhood = query_gene.relations['neighbours'][0]
-            if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
-                query_gene.relations['neighbours'] = GenomicRangesList([neighbourhood.merge(query_gene)],
-                                                                       sequence_file_path=query_genome_filename)
-                query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
-                                                                                            chromsizes=subject_chromsizes)
-            if program_mode in ['orthodb_short', 'liftover']:
-                query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
-                                                                       sequence_file_path=query_genome_filename)
-            query_prepared.append(query_gene)
-
-        query_prepared_genes = GenomicRangesList(query_prepared,
-                                                 sequence_file_path=query_genome_filename)
-        query_unalignable_genes = GenomicRangesList(query_unalignable,
-                                                    sequence_file_path=query_genome_filename)
+            query_prepared_genes, query_unalignable_genes = liftover_short(*process_args)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
