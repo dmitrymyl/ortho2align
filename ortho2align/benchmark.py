@@ -73,61 +73,71 @@ def calc_auc(x, y):
     return trapz(y, x)
 
 
-def trace_orthologs(granges_list, found_relname='found', real_relname='real'):
+def trace_orthologs(granges_list, found_subject_relname='found_subject', real_relname='real'):
     for grange in granges_list:
-        for found_grange in grange.relations[found_relname]:
-            found_grange.relations['trace'] = found_grange.find_neighbours(grange.relations[real_relname])
-        for real_grange in grange.relations[found_relname]:
-            real_grange.relations['trace'] = real_grange.find_neighbours(grange.relations[real_relname])
+        for found_subject_grange in grange.relations[found_subject_relname]:
+            found_subject_grange.relations['trace'] = found_subject_grange.find_neighbours(grange.relations[real_relname])
+        for real_grange in grange.relations[real_relname]:
+            real_grange.relations['trace'] = real_grange.find_neighbours(grange.relations[found_subject_relname])
 
 
-def calc_ortholog_metrics(granges_list, found_relname='found', real_relname='real'):
-    metric_names = ['TP', 'FP', 'TN', 'FN', 'JI', 'OC', 'QF', 'FF', 'RF']
+def calc_ortholog_metrics(granges_list,
+                          found_query_relname='found_query',
+                          found_subject_relname='found_subject',
+                          found_query_subject_relanme='ortho_link',
+                          real_relname='real'):
+    metric_names = ['TP', 'FP', 'TN', 'FN', 'JI', 'OC', 'QF', 'FF', 'RF', 'CF']
     metrics = {name: list() for name in metric_names}
     for grange in granges_list:
-        tp, tn, fp, fn, ji, oc, qf, ff, rf = [0 for _ in range(9)]
-        if len(grange.relations[found_relname]) == 0 and \
+        tp, fp, tn, fn, ji, oc, qf, ff, rf, cf = [[0] for _ in range(len(metric_names))]
+        if len(grange.relations[found_subject_relname]) == 0 and \
            len(grange.relations[real_relname]) == 0:
-            tn = 1
-        elif len(grange.relations[found_relname]) > 0 and \
+            tn = [1]
+        elif len(grange.relations[found_subject_relname]) > 0 and \
              len(grange.relations[real_relname]) > 0:
-            tp = sum([len(found_grange.relations['trace'])
-                      for found_grange in grange.relations[found_relname]])
-            fp = len([found_grange
-                      for found_grange in grange.relations[found_relname]
-                      if len(found_grange.relations['trace']) == 0])
-            fn = len([real_grange
-                      for real_grange in grange.relations[real_relname]
-                      if len(real_grange.relations['trace']) == 0])
+            tp = [sum([len(found_grange.relations['trace'])
+                       for found_grange in grange.relations[found_subject_relname]])]
+            fp = [len([found_grange
+                       for found_grange in grange.relations[found_subject_relname]
+                       if len(found_grange.relations['trace']) == 0])]
+            fn = [len([real_grange
+                       for real_grange in grange.relations[real_relname]
+                       if len(real_grange.relations['trace']) == 0])]
             ji = [found_grange.calc_JI(real_grange)
-                  for found_grange in grange.relations[found_relname]
+                  for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
-            if len(ji) == 0:
-                ji = 0
+            # if len(ji) == 0:
+            #     ji = [0]
             oc = [found_grange.calc_OC(real_grange)
-                  for found_grange in grange.relations[found_relname]
+                  for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
-            if len(oc) == 0:
-                oc = 0
+            # if len(oc) == 0:
+            #     oc = [0]
             qf = [grange.calc_fraction(found_grange)
-                  for found_grange in grange.relations[found_relname]]
-            if len(qf) == 0:
-                qf = 0
+                  for found_grange in grange.relations[found_query_relname]]
+            # if len(qf) == 0:
+            #     qf = [0]
             ff = [real_grange.calc_fraction(found_grange)
                   for real_grange in grange.relations[real_relname]
                   for found_grange in real_grange.relations['trace']]
-            if len(ff) == 0:
-                ff = 0
+            # if len(ff) == 0:
+            #     ff = [0]
             rf = [found_grange.calc_fraction(real_grange)
-                  for found_grange in grange.relations[found_relname]
+                  for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
-            if len(rf) == 0:
-                rf = 0
-        elif len(grange.relations[found_relname]) > 0:
-            fp = len(grange.relations[found_relname])
+            # if len(rf) == 0:
+            #     rf = [0]
+            cf = [grange.calc_fraction(found_query_grange) * found_subject_grange.calc_fraction(real_grange)
+                  for found_query_grange in grange.relations[found_query_relname]
+                  for found_subject_grange in found_query_grange.relations[found_query_subject_relanme]
+                  for real_grange in found_subject_grange.relations['trace']]
+            # if len(cf) == 0:
+            #     cf = [0]
+        elif len(grange.relations[found_subject_relname]) > 0:
+            fp = [len(grange.relations[found_subject_relname])]
         else:  # len(grange.relations[real_relname]) > 0
-            fn = len(grange.relations[real_relname])
-        grange_metrics = [tp, fp, tn, fn, ji, oc, qf, ff, rf]
+            fn = [len(grange.relations[real_relname])]
+        grange_metrics = [tp, fp, tn, fn, ji, oc, qf, ff, rf, cf]
         for name, value in zip(metric_names, grange_metrics):
             metrics[name].append(value)
     return metrics
@@ -141,6 +151,7 @@ def unnest_number_list(collection):
             unnested += value
         else:
             unnested.append(value)
+    return unnested
 
 
 def calc_ensemble_metric(ortholog_metrics, metric_name):

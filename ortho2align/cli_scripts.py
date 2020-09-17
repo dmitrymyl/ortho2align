@@ -3,14 +3,13 @@ import sys
 import argparse
 import textwrap
 from tqdm import tqdm
-from scipy.stats import rankdata
+from .fitting import ranking
 
 
 def cache_orthodb_xrefs():
 
     from pathlib import Path
     from .orthodb import split_odb_file
-
 
     parser = argparse.ArgumentParser(description='Cache OrthoDB gene ID cross-'
                                                  'references into specific '
@@ -481,7 +480,7 @@ def get_orthodb_by_taxid():
     output_filename = Path(args.output)
 
     with open(orthodb_map_filename, 'r') as infile:
-        orthodb_map = json.read(infile)
+        orthodb_map = json.load(infile)
 
     taxid_map = extract_taxid_mapping(orthodb_map, taxid)
 
@@ -550,11 +549,72 @@ def align_two_ranges_blast(query, subject, **kwargs):
     return query.align_blast(subject, **kwargs)
 
 
-def estimate_background():
+def bg_from_inter_ranges():
     import random
+    from .genomicranges import BaseGenomicRangesList, GenomicRangesList
+
+    parser = argparse.ArgumentParser(description='Generate background set of genomic ranges from intergenic ranges.',
+                                     prog='ortho2align bg_from_inter_ranges',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument('-genes',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='Gene annotation filename to use for composing intergenic ranges.')
+    parser.add_argument('-observations',
+                        type=int,
+                        nargs='?',
+                        required=True,
+                        help='Number of background regions to generate.')
+    parser.add_argument('-output',
+                        type=str,
+                        nargs='?',
+                        help='Output filename for background regions annotation in bed6 format.')
+    parser.add_argument('-seed',
+                        type=int,
+                        nargs='?',
+                        default=123,
+                        help='random seed number for sampling intergenic regions.')
+    parser.add_argument('-bed',
+                        type=str,
+                        nargs='?',
+                        default='6',
+                        help='specific bed format (3, 6 or 12).')
+
+    args = parser.parse_args(sys.argv[2:])
+
+    random.seed(args.seed)
+
+    genes_filename = args.genes
+    genes_fileformat = genes_filename.split('.')[-1]
+    if genes_fileformat == 'bed':
+        genes_fileformat += args.bed
+    observations = args.observations
+    output_filename = args.output
+
+    with open(genes_filename, 'r') as infile:
+        genes = GenomicRangesList.parse_annotation(infile,
+                                                   fileformat=genes_fileformat)
+
+    inter_genes = genes.inter_ranges()
+    if len(inter_genes) < observations:
+        parser.error(f'The number of observations ({observations}) '
+                     'supplied by -observation key '
+                     'must be less than the number of intergenic '
+                     f'regions ({len(inter_genes)}) derived from genes '
+                     'supplied by -genes key.')
+    samples = BaseGenomicRangesList(random.sample(inter_genes, k=observations))
+
+    with open(output_filename, 'w') as outfile:
+        samples.to_bed6(outfile)
+
+
+def estimate_background():
     import json
+    from tempfile import TemporaryDirectory
     from functools import partial
-    from .genomicranges import GenomicRangesList
+    from .genomicranges import GenomicRangesList, FastaSeqFile, SequencePath
     from .parallel import NonExceptionalProcessPool
 
     parser = argparse.ArgumentParser(description='Estimate background alignment scores.',
@@ -565,11 +625,11 @@ def estimate_background():
                         nargs='?',
                         required=True,
                         help='Query species gene annotation filename.')
-    parser.add_argument('-subject_genes',
+    parser.add_argument('-bg_ranges',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='Subject species gene annotation filename.')
+                        help='Background genomic range set of subject species.')
     parser.add_argument('-query_genome',
                         type=str,
                         nargs='?',
@@ -580,26 +640,16 @@ def estimate_background():
                         nargs='?',
                         required=True,
                         help='Subject species genome filename (fasta format).')
-    parser.add_argument('-observations',
-                        type=int,
-                        nargs='?',
-                        required=True,
-                        help='Number of alignments to estimate background.')
     parser.add_argument('-output',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='File to save background alignment scores. Uses numpy.save function.')
+                        help='JSON filename to save background alignment scores.')
     parser.add_argument('-cores',
                         type=int,
                         nargs='?',
                         default=1,
                         help='Number of cores to use for alignment multiprocessing.')
-    parser.add_argument('-seed',
-                        type=int,
-                        nargs='?',
-                        default=123,
-                        help='random seed number for sampling query genes and subject intergenic regions.')
     parser.add_argument('-bed',
                         type=str,
                         nargs='?',
@@ -616,27 +666,22 @@ def estimate_background():
 
     args = parser.parse_args(sys.argv[2:])
 
-    random.seed = args.seed
-
     query_genes_filename = args.query_genes
     query_genes_filetype = query_genes_filename.split('.')[-1]
     if query_genes_filetype == 'bed':
         query_genes_filetype += args.bed
-    subject_genes_filename = args.subject_genes
-    subject_genes_filetype = subject_genes_filename.split('.')[-1]
-    if subject_genes_filetype == 'bed':
-        subject_genes_filetype += args.bed
+    bg_ranges_filename = args.bg_ranges
+    bg_ranges_filetype = bg_ranges_filename.split('.')[-1]
+    if bg_ranges_filetype == 'bed':
+        bg_ranges_filetype += args.bed
     query_genome_filename = args.query_genome
     subject_genome_filename = args.subject_genome
-    observations = args.observations
     output_filename = args.output
     cores = args.cores
     word_size = args.word_size
     silent = args.silent
 
     cmd_hints = ['reading annotations...',
-                 'getting intergenic ranges of subject genes...',
-                 'getting pairs for background estimation...',
                  'getting sample sequences...',
                  'aligning samples...',
                  'saving to file...',
@@ -651,53 +696,51 @@ def estimate_background():
             query_genes = GenomicRangesList.parse_annotation(infile,
                                                              fileformat=query_genes_filetype,
                                                              sequence_file_path=query_genome_filename)
-        with open(subject_genes_filename, 'r') as infile:
-            subject_genes = GenomicRangesList.parse_annotation(infile,
-                                                               fileformat=subject_genes_filetype,
-                                                               sequence_file_path=subject_genome_filename)
+        with open(bg_ranges_filename, 'r') as infile:
+            bg_ranges = GenomicRangesList.parse_annotation(infile,
+                                                           fileformat=bg_ranges_filetype,
+                                                           sequence_file_path=subject_genome_filename)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        subject_genes = subject_genes.inter_ranges()
+        query_chromsizes = FastaSeqFile(query_genome_filename).chromsizes
+        subject_chromsizes = FastaSeqFile(subject_genome_filename).chromsizes
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
+        with TemporaryDirectory() as tempdirname:
+            tempdir = SequencePath(tempdirname)
 
-        subject_samples = GenomicRangesList([random.choice(subject_genes) for _ in range(observations)],
-                                            subject_genes.sequence_file_path)
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
+            query_genes.get_fasta(outfileprefix='query_',
+                                  outdir=tempdir,
+                                  chromsizes=query_chromsizes)
+            bg_ranges.get_fasta(outfileprefix='bg_',
+                                outdir=tempdir,
+                                chromsizes=subject_chromsizes)
+            all_scores = dict()
 
-        query_genes.get_fasta('query_')
-        subject_samples.get_fasta('subject_')
-        all_scores = dict()
+            cmd_point += 1
+            pbar.postfix = cmd_hints[cmd_point]
+            pbar.update()
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
+            align_two_ranges_blast_word_size = partial(align_two_ranges_blast,
+                                                       word_size=word_size)
 
-        align_two_ranges_blast_word_size = partial(align_two_ranges_blast,
-                                                   word_size=word_size)
-
-        for query in tqdm(query_genes, disable=silent, position=1):
-            sample_pairs = zip((query
-                                for _ in range(observations)),
-                               subject_samples)
-            with NonExceptionalProcessPool(cores, verbose=False) as p:
-                alignments, exceptions = p.starmap_async(align_two_ranges_blast_word_size,
-                                                         sample_pairs)
-            if len(exceptions) > 0:
-                print('Exceptions occured: ')
-                for exception in exceptions:
-                    print(exception)
-            scores = [hsp.score
-                      for alignment in alignments
-                      for hsp in alignment.HSPs]
-            all_scores[query.name] = scores
+            for query in tqdm(query_genes, disable=silent, position=1):
+                sample_pairs = zip((query
+                                    for _ in range(len(bg_ranges))),
+                                   bg_ranges)
+                with NonExceptionalProcessPool(cores, verbose=False) as p:
+                    alignments, exceptions = p.starmap_async(align_two_ranges_blast_word_size,
+                                                             sample_pairs)
+                if len(exceptions) > 0:
+                    print('Exceptions occured: ')
+                    for exception in exceptions:
+                        print(exception)
+                scores = [hsp.score
+                          for alignment in alignments
+                          for hsp in alignment.HSPs]
+                all_scores[query.name] = scores
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -711,9 +754,9 @@ def estimate_background():
         pbar.update()
 
 
-def orthodb_long(query_genes, query_anchors, query_genome_filename,
-                 subject_anchors, subject_genome_filename, subject_chromsizes,
-                 ortho_map, neighbour_dist, merge_dist, flank_dist):
+def anchor_long(query_genes, query_anchors, query_genome_filename,
+                subject_anchors, subject_genome_filename, subject_chromsizes,
+                ortho_map, neighbour_dist, merge_dist, flank_dist):
     from .genomicranges import GenomicRangesList
 
     query_anchors.relation_mapping(subject_anchors,
@@ -753,9 +796,9 @@ def orthodb_long(query_genes, query_anchors, query_genome_filename,
     return query_prepared_genes, query_unalignable_genes
 
 
-def orthodb_short(query_genes, query_anchors, query_genome_filename,
-                  subject_anchors, subject_genome_filename, subject_chromsizes,
-                  ortho_map, neighbour_dist, merge_dist, flank_dist):
+def anchor_short(query_genes, query_anchors, query_genome_filename,
+                 subject_anchors, subject_genome_filename, subject_chromsizes,
+                 ortho_map, neighbour_dist, merge_dist, flank_dist):
     from .genomicranges import GenomicRangesList
 
     query_anchors.relation_mapping(subject_anchors,
@@ -795,17 +838,22 @@ def orthodb_short(query_genes, query_anchors, query_genome_filename,
     return query_prepared_genes, query_unalignable_genes
 
 
-def liftover_long(query_genes, query_anchors, query_genome_filename,
-                  subject_anchors, subject_genome_filename, subject_chromsizes,
-                  ortho_map, neighbour_dist, merge_dist, flank_dist):
-    from .genomicranges import GenomicRangesList
+def liftover_long(query_genes, query_genome_filename, subject_genome_filename,
+                  subject_chromsizes, liftover_chains, liftover_origin,
+                  neighbour_dist, merge_dist, flank_dist):
+    from .genomicranges import GenomicRangesList, GenomicRange
 
-    query_anchors.relation_mapping(subject_anchors,
-                                   ortho_map,
-                                   'orthologs')
-    query_genes.get_neighbours(query_anchors,
-                               neighbour_dist,
-                               'neighbours')
+    if liftover_origin == 'query':
+        query_genes.get_neighbours(liftover_chains.query_chains,
+                                   neighbour_dist,
+                                   'neighbours')
+    elif liftover_origin == 'subject':
+        query_genes.get_neighbours(liftover_chains.subject_chains,
+                                   neighbour_dist,
+                                   'neighbours')
+    else:
+        raise ValueError('liftover_chains is not one of "query", "subject".')
+
     query_unalignable = list()
     query_prepared = list()
 
@@ -813,11 +861,30 @@ def liftover_long(query_genes, query_anchors, query_genome_filename,
         if len(query_gene.relations['neighbours']) == 0:
             query_unalignable.append(query_gene)
             continue
-        syntenies = [grange
-                     for neighbour in query_gene.relations['neighbours']
-                     for grange in neighbour.relations['orthologs']]
-        synteny_list = GenomicRangesList(syntenies,
+
+        syntenies = [neighbour.sister
+                     for neighbour in query_gene.relations['neighbours']]
+
+        neighbours = [GenomicRange(chrom=grange.chrom,
+                                   start=grange.start,
+                                   end=grange.end,
+                                   strand=grange.strand,
+                                   name=grange.name,
+                                   genome=query_genome_filename)
+                      for grange in query_gene.relations['neighbours']]
+
+        query_gene.relations['neighbours'] = GenomicRangesList(neighbours,
+                                                               sequence_file_path=query_genome_filename)
+
+        synteny_list = GenomicRangesList([GenomicRange(chrom=grange.chrom,
+                                                       start=grange.start,
+                                                       end=grange.end,
+                                                       strand=grange.strand,
+                                                       name=grange.name,
+                                                       genome=subject_genome_filename)
+                                          for grange in syntenies],
                                          sequence_file_path=subject_genome_filename)
+
         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
                                                                                        chromsizes=subject_chromsizes)
         query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
@@ -825,8 +892,6 @@ def liftover_long(query_genes, query_anchors, query_genome_filename,
         if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
             query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
                                                                                         chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
-                                                               sequence_file_path=query_genome_filename)
 
         query_prepared.append(query_gene)
 
@@ -838,8 +903,74 @@ def liftover_long(query_genes, query_anchors, query_genome_filename,
 
 
 def liftover_short(query_genes, query_genome_filename, subject_genome_filename,
-                   subject_chromsizes, liftover_chains, neighbour_dist,
-                   merge_dist, flank_dist, min_ratio=0.05, allow_duplications=True):
+                   subject_chromsizes, liftover_chains, liftover_origin,
+                   neighbour_dist, merge_dist, flank_dist):
+    from .genomicranges import GenomicRangesList, GenomicRange
+
+    if liftover_origin == 'query':
+        query_genes.get_neighbours(liftover_chains.query_chains,
+                                   neighbour_dist,
+                                   'neighbours')
+    elif liftover_origin == 'subject':
+        query_genes.get_neighbours(liftover_chains.subject_chains,
+                                   neighbour_dist,
+                                   'neighbours')
+    else:
+        raise ValueError('liftover_chains is not one of "query", "subject".')
+
+    query_unalignable = list()
+    query_prepared = list()
+
+    for query_gene in tqdm(query_genes):
+        if len(query_gene.relations['neighbours']) == 0:
+            query_unalignable.append(query_gene)
+            continue
+
+        syntenies = [neighbour.sister
+                     for neighbour in query_gene.relations['neighbours']]
+
+        neighbours = [GenomicRange(chrom=grange.chrom,
+                                   start=grange.start,
+                                   end=grange.end,
+                                   strand=grange.strand,
+                                   name=grange.name,
+                                   genome=query_genome_filename)
+                      for grange in query_gene.relations['neighbours']]
+
+        query_gene.relations['neighbours'] = GenomicRangesList(neighbours,
+                                                               sequence_file_path=query_genome_filename)
+
+        synteny_list = GenomicRangesList([GenomicRange(chrom=grange.chrom,
+                                                       start=grange.start,
+                                                       end=grange.end,
+                                                       strand=grange.strand,
+                                                       name=grange.name,
+                                                       genome=subject_genome_filename)
+                                          for grange in syntenies],
+                                         sequence_file_path=subject_genome_filename)
+
+        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+                                                                                       chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+        neighbourhood = query_gene.relations['neighbours'][0]
+        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+                                                                                        chromsizes=subject_chromsizes)
+        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+                                                               sequence_file_path=query_genome_filename)
+
+        query_prepared.append(query_gene)
+
+    query_prepared_genes = GenomicRangesList(query_prepared,
+                                             sequence_file_path=query_genome_filename)
+    query_unalignable_genes = GenomicRangesList(query_unalignable,
+                                                sequence_file_path=query_genome_filename)
+    return query_prepared_genes, query_unalignable_genes
+
+
+def liftover_lift(query_genes, query_genome_filename, subject_genome_filename,
+                  subject_chromsizes, liftover_chains, liftover_origin, neighbour_dist,
+                  merge_dist, flank_dist, min_ratio=0.05, allow_duplications=True):
     from .genomicranges import GenomicRangesList
 
     query_unalignable = list()
@@ -847,6 +978,7 @@ def liftover_short(query_genes, query_genome_filename, subject_genome_filename,
 
     liftover_results = liftover_chains.lift_granges(query_genes,
                                                     min_ratio=min_ratio,
+                                                    origin=liftover_origin,
                                                     allow_duplications=allow_duplications)
     lifted = liftover_results.lifted
 
@@ -887,17 +1019,18 @@ def align_syntenies(grange, **kwargs):
 def get_alignments():
     import json
     from functools import partial
+    from tempfile import TemporaryDirectory
     from .parallel import NonExceptionalProcessPool
-    from .genomicranges import GenomicRangesList, FastaSeqFile
+    from .genomicranges import GenomicRangesList, FastaSeqFile, SequencePath
     from .liftover import LiftOverChains
 
-    parser = argparse.ArgumentParser(description='Find orthologs of provided query genes in subject species.',
+    parser = argparse.ArgumentParser(description='Compute orthologous alignments of provided query genes and subject species genome.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-mode',
                         type=str,
                         nargs='?',
-                        choices=['orthodb_long', 'orthodb_short', 'liftover_long', 'liftover_short'],
-                        default='orthodb_long',
+                        choices=['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift'],
+                        default='anchor_long',
                         help='type of orthology map and neighbourhood size.')
     parser.add_argument('-query_genes',
                         type=str,
@@ -930,6 +1063,11 @@ def get_alignments():
                         type=str,
                         nargs='?',
                         help='liftover .chain filename')
+    parser.add_argument('-liftover_origin',
+                        type=str,
+                        nargs='?',
+                        choices=['query', 'subject'],
+                        help='which liftover .chain side is the query one')
     parser.add_argument('-output',
                         type=str,
                         nargs='?',
@@ -992,6 +1130,7 @@ def get_alignments():
     subject_genome_filename = args.subject_genome
     ortho_map_filename = args.ortho_map
     liftover_chains_filename = args.liftover_chains
+    liftover_origin = args.liftover_origin
     output_filename = args.output
     unalignable_filename = args.unalignable
     cores = args.cores
@@ -1002,20 +1141,22 @@ def get_alignments():
     word_size = args.word_size
     silent = args.silent
 
-    if program_mode == 'liftover_short' and liftover_chains_filename is None:
-        parser.error('You must supply -liftover_chains with -mode liftover_short.')
+    if program_mode in ['liftover_long', 'liftover_short', 'liftover_lift']:
+        if liftover_chains_filename is None:
+            parser.error(f'You must supply -liftover_chains with -mode {program_mode}.')
+        if liftover_origin is None:
+            parser.error(f'You must supply -liftover_origin with -mode {program_mode}.')
 
-    if program_mode in ['orthodb_long', 'orthodb_short', 'liftover_long']:
+    if program_mode in ['anchor_long', 'anchor_short']:
         if query_anchors_filename is None:
-            parser.error(f'You must supply -query_anchors with -mode {program_mode}')
+            parser.error(f'You must supply -query_anchors with -mode {program_mode}.')
         if subject_anchors_filename is None:
-            parser.error(f'You must supply -subject_anchors with -mode {program_mode}')
+            parser.error(f'You must supply -subject_anchors with -mode {program_mode}.')
         if ortho_map_filename is None:
-            parser.error(f'You must supply -ortho_map with -mode {program_mode}')
+            parser.error(f'You must supply -ortho_map with -mode {program_mode}.')
 
     cmd_hints = ['reading annotations...',
-                 'mapping orthology and neighbour relations...',
-                 'composing syntenies...',
+                 'mapping orthology and neighbour relations, composing syntenies...',
                  'getting sequences...',
                  'getting alignments...',
                  'saving alignments...',
@@ -1034,7 +1175,7 @@ def get_alignments():
         subject_genome = FastaSeqFile(subject_genome_filename)
         subject_chromsizes = subject_genome.chromsizes
 
-        if program_mode != 'liftover_short':
+        if program_mode in ['anchor_long', 'anchor_short']:
             query_anchors_filetype = query_anchors_filename.split('.')[-1]
             if query_anchors_filetype == 'bed':
                 query_anchors_filetype += args.bed
@@ -1073,16 +1214,14 @@ def get_alignments():
                             subject_anchors, subject_genome_filename, subject_chromsizes,
                             ortho_map, neighbour_dist, merge_dist, flank_dist]
 
-            if program_mode == 'orthodb_long':
-                query_prepared_genes, query_unalignable_genes = orthodb_long(*process_args)
-            elif program_mode == 'orthodb_short':
-                query_prepared_genes, query_unalignable_genes = orthodb_short(*process_args)
-            elif program_mode == 'liftover_long':
-                query_prepared_genes, query_unalignable_genes = liftover_long(*process_args)
+            if program_mode == 'anchor_long':
+                query_prepared_genes, query_unalignable_genes = anchor_long(*process_args)
+            elif program_mode == 'anchor_short':
+                query_prepared_genes, query_unalignable_genes = anchor_short(*process_args)
             else:
-                raise ValueError("program_mode is not one of ['orthodb_long', 'orthodb_short', 'liftover_long', 'liftover_short']")
+                raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
 
-        else:
+        elif program_mode in ['liftover_long', 'liftover_short', 'liftover_lift']:
             with open(liftover_chains_filename, 'r') as infile:
                 liftover_chains = LiftOverChains.parse_chain_file(infile)
 
@@ -1090,11 +1229,23 @@ def get_alignments():
             pbar.postfix = cmd_hints[cmd_point]
             pbar.update()
 
-            process_args = [query_genes, query_genome_filename, subject_genome_filename,
-                            subject_chromsizes, liftover_chains, neighbour_dist,
-                            merge_dist, flank_dist, min_ratio]
-
-            query_prepared_genes, query_unalignable_genes = liftover_short(*process_args)
+            if program_mode in ['liftover_long', 'liftover_short']:
+                process_args = [query_genes, query_genome_filename, subject_genome_filename,
+                                subject_chromsizes, liftover_chains, liftover_origin,
+                                neighbour_dist, merge_dist, flank_dist]
+                if program_mode == 'liftover_long':
+                    query_prepared_genes, query_unalignable_genes = liftover_long(*process_args)
+                if program_mode == 'liftover_short':
+                    query_prepared_genes, query_unalignable_genes = liftover_short(*process_args)
+            elif program_mode == 'liftover_lift':
+                process_args = [query_genes, query_genome_filename, subject_genome_filename,
+                                subject_chromsizes, liftover_chains, liftover_origin, neighbour_dist,
+                                merge_dist, flank_dist, min_ratio]
+                query_prepared_genes, query_unalignable_genes = liftover_lift(*process_args)
+            else:
+                raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
+        else:
+            raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -1102,18 +1253,24 @@ def get_alignments():
 
         query_chromsizes = query_prepared_genes.sequence_file.chromsizes
 
-        for query_gene in tqdm(query_prepared_genes):
-            query_gene.relations['neighbours'].get_fasta('neigh_', chromsizes=query_chromsizes)
-            query_gene.relations['syntenies'].get_fasta('synt_', chromsizes=subject_chromsizes)
+        with TemporaryDirectory() as tempdirname:
+            tempdir = SequencePath(tempdirname)
+            for query_gene in tqdm(query_prepared_genes):
+                query_gene.relations['neighbours'].get_fasta(outfileprefix='neigh_',
+                                                             outdir=tempdir,
+                                                             chromsizes=query_chromsizes)
+                query_gene.relations['syntenies'].get_fasta(outfileprefix='synt_',
+                                                            outdir=tempdir,
+                                                            chromsizes=subject_chromsizes)
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
+            cmd_point += 1
+            pbar.postfix = cmd_hints[cmd_point]
+            pbar.update()
 
-        align_syntenies_word_size = partial(align_syntenies, word_size=word_size)
+            align_syntenies_word_size = partial(align_syntenies, word_size=word_size)
 
-        with NonExceptionalProcessPool(cores, verbose=not silent) as p:
-            alignments, exceptions = p.map_async(align_syntenies_word_size, query_prepared_genes)
+            with NonExceptionalProcessPool(cores, verbose=not silent) as p:
+                alignments, exceptions = p.map_async(align_syntenies_word_size, query_prepared_genes)
 
         if len(exceptions) > 0:
             print('Exceptions occured:')
@@ -1144,41 +1301,41 @@ def refine(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
     if not fdr:
         score_threshold = background.isf(pval_threshold)
     aligned = False
-    query_transcripts = list()
-    subject_transcripts = list()
+    query_orthologs = list()
+    subject_orthologs = list()
     query_unaligned = list()
     for alignment in query_gene_alignments:
         if fdr:
             pvals = background.sf([hsp.score
                                    for hsp in alignment.HSPs])
-            qvals = pvals * len(pvals) / rankdata(pvals)
+            qvals = pvals * len(pvals) / ranking(pvals)
             alignment.filter_by_array(qvals, pval_threshold, side='l')
         else:
             alignment.filter_by_score(score_threshold)
-        alignment.srange.name = 'ortho_' + alignment.qrange.name
-        transcript = alignment.best_transcript()
+        alignment.srange.name = alignment.qrange.name
+        result = alignment.best_transcript()
         try:
-            record = transcript.to_bed12(mode='str')
-            query_transcripts.append(record[0])
-            subject_transcripts.append(record[1])
+            record = result.to_bed12(mode='str')
+            query_orthologs.append(record[0])
+            subject_orthologs.append(record[1])
             aligned = True
         except ValueError:
-            query_unaligned = [alignment.qrange.to_dict()]
+            query_unaligned = [alignment.qrange]
     if aligned:
         query_unaligned = list()
-    return query_transcripts, subject_transcripts, query_unaligned
+    return query_orthologs, subject_orthologs, query_unaligned
 
 
-def refine_alignments():
+def build_orthologs():
 
     import json
     from pathlib import Path
     from functools import partial
-    from .genomicranges import GenomicRangesAlignment
+    from .genomicranges import GenomicRangesAlignment, BaseGenomicRangesList
     from .fitting import HistogramFitter, KernelFitter
     from .parallel import TimeoutProcessPool
 
-    parser = argparse.ArgumentParser(description='Refine alignments based on chosen strategy and build final orthologous transcripts.',
+    parser = argparse.ArgumentParser(description='Asses orthologous alignments based on chosen statistical strategy and build orthologs.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-alignments',
                         type=str,
@@ -1204,21 +1361,21 @@ def refine_alignments():
     parser.add_argument('--fdr',
                         action='store_true',
                         help='use FDR correction for HSP scores.')
-    parser.add_argument('-query_transcripts',
+    parser.add_argument('-query_orthologs',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='output filename for query transcripts.')
-    parser.add_argument('-subject_transcripts',
+                        help='output .bed12 filename for query orthologs.')
+    parser.add_argument('-subject_orthologs',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='output filename for subject transcripts.')
+                        help='output .bed12 filename for subject orthologs.')
     parser.add_argument('-query_unaligned',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='output filename for unaligned query ranges.')
+                        help='output .bed6 filename for unaligned query ranges.')
     parser.add_argument('-cores',
                         type=int,
                         nargs='?',
@@ -1238,8 +1395,8 @@ def refine_alignments():
     alignments_filename = Path(args.alignments)
     background_filename = Path(args.background)
     fitting_type = args.fitting
-    query_output_filename = Path(args.query_transcripts)
-    subject_output_filename = Path(args.subject_transcripts)
+    query_output_filename = Path(args.query_orthologs)
+    subject_output_filename = Path(args.subject_orthologs)
     query_unaligned_filename = Path(args.query_unaligned)
     pval_threshold = args.threshold
     fdr = args.fdr
@@ -1249,7 +1406,7 @@ def refine_alignments():
 
     cmd_hints = ['reading alignments...',
                  'getting background...',
-                 'refining alignments and calling transcripts...',
+                 'refining alignments and calling orthologs...',
                  'saving to files...',
                  'finished.']
     cmd_point = 0
@@ -1288,7 +1445,7 @@ def refine_alignments():
                                for query_name, query_gene_alignments in alignment_data.items())
 
         with TimeoutProcessPool(cores, verbose=not silent) as p:
-            transcripts, exceptions = p.starmap(refine_partial,
+            orthologs, exceptions = p.starmap(refine_partial,
                                                 data_for_refinement,
                                                 timeout)
 
@@ -1301,43 +1458,45 @@ def refine_alignments():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        query_transcripts, subject_transcripts, query_unaligned = zip(*transcripts)
-        query_transcripts = [transcript
-                             for group in query_transcripts
-                             for transcript in group]
-        subject_transcripts = [transcript
-                               for group in subject_transcripts
-                               for transcript in group]
-        query_unaligned = [grange
-                           for group in query_unaligned
-                           for grange in group]
+        query_orthologs, subject_orthologs, query_unaligned = zip(*orthologs)
+        query_orthologs = [ortholog
+                             for group in query_orthologs
+                             for ortholog in group]
+        subject_orthologs = [ortholog
+                               for group in subject_orthologs
+                               for ortholog in group]
+        query_unaligned = BaseGenomicRangesList([grange
+                                                 for group in query_unaligned
+                                                 for grange in group])
 
         with open(query_output_filename, 'w') as outfile:
-            for record in query_transcripts:
+            for record in query_orthologs:
                 outfile.write(record + "\n")
         with open(subject_output_filename, 'w') as outfile:
-            for record in subject_transcripts:
+            for record in subject_orthologs:
                 outfile.write(record + "\n")
         with open(query_unaligned_filename, 'w') as outfile:
-            json.dump(query_unaligned, outfile)
+            query_unaligned.to_bed6(outfile)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
 
-def best_orthologs():
+def get_best_orthologs():
+    import json
     from pathlib import Path
-
+    from collections import defaultdict
 
     parser = argparse.ArgumentParser(description='Select only one ortholog for each query gene based on provided variety of strategies.',
+                                     prog='ortho2align best_orthologs',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-query_transcripts',
+    parser.add_argument('-query_orthologs',
                         type=str,
                         nargs='?',
                         required=True,
                         help='query orthologs bed12 file.')
-    parser.add_argument('-subject_transcripts',
+    parser.add_argument('-subject_orthologs',
                         type=str,
                         nargs='?',
                         required=True,
@@ -1364,24 +1523,32 @@ def best_orthologs():
                         nargs='?',
                         required=True,
                         help='output filename for subject orthologs.')
+    parser.add_argument('-outfile_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='output json filename for mapping of query and subject ortholog names.')
 
     args = parser.parse_args(sys.argv[2:])
-    query_filename = Path(args.query_transcripts)
-    subject_filename = Path(args.subject_transcripts)
+    query_filename = Path(args.query_orthologs)
+    subject_filename = Path(args.subject_orthologs)
     value_name = args.value
     func_name = args.function
     query_output_filename = Path(args.outfile_query)
     subject_output_filename = Path(args.outfile_subject)
+    outfile_map_filename = Path(args.outfile_map)
 
-    value_extraction = {'total_length': lambda line: int(line.strip().split('\t')[2]) - \
-                                                     int(line.strip().split('\t')[1]),
-                        'block_count': lambda line: int(line.strip().split('\t')[9]),
-                        'block_length': lambda line: sum([int(i)
-                                                          for i in line.strip().split('\t')[10].split(',')]),
-                        'weight': lambda line: float(line.strip().split('\t')[4]),
-                        'name': lambda line: line.strip().split('\t')[3]}
-    func_to_apply = {'min': min,
-                     'max': max}
+    extract = {'total_length': lambda line: int(line.strip().split('\t')[2]) - \
+                                            int(line.strip().split('\t')[1]),
+               'block_count': lambda line: int(line.strip().split('\t')[9]),
+               'block_length': lambda line: sum([int(i)
+                                                 for i in line.strip().split('\t')[10].split(',')]),
+               'weight': lambda line: float(line.strip().split('\t')[4]),
+               'name': lambda line: line.strip().split('\t')[3]}
+
+    func = {'min': min, 'max': max}
+
+    name_pairs = list()
 
     with open(query_filename, 'r') as query_in, \
          open(subject_filename, 'r') as subject_in, \
@@ -1391,27 +1558,37 @@ def best_orthologs():
         for query_line, subject_line in zip(query_in, subject_in):
             if len(purge) == 0:
                 purge.append((query_line, subject_line))
-            elif value_extraction['name'](purge[-1][0]) == value_extraction['name'](query_line):
+            elif extract['name'](purge[-1][0]) == extract['name'](query_line):
                 purge.append((query_line, subject_line))
             else:
-                best_ortholog = func_to_apply[func_name](purge, key=lambda i: value_extraction[value_name](i[0]))
+                best_ortholog = func[func_name](purge,
+                                                key=lambda i: extract[value_name](i[0]))
                 query_out.write(best_ortholog[0])
                 subject_out.write(best_ortholog[1])
+                name_pairs.append([extract['name'](best_ortholog[0]),
+                                   extract['name'](best_ortholog[1])])
                 purge = list()
                 purge.append((query_line, subject_line))
 
         if len(purge) > 0:
-            best_ortholog = func_to_apply[func_name](purge, key=lambda i: value_extraction[value_name](i[0]))
+            best_ortholog = func[func_name](purge,
+                                            key=lambda i: extract[value_name](i[0]))
             query_out.write(best_ortholog[0])
             subject_out.write(best_ortholog[1])
+            name_pairs.append([extract['name'](best_ortholog[0]),
+                               extract['name'](best_ortholog[1])])
+
+    the_map = defaultdict(list)
+    for query_name, subject_name in name_pairs:
+        the_map[query_name].append(subject_name)
+    with open(outfile_map_filename, 'w') as outfile:
+        json.dump(the_map, outfile)
 
 
 def benchmark_orthologs():
     import json
-    from pathlib import Path
     from .genomicranges import GenomicRangesList
     from .benchmark import trace_orthologs, calc_ortholog_metrics
-
 
     parser = argparse.ArgumentParser(description='Compare found orthologs against real orthologs and calculate several performance metrics.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -1420,11 +1597,31 @@ def benchmark_orthologs():
                         nargs='?',
                         required=True,
                         help='query genomic ranges.')
+    parser.add_argument('-found_query',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='found orthologs of query genomic ranges in query genome.')
     parser.add_argument('-found_subject',
                         type=str,
                         nargs='?',
                         required=True,
                         help='found orthologs of query genomic ranges in subject genome.')
+    parser.add_argument('-found_query_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json map linking query genes names and names of corresponding found query orthologs.')
+    parser.add_argument('-found_subject_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json map linking query genes names and names of corresponding found subject orthologs.')
+    parser.add_argument('-found_query_subject_map',
+                        type=str,
+                        nargs='?',
+                        required=True,
+                        help='json map linking query orthologs names and corresponding subject orthologs names.')
     parser.add_argument('-real_subject',
                         type=str,
                         nargs='?',
@@ -1435,11 +1632,6 @@ def benchmark_orthologs():
                         nargs='?',
                         required=True,
                         help='json map linking query genes names and names of corresponding real orthologs.')
-    parser.add_argument('-ortho_map',
-                        type=str,
-                        nargs='?',
-                        required=True,
-                        help='json map linking query genes names and names of corresponding found orthologs.')
     parser.add_argument('-outfile',
                         type=str,
                         nargs='?',
@@ -1452,17 +1644,24 @@ def benchmark_orthologs():
                         help='specific bed format (3, 6 or 12).')
 
     args = parser.parse_args(sys.argv[2:])
-    query_genes_filename = Path(args.query_genes)
-    found_subject_filename = Path(args.found_subject)
-    real_subject_filename = Path(args.real_subject)
-    real_map_filename = Path(args.real_map)
-    ortho_map_filename = Path(args.ortho_map)
-    out_filename = Path(args.outfile)
+    query_genes_filename = args.query_genes
+    found_query_filename = args.found_query
+    found_subject_filename = args.found_subject
+    found_query_map_filename = args.found_query_map
+    found_subject_map_filename = args.found_subject_map
+    found_query_subject_map_filename = args.found_query_subject_map
+    real_subject_filename = args.real_subject
+    real_map_filename = args.real_map
+    out_filename = args.outfile
     bed_format = args.bed
 
     query_genes_fileformat = query_genes_filename.split('.')[-1]
     if query_genes_fileformat == 'bed':
         query_genes_fileformat += bed_format
+
+    found_query_fileformat = found_query_filename.split('.')[-1]
+    if found_query_fileformat == 'bed':
+        found_query_fileformat += bed_format
 
     found_subject_fileformat = found_subject_filename.split('.')[-1]
     if found_subject_fileformat == 'bed':
@@ -1480,6 +1679,15 @@ def benchmark_orthologs():
         query_genes = GenomicRangesList.parse_annotation(infile,
                                                          fileformat=query_genes_fileformat,
                                                          name_pattern=name_pattern)
+
+    with open(found_query_filename, 'r') as infile:
+        if found_query_fileformat == 'gtf':
+            name_pattern = r'GeneID:(\d+)'
+        else:
+            name_pattern = None
+        found_query_genes = GenomicRangesList.parse_annotation(infile,
+                                                               fileformat=found_query_fileformat,
+                                                               name_pattern=name_pattern)
 
     with open(found_subject_filename, 'r') as infile:
         if found_subject_fileformat == 'gtf':
@@ -1499,14 +1707,26 @@ def benchmark_orthologs():
                                                                 fileformat=real_subject_fileformat,
                                                                 name_pattern=name_pattern)
 
+    with open(found_query_map_filename, 'r') as infile:
+        found_query_map = json.load(infile)
+
+    with open(found_subject_map_filename, 'r') as infile:
+        found_subject_map = json.load(infile)
+
+    with open(found_query_subject_map_filename, 'r') as infile:
+        found_query_subject_map = json.load(infile)
+
     with open(real_map_filename, 'r') as infile:
         real_map = json.load(infile)
 
-    with open(ortho_map_filename, 'r') as infile:
-        ortho_map = json.load(infile)
-
-    query_genes.relation_mapping(found_subject_genes, ortho_map, 'found')
+    query_genes.relation_mapping(found_query_genes, found_query_map, 'found_query')
+    query_genes.relation_mapping(found_subject_genes, found_subject_map, 'found_subject')
     query_genes.relation_mapping(real_subject_genes, real_map, 'real')
+
+    for query_gene in query_genes:
+        query_gene.relations['found_query'].relation_mapping(query_gene.relations['found_subject'],
+                                                             found_query_subject_map,
+                                                             'ortho_link')
 
     trace_orthologs(query_genes)
     metrics = calc_ortholog_metrics(query_genes)
@@ -1526,20 +1746,26 @@ def ortho2align():
         get_orthodb_map         Retrieve mapping of OrthoDB genes in query
                                 species to known orthologs in subject species.
 
+        get_orthodb_by_taxid    Retrieve OrthoDB mapping for specific taxid from
+                                bulk OrthoDB mapping produced with get_orthodb_map.
+
         get_liftover_map        Retrieve mapping and annotation of syntenic regions
                                 from liftOver chain file.
+
+        bg_from_inter_ranges    Generates set of unique background regions 
+                                from intergenic ranges of provided set of genes.
 
         estimate_background     Estimate background distribution of alignment scores
                                 between query genes and subject species intergenic
                                 regions.
 
-        get_alignments          Find orthologs of provided query genes in
-                                subject species.
+        get_alignments          Compute orthologous alignments of provided query genes
+                                and subject species genome.
 
-        refine_alignments       Refine alignments based on chosen strategy and
-                                build final orthologous transcripts.
+        build_orthologs         Asses orthologous alignments based on chosen statistical
+                                strategy and build orthologs.
 
-        best_orthologs          Select only one ortholog for each query gene based
+        get_best_orthologs      Select only one ortholog for each query gene based
                                 on provided variety of strategies.
 
         benchmark_orthologs     Compare found orthologs against real orthologs and
@@ -1549,12 +1775,15 @@ def ortho2align():
     '''
     commands = {'cache_orthodb_xrefs': cache_orthodb_xrefs,
                 'get_orthodb_map': get_orthodb_map,
+                'get_orthodb_by_taxid': get_orthodb_by_taxid,
                 'get_liftover_map': get_liftover_map,
+                'bg_from_inter_ranges': bg_from_inter_ranges,
                 'estimate_background': estimate_background,
                 'get_alignments': get_alignments,
-                'refine_alignments': refine_alignments,
-                'best_orthologs': best_orthologs,
+                'build_orthologs': build_orthologs,
+                'get_best_orthologs': get_best_orthologs,
                 'benchmark_orthologs': benchmark_orthologs}
+
     parser = argparse.ArgumentParser(description='ortho2align set of programms.',
                                      usage=textwrap.dedent(usage))
     parser.add_argument('command',

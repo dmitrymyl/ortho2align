@@ -354,3 +354,11 @@ class KernelFitter(AbstractFitter):
         if single_value:
             return points[0]
         return np.array(points)
+
+
+def ranking(data):
+    """Returns ranks of data items, no tie handling."""
+    sortindices = np.argsort(data)
+    ranks = np.empty_like(data)
+    ranks[sortindices] = np.arange(len(data)) + 1
+    return ranks

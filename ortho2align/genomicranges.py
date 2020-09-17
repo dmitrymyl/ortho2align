@@ -180,6 +180,18 @@ class SequencePath:
         """Equality magic method."""
         return self.path == other.path
 
+    def __truediv__(self, key):
+        if self.path is None:
+            return None
+        else:
+            return self.__class__(self.path / key)
+
+    def __rtruediv__(self, key):
+        if self.path is None:
+            return None
+        else:
+            return self.__class(key / self.path)
+
     def to_dict(self):
         """Returns dict representation."""
         if self.path is None:
@@ -2018,7 +2030,7 @@ class GenomicRangesList(BaseGenomicRangesList):
                   for attr in set(self.init_args) - used_args}
         return self.__class__(new_list, **kwargs)
 
-    def get_fasta(self, outfileprefix, mode='split', chromsizes=None, verbose=False):
+    def get_fasta(self, outfileprefix, outdir=SequencePath('.'), mode='split', chromsizes=None, verbose=False):
         """Extracts sequences of genomic ranges.
 
         Can extract sequences of all genomic ranges in *'bulk'* mode
@@ -2029,6 +2041,7 @@ class GenomicRangesList(BaseGenomicRangesList):
         Args:
             outfileprefix (str, Path, SequencePath): Prefix of the
                 output file(s).
+            outdir (str, Path, SequencePath, default SequencePath('.')): Output directory.
             mode (str, default 'split'): The mode to extract sequences,
                 one of 'split', 'bulk'.
             chromsizes (dict, default None): A dict of `ChromosomeLocation`
@@ -2044,6 +2057,8 @@ class GenomicRangesList(BaseGenomicRangesList):
             ValueError: An error in cases the extraction mode is not
                 one of *'bulk'*, *'split'*.
         """
+        if not isinstance(outdir, SequencePath):
+            outdir = SequencePath(outdir)
         if mode == 'split':
             with self.sequence_file:
                 filenames = list()
@@ -2051,9 +2066,9 @@ class GenomicRangesList(BaseGenomicRangesList):
                                    desc='Getting fasta',
                                    unit='grange',
                                    disable=not verbose):
-                    grange.sequence_file_path = (str(outfileprefix) +
-                                                 grange.sequence_header +
-                                                 '.fasta')
+                    grange.sequence_file_path = outdir / (str(outfileprefix) +
+                                                          grange.sequence_header +
+                                                          '.fasta')
                     with open(grange.sequence_file_path, 'w') as output:
                         self.sequence_file.get_fasta_by_coord(grange,
                                                               output,
@@ -2061,7 +2076,7 @@ class GenomicRangesList(BaseGenomicRangesList):
                     filenames.append(grange.sequence_file_path)
         elif mode == 'bulk':
             with self.sequence_file:
-                outfilename = str(outfileprefix) + '.fasta'
+                outfilename = outdir / (str(outfileprefix) + '.fasta')
                 with open(outfilename, 'w') as output:
                     for grange in self:
                         self.sequence_file.get_fasta_by_coord(grange,

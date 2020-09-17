@@ -54,9 +54,38 @@ class InsideTheGapError(LiftOverException):
         super().__init__(f'Genomic range {self.grange} fully lies within a gap inside a chain {self.chain}.')
 
 
-# A convenient object for parsing liftOver chain files.
-Chain = namedtuple('Chain',
-                   'chain score qchrom qsize qstrand qstart qend schrom ssize sstrand sstart send name')
+class Chain:
+    """Convenient class for chain representation when parsing."""
+    __slots__ = ('chain', 'score', 'qchrom', 'qsize', 'qstrand', 'qstart',
+                 'qend', 'schrom', 'ssize', 'sstrand', 'sstart', 'send', 'name')
+
+    def __init__(self, chain, score, qchrom, qsize, qstrand, qstart,
+                 qend, schrom, ssize, sstrand, sstart, send, name):
+        self.chain = chain
+        self.score = score
+        self.qchrom = qchrom
+        self.qsize = int(qsize)
+        self.qstrand = qstrand
+        if qstrand == '-':
+            self.qstart = self.qsize - int(qend)
+            self.qend = self.qsize - int(qstart)
+        elif qstrand in ['+', '.']:
+            self.qstart = int(qstart)
+            self.qend = int(qend)
+        else:
+            raise ValueError('The strand of the lift over chain is not one of "+", "-", ".".')
+        self.schrom = schrom
+        self.ssize = int(ssize)
+        self.sstrand = sstrand
+        if sstrand == '-':
+            self.sstart = self.ssize - int(send)
+            self.send = self.ssize - int(sstart)
+        elif sstrand in ['+', '.']:
+            self.sstart = int(sstart)
+            self.send = int(send)
+        else:
+            raise ValueError('The strand of the lift over chain is not one of "+", "-", ".".')
+        self.name = name
 
 
 class LiftOverChain(BaseGenomicRange):
@@ -328,67 +357,40 @@ class LiftOverChains:
         """
         query_chains = list()
         subject_chains = list()
+        record_lengths = (3, 1)
         for line in tqdm(fileobj, disable=not verbose):
-            record = line.strip().split()
+            record = tuple(line.strip().split())
             if line.startswith('chain'):
                 chain_ = Chain(*record)
                 blocks = list()
-            elif len(record) in (3, 1):
-                blocks.append((int(i) for i in record))
-
-                if len(record) == 1:
-                    sizes, *gaps = (tuple(item
-                                          for item in group
-                                          if item is not None)
-                                    for group in zip_longest(*blocks))
-
-                    if len(gaps) == 0:
-                        dqs = []
-                        dss = []
-                    else:
-                        dqs, dss = gaps
-
-                    qsize = int(chain_.qsize)
-                    if chain_.qstrand == '-':
-                        qstart = qsize - int(chain_.qend)
-                        qend = qsize - int(chain_.qstart)
-                    elif chain_.qstrand in ['+', '.']:
-                        qstart = int(chain_.qstart)
-                        qend = int(chain_.qend)
-                    else:
-                        raise ValueError('The strand of the lift over chain is not one of "+", "-", ".".')
-
-                    ssize = int(chain_.ssize)
-                    if chain_.sstrand == '-':
-                        sstart = ssize - int(chain_.send)
-                        send = ssize - int(chain_.sstart)
-                    elif chain_.sstrand in ['+', '.']:
-                        sstart = int(chain_.sstart)
-                        send = int(chain_.send)
-                    else:
-                        raise ValueError('The strand of the lift over chain is not one of "+", "-", ".".')
-                    query_chain = LiftOverChain(chrom=chain_.qchrom,
-                                                start=qstart,
-                                                end=qend,
-                                                strand=chain_.qstrand,
-                                                name=chain_.name,
-                                                blocks=sizes,
-                                                gaps=dqs,
-                                                chromsize=qsize)
-                    subject_chain = LiftOverChain(chrom=chain_.schrom,
-                                                  start=sstart,
-                                                  end=send,
-                                                  strand=chain_.sstrand,
-                                                  name=chain_.name,
-                                                  blocks=sizes,
-                                                  gaps=dss,
-                                                  chromsize=ssize)
-                    query_chain.sister = subject_chain
-                    subject_chain.sister = query_chain
-                    query_chains.append(query_chain)
-                    subject_chains.append(subject_chain)
+            elif len(record) in record_lengths:
+                blocks.append(record)
             elif len(record) == 0:
-                continue
+                sizes = tuple(int(item[0]) for item in blocks)
+                dqs = tuple(int(item[1]) for item in blocks[:-1])
+                dss = tuple(int(item[2]) for item in blocks[:-1])
+
+                query_chain = LiftOverChain(chrom=chain_.qchrom,
+                                            start=chain_.qstart,
+                                            end=chain_.qend,
+                                            strand=chain_.qstrand,
+                                            name=chain_.name,
+                                            blocks=sizes,
+                                            gaps=dqs,
+                                            chromsize=chain_.qsize)
+                subject_chain = LiftOverChain(chrom=chain_.schrom,
+                                              start=chain_.sstart,
+                                              end=chain_.send,
+                                              strand=chain_.sstrand,
+                                              name=chain_.name,
+                                              blocks=sizes,
+                                              gaps=dss,
+                                              chromsize=chain_.ssize)
+
+                query_chain.sister = subject_chain
+                subject_chain.sister = query_chain
+                query_chains.append(query_chain)
+                subject_chains.append(subject_chain)
             else:
                 if len(query_chains) == 0 or len(subject_chains) == 0:
                     raise ValueError('Provided file is not in the correct format of chain file.')
