@@ -22,7 +22,7 @@ from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from tqdm import tqdm
-from .alignment import HSPVertex, Alignment, Transcript, nxor_strands, numberize
+from .alignment import HSPVertex, Alignment, AlignmentChain, nxor_strands, numberize
 
 
 class GenomicException(Exception):
@@ -967,8 +967,8 @@ class GenomicRangesAlignment(Alignment):
         return all([i == k for i, k in zip(self._all_HSPs, other._all_HSPs)])
 
     @property
-    def transcript_class(self):
-        return GenomicRangesTranscript
+    def chain_class(self):
+        return GenomicRangesAlignmentChain
 
     def to_dict(self):
         dict_ = super().to_dict()
@@ -1067,7 +1067,7 @@ class GenomicRangesAlignment(Alignment):
                                        srange=srange)
 
 
-class GenomicRangesTranscript(Transcript):
+class GenomicRangesAlignmentChain(AlignmentChain):
 
     def __init__(self, HSPs, alignment, score=None):
         super().__init__(HSPs, alignment, score)
@@ -1137,7 +1137,7 @@ class GenomicRangesTranscript(Transcript):
 
     def to_bed12(self, mode='list'):
         """
-        Turns transcript into BED12 representation of both
+        Turns alignemnt chain into BED12 representation of both
         query side and subject side.
 
         Args:
@@ -1148,10 +1148,10 @@ class GenomicRangesTranscript(Transcript):
             (list of two lists or two strs): BED12 representation.
         """
         if len(self.HSPs) == 0:
-            raise ValueError('No HSPs were found in the Transcript.')
+            raise ValueError('No HSPs were found in the AlignmentChain.')
         if self.alignment.relative:
             raise ValueError('Alignment coordinates are not translated to genomic coordinates. '\
-                             'Use Transcript.alignment.to_genomic().')
+                             'Use GenomicRangesAlignmentChain.alignment.to_genomic().')
         q_side = self._prepare_side(side='q')
         s_side = self._prepare_side(side='s')
         if mode == 'list':

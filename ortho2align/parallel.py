@@ -457,3 +457,14 @@ class TimeoutProcessPool:
         """
         return self._map(func, iterable, timeout=timeout, applier=starapply)
 
+
+class ExceptionLogger(Exception):
+
+    def __init__(self, exception, variable, message=""):
+        self.exception = exception
+        self.variable = variable
+        self.message = message
+
+    def __str__(self):
+        return f'The exception "{self.exception}" has been raised. ' \
+               f'Important variable is {self.variable}. {self.message}'

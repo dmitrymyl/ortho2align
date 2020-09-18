@@ -395,7 +395,7 @@ class Alignment:
     Allows to read BLAST alignment from file produced with
     `-outfmt 7`, plot an alignment map, read from and write to
     dictionary representation (hence, JSON) and find best
-    transcripts based on some strategies.
+    alignment chains based on some strategies.
 
     Attributes:
         _all_HSPs (list): list of all HSPs related
@@ -474,8 +474,8 @@ class Alignment:
         return all([i == k for i, k in zip(self._all_HSPs, other._all_HSPs)])
 
     @property
-    def transcript_class(self):
-        return Transcript
+    def chain_class(self):
+        return AlignmentChain
 
     def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None, main_color='black', all_color='grey'):
         """Plots alignment map."""
@@ -868,9 +868,9 @@ class Alignment:
 
         return vertices
 
-    def _find_all_transcripts(self, vertices, orientation):
+    def _find_all_chains(self, vertices, orientation):
         """
-        Build all possible transcripts from given list
+        Build all possible alignment chains from given list
         of HSPs so that HSPs follow each other on both
         query and subject sequences and do not overlap
         with each other.
@@ -880,27 +880,27 @@ class Alignment:
                 sorted by query start and query end.
 
         Returns:
-            list of all possible transcripts.
+            list of all possible alignment chains.
         """
         if len(vertices) == 0:
             return []
         vertices = self._build_hsp_graph(vertices, orientation)
         stack = list()
-        transcripts = list()
+        chains = list()
         stack.append([vertices[0]])
         while stack:
             if stack[-1][-1].next_vertices:
-                nascent_transcript = stack.pop()
-                for neighbour, weight in nascent_transcript[-1].next_vertices:
-                    stack.append(nascent_transcript + [neighbour])
+                nascent_chain = stack.pop()
+                for neighbour, weight in nascent_chain[-1].next_vertices:
+                    stack.append(nascent_chain + [neighbour])
             else:
-                transcripts.append(self.transcript_class(stack.pop()[1:-1], self))
-        return transcripts
+                chains.append(self.chain_class(stack.pop()[1:-1], self))
+        return chains
 
-    def get_all_transcripts(self):
-        """Finds all possible transcripts from HSPs.
+    def get_all_chains(self):
+        """Finds all possible alignment chains from HSPs.
 
-        Finds all possible transcripts consisting of
+        Finds all possible alignment chains consisting of
         consecutive non-overlapping HSPs in both
         query and subject sequences in two orientations:
         * direct, i.e. HSP is aimed from start towards
@@ -914,15 +914,15 @@ class Alignment:
             Use only with few HSPs.
 
         Returns:
-            dictionary containing lists of transcripts
+            dictionary containing lists of alignment chains
             in direct and reverse orientation.
         """
         oriented_groups = self._split_orientations()
-        return {key: self._find_all_transcripts(group, key)
+        return {key: self._find_all_chains(group, key)
                 for key, group in oriented_groups.items()}
 
-    def _find_best_transcript(self, vertices, orientation):
-        """Finds best transcript in given HSP list.
+    def _find_best_chain(self, vertices, orientation):
+        """Finds best alignment chain in given HSP list.
 
         Utilizes dynamic programming algorithm of finding
         the shortest path between two graph vertices to
@@ -938,10 +938,10 @@ class Alignment:
             orientation (str): one of 'direct', 'reverse'.
 
         Returns:
-            A Transcript instance with the best score.
+            A AlignmentChain instance with the best score.
         """
         if len(vertices) == 0:
-            return self.transcript_class([], self)
+            return self.chain_class([], self)
         vertices = self._build_hsp_graph(vertices, orientation)
         for vertex in vertices:
             for neighbour, weight in vertex.next_vertices:
@@ -952,44 +952,44 @@ class Alignment:
         while current_vertex.best_prev is not None:
             best_hsps.append(current_vertex)
             current_vertex = current_vertex.best_prev
-        return self.transcript_class(best_hsps[1:][::-1], self, -score)
+        return self.chain_class(best_hsps[1:][::-1], self, -score)
 
-    def get_best_transcripts(self):
-        """Finds best transcripts.
+    def get_best_chains(self):
+        """Finds best alignment chains.
 
-        Finds best transcripts in direct
+        Finds best alignment chains in direct
         and reverse HSP orientation with
         dynamic programming approach (i.e.
         minimizing gap penalties between HSPs.)
 
         Returns:
             dict with best direct and reverse
-            Transcript instance under 'direct'
+            AlignmentChain instance under 'direct'
             and 'reverse' keys, respectively.
         """
         oriented_groups = self._split_orientations()
-        return {key: self._find_best_transcript(group, key)
+        return {key: self._find_best_chain(group, key)
                 for key, group in oriented_groups.items()}
 
-    def best_transcript(self):
-        """Finds the best transcript based on its score.
+    def best_chain(self):
+        """Finds the best alignment chain based on its score.
 
-        First, finds best transcripts in direct and
+        First, finds best alignment chains in direct and
         reverse orientations and then choses the one
         with the biggest score.
 
         Returns:
-            Transcript: transcript of the biggest score.
+            AlignmentChain: alignment chain of the biggest score.
         """
-        transcripts = self.get_best_transcripts()
-        if transcripts['direct'].score > transcripts['reverse'].score:
-            return transcripts['direct']
+        chains = self.get_best_chains()
+        if chains['direct'].score > chains['reverse'].score:
+            return chains['direct']
         else:
-            return transcripts['reverse']
+            return chains['reverse']
 
 
-class Transcript:
-    """Transcript combined from non-overlapping
+class AlignmentChain:
+    """AlignmentChain combined from non-overlapping
     sequential HSPs.
 
     Attributes:
@@ -998,7 +998,7 @@ class Transcript:
             regions in query and subject sequences;
         alignment (Alignment): corresponding
             `Alignment` instance;
-        score (int, float): a transcript score
+        score (int, float): a alignment chain score
             computed as HSPs scores minus gap
             penalties (see `set_score` and
             `HSP.distance` methods for definition).
@@ -1006,11 +1006,11 @@ class Transcript:
     __slots__ = ('HSPs', 'alignment', '_score')
 
     def __init__(self, HSPs, alignment, score=None):
-        """Inits Transcript class.
+        """Inits AlignmentChain class.
 
         Args:
             HSPs (list): a list of HSPs representing the
-                transcript.
+                alignment chain.
             alignment (GenomicRangesAlignment): corresponding `Alignment`
                 instance.
         """
@@ -1020,14 +1020,14 @@ class Transcript:
 
     @property
     def score(self):
-        """Calculates transcript score.
+        """Calculates alignment chain score.
 
-        The transcript score is based on alignment
+        The alignment chain score is based on alignment
         score and gap penalties defined by distance
         function.
 
         Returns:
-            Transcript score.
+            AlignmentChain score.
         """
         if self._score is None:
             if self.HSPs:
@@ -1050,7 +1050,7 @@ class Transcript:
         return "\n".join([header] + lines)
 
     def __repr__(self):
-        return f"Transcript({repr(self.HSPs)})"
+        return f"AlignmentChain({repr(self.HSPs)})"
 
     def __eq__(self, other):
         if len(self.HSPs) != len(other.HSPs):
@@ -1077,18 +1077,18 @@ class Transcript:
         score = dict_.get('score')
         return cls(HSPs, alignment, score)
 
-    def plot_transcript(self, color='red', link_color='blue'):
-        """Plots transcript with corresponding alignment.
+    def plot_chain(self, color='red', link_color='blue'):
+        """Plots alignment chain with corresponding alignment.
 
         First plots corresponding alignment in black, then
-        transcripts's HSPs with solid lines and connections
+        alignment chains's HSPs with solid lines and connections
         between them with dashed lines.
 
         Args:
-            color (str): a color name to plot transcript's
+            color (str): a color name to plot alignment chain's
                 HSPs;
             link_color (str): a color name to plot connections
-                between transcript's HSPs.
+                between alignment chain's HSPs.
 
         Returns:
             None
