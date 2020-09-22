@@ -557,6 +557,7 @@ def align_two_ranges_blast(query, subject, **kwargs):
 def bg_from_inter_ranges():
     import random
     from .genomicranges import BaseGenomicRangesList, GenomicRangesList
+    from .parsing import parse_annotation
 
     parser = argparse.ArgumentParser(description='Generate background set of genomic ranges from intergenic ranges.',
                                      prog='ortho2align bg_from_inter_ranges',
@@ -581,11 +582,6 @@ def bg_from_inter_ranges():
                         nargs='?',
                         default=123,
                         help='random seed number for sampling intergenic regions.')
-    parser.add_argument('-bed',
-                        type=str,
-                        nargs='?',
-                        default='6',
-                        help='specific bed format (3, 6 or 12).')
 
     args = parser.parse_args(sys.argv[2:])
 
@@ -599,8 +595,7 @@ def bg_from_inter_ranges():
     output_filename = args.output
 
     with open(genes_filename, 'r') as infile:
-        genes = GenomicRangesList.parse_annotation(infile,
-                                                   fileformat=genes_fileformat)
+        genes = parse_annotation(infile)
 
     inter_genes = genes.inter_ranges()
     if len(inter_genes) < observations:
@@ -619,7 +614,8 @@ def estimate_background():
     import json
     from tempfile import TemporaryDirectory
     from functools import partial
-    from .genomicranges import GenomicRangesList, FastaSeqFile, SequencePath
+    from .genomicranges import FastaSeqFile, SequencePath
+    from .parsing import parse_annotation
     from .parallel import NonExceptionalProcessPool
 
     parser = argparse.ArgumentParser(description='Estimate background alignment scores.',
@@ -655,11 +651,12 @@ def estimate_background():
                         nargs='?',
                         default=1,
                         help='Number of cores to use for alignment multiprocessing.')
-    parser.add_argument('-bed',
+    parser.add_argument('-name_regex',
                         type=str,
                         nargs='?',
-                        default='6',
-                        help='specific bed format (3, 6 or 12).')
+                        default=None,
+                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-word_size',
                         type=int,
                         nargs='?',
@@ -672,17 +669,12 @@ def estimate_background():
     args = parser.parse_args(sys.argv[2:])
 
     query_genes_filename = args.query_genes
-    query_genes_fileformat = query_genes_filename.split('.')[-1]
-    if query_genes_fileformat == 'bed':
-        query_genes_fileformat += args.bed
     bg_ranges_filename = args.bg_ranges
-    bg_ranges_fileformat = bg_ranges_filename.split('.')[-1]
-    if bg_ranges_fileformat == 'bed':
-        bg_ranges_fileformat += args.bed
     query_genome_filename = args.query_genome
     subject_genome_filename = args.subject_genome
     output_filename = args.output
     cores = args.cores
+    name_regex = args.name_regex
     word_size = args.word_size
     silent = args.silent
 
@@ -698,13 +690,12 @@ def estimate_background():
               disable=silent) as pbar:
 
         with open(query_genes_filename, 'r') as infile:
-            query_genes = GenomicRangesList.parse_annotation(infile,
-                                                             fileformat=query_genes_fileformat,
-                                                             sequence_file_path=query_genome_filename)
+            query_genes = parse_annotation(infile,
+                                           sequence_file_path=query_genome_filename,
+                                           name_regex=name_regex)
         with open(bg_ranges_filename, 'r') as infile:
-            bg_ranges = GenomicRangesList.parse_annotation(infile,
-                                                           fileformat=bg_ranges_fileformat,
-                                                           sequence_file_path=subject_genome_filename)
+            bg_ranges = parse_annotation(infile,
+                                         sequence_file_path=subject_genome_filename)
 
         cmd_point += 1
         pbar.postfix = cmd_hints[cmd_point]
@@ -1033,7 +1024,8 @@ def get_alignments():
     from functools import partial
     from tempfile import TemporaryDirectory
     from .parallel import NonExceptionalProcessPool
-    from .genomicranges import BaseGenomicRangesList, GenomicRangesList, FastaSeqFile, SequencePath
+    from .parsing import parse_annotation
+    from .genomicranges import BaseGenomicRangesList, FastaSeqFile, SequencePath
     from .liftover import LiftOverChains
 
     parser = argparse.ArgumentParser(description='Compute orthologous alignments of provided query genes and subject species genome.',
@@ -1049,10 +1041,22 @@ def get_alignments():
                         nargs='?',
                         required=True,
                         help='query genes annotation filename')
+    parser.add_argument('-query_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-query_anchors',
                         type=str,
                         nargs='?',
                         help='query anchors annotation filename')
+    parser.add_argument('-query_anchors_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the query anchors annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-query_genome',
                         type=str,
                         nargs='?',
@@ -1062,6 +1066,12 @@ def get_alignments():
                         type=str,
                         nargs='?',
                         help='subject anchors annotation filename')
+    parser.add_argument('-subject_anchors_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the subject anchors annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-subject_genome',
                         type=str,
                         nargs='?',
@@ -1125,11 +1135,6 @@ def get_alignments():
                         nargs='?',
                         default=6,
                         help='-word_size parameter to use in blastn.')
-    parser.add_argument('-bed',
-                        type=str,
-                        nargs='?',
-                        default='6',
-                        help='specific bed format (3, 6 or 12).')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -1138,12 +1143,12 @@ def get_alignments():
 
     program_mode = args.mode
     query_genes_filename = args.query_genes
-    query_genes_fileformat = query_genes_filename.split('.')[-1]
-    if query_genes_fileformat == 'bed':
-        query_genes_fileformat += args.bed
+    query_name_regex = args.query_name_regex
     query_genome_filename = args.query_genome
     query_anchors_filename = args.query_anchors
+    query_anchors_name_regex = args.query_anchors_name_regex
     subject_anchors_filename = args.subject_anchors
+    subject_anchors_name_regex = args.subject_anchors_name_regex
     subject_genome_filename = args.subject_genome
     ortho_map_filename = args.ortho_map
     liftover_chains_filename = args.liftover_chains
@@ -1186,41 +1191,25 @@ def get_alignments():
               disable=silent) as pbar:
 
         with open(query_genes_filename, 'r') as infile:
-            query_genes = GenomicRangesList.parse_annotation(infile,
-                                                             fileformat=query_genes_fileformat,
-                                                             sequence_file_path=query_genome_filename)
+            query_genes = parse_annotation(infile,
+                                           sequence_file_path=query_genome_filename,
+                                           name_regex=query_name_regex)
 
         subject_genome = FastaSeqFile(subject_genome_filename)
         subject_chromsizes = subject_genome.chromsizes
 
         if program_mode in ['anchor_long', 'anchor_short']:
-            query_anchors_fileformat = query_anchors_filename.split('.')[-1]
-            if query_anchors_fileformat == 'bed':
-                query_anchors_fileformat += args.bed
 
             with open(query_anchors_filename, 'r') as infile:
-                if query_anchors_fileformat == 'gtf':
-                    name_pattern = r'GeneID:(\d+)'
-                else:
-                    name_pattern = None
-                query_anchors = GenomicRangesList.parse_annotation(infile,
-                                                                   fileformat=query_anchors_fileformat,
-                                                                   sequence_file_path=query_genome_filename,
-                                                                   name_pattern=name_pattern)
-
-            subject_anchors_fileformat = subject_anchors_filename.split('.')[-1]
-            if subject_anchors_fileformat == 'bed':
-                subject_anchors_fileformat += args.bed
+                query_anchors = parse_annotation(infile,
+                                                 sequence_file_path=query_genome_filename,
+                                                 name_regex=query_anchors_name_regex)
 
             with open(subject_anchors_filename, 'r') as infile:
-                if query_anchors_fileformat == 'gtf':
-                    name_pattern = r'GeneID:(\d+)'
-                else:
-                    name_pattern = None
-                subject_anchors = GenomicRangesList.parse_annotation(infile,
-                                                                     fileformat=subject_anchors_fileformat,
-                                                                     sequence_file_path=subject_genome_filename,
-                                                                     name_pattern=name_pattern)
+                subject_anchors = parse_annotation(infile,
+                                                   sequence_file_path=subject_genome_filename,
+                                                   name_regex=subject_anchors_name_regex)
+
             with open(ortho_map_filename, 'r') as mapfile:
                 ortho_map = json.load(mapfile)
 
@@ -1631,7 +1620,7 @@ def get_best_orthologs():
 
 def benchmark_orthologs():
     import json
-    from .genomicranges import GenomicRangesList
+    from .parsing import parse_annotation
     from .benchmark import trace_orthologs, calc_ortholog_metrics
 
     parser = argparse.ArgumentParser(description='Compare found orthologs against real orthologs and calculate several performance metrics.',
@@ -1641,16 +1630,34 @@ def benchmark_orthologs():
                         nargs='?',
                         required=True,
                         help='query genomic ranges.')
+    parser.add_argument('-query_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-found_query',
                         type=str,
                         nargs='?',
                         required=True,
                         help='found orthologs of query genomic ranges in query genome.')
+    parser.add_argument('-found_query_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the found query orthologs annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-found_subject',
                         type=str,
                         nargs='?',
                         required=True,
                         help='found orthologs of query genomic ranges in subject genome.')
+    parser.add_argument('-found_subject_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the found subject orthologs annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-found_query_map',
                         type=str,
                         nargs='?',
@@ -1671,6 +1678,12 @@ def benchmark_orthologs():
                         nargs='?',
                         required=True,
                         help='real orthologs of query genomic ranges in subject genome.')
+    parser.add_argument('-real_subject_name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the real subject orthologs annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-real_map',
                         type=str,
                         nargs='?',
@@ -1681,75 +1694,37 @@ def benchmark_orthologs():
                         nargs='?',
                         required=True,
                         help='json output filename.')
-    parser.add_argument('-bed',
-                        type=str,
-                        nargs='?',
-                        default='6',
-                        help='specific bed format (3, 6 or 12).')
 
     args = parser.parse_args(sys.argv[2:])
     query_genes_filename = args.query_genes
+    query_name_regex = args.query_name_regex
     found_query_filename = args.found_query
+    found_query_name_regex = args.found_query_name_regex
     found_subject_filename = args.found_subject
+    found_subject_name_regex = args.found_subject_name_regex
     found_query_map_filename = args.found_query_map
     found_subject_map_filename = args.found_subject_map
     found_query_subject_map_filename = args.found_query_subject_map
     real_subject_filename = args.real_subject
+    real_subject_name_regex = args.real_subject_name_regex
     real_map_filename = args.real_map
     out_filename = args.outfile
-    bed_format = args.bed
-
-    query_genes_fileformat = query_genes_filename.split('.')[-1]
-    if query_genes_fileformat == 'bed':
-        query_genes_fileformat += bed_format
-
-    found_query_fileformat = found_query_filename.split('.')[-1]
-    if found_query_fileformat == 'bed':
-        found_query_fileformat += bed_format
-
-    found_subject_fileformat = found_subject_filename.split('.')[-1]
-    if found_subject_fileformat == 'bed':
-        found_subject_fileformat += bed_format
-
-    real_subject_fileformat = real_subject_filename.split('.')[-1]
-    if real_subject_fileformat == 'bed':
-        real_subject_fileformat += bed_format
 
     with open(query_genes_filename, 'r') as infile:
-        if query_genes_fileformat == 'gtf':
-            name_pattern = r'GeneID:(\d+)'
-        else:
-            name_pattern = None
-        query_genes = GenomicRangesList.parse_annotation(infile,
-                                                         fileformat=query_genes_fileformat,
-                                                         name_pattern=name_pattern)
+        query_genes = parse_annotation(infile,
+                                       name_regex=query_name_regex)
 
     with open(found_query_filename, 'r') as infile:
-        if found_query_fileformat == 'gtf':
-            name_pattern = r'GeneID:(\d+)'
-        else:
-            name_pattern = None
-        found_query_genes = GenomicRangesList.parse_annotation(infile,
-                                                               fileformat=found_query_fileformat,
-                                                               name_pattern=name_pattern)
+        found_query_genes = parse_annotation(infile,
+                                             name_regex=found_query_name_regex)
 
     with open(found_subject_filename, 'r') as infile:
-        if found_subject_fileformat == 'gtf':
-            name_pattern = r'GeneID:(\d+)'
-        else:
-            name_pattern = None
-        found_subject_genes = GenomicRangesList.parse_annotation(infile,
-                                                                 fileformat=found_subject_fileformat,
-                                                                 name_pattern=name_pattern)
+        found_subject_genes = parse_annotation(infile,
+                                               name_regex=found_subject_name_regex)
 
     with open(real_subject_filename, 'r') as infile:
-        if real_subject_fileformat == 'gtf':
-            name_pattern = r'GeneID:(\d+)'
-        else:
-            name_pattern = None
-        real_subject_genes = GenomicRangesList.parse_annotation(infile,
-                                                                fileformat=real_subject_fileformat,
-                                                                name_pattern=name_pattern)
+        real_subject_genes = parse_annotation(infile,
+                                              name_regex=real_subject_name_regex)
 
     with open(found_query_map_filename, 'r') as infile:
         found_query_map = json.load(infile)

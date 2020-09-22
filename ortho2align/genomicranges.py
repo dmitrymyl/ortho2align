@@ -22,7 +22,8 @@ from io import TextIOWrapper
 from collections import namedtuple, defaultdict
 from sortedcontainers import SortedKeyList
 from tqdm import tqdm
-from .alignment import HSPVertex, Alignment, AlignmentChain, nxor_strands, numberize
+from .alignment import HSPVertex, Alignment, AlignmentChain, nxor_strands
+from .utils import numberize
 
 
 class GenomicException(Exception):
@@ -1119,7 +1120,7 @@ class GenomicRangesAlignmentChain(AlignmentChain):
         score = self.score
         thickStart = chromStart
         thickEnd = chromEnd
-        itemRgb = 0
+        itemRgb = '.'
         blockCount = len(self.HSPs)
         side = [chrom,
                 chromStart,
@@ -1409,6 +1410,8 @@ class BaseGenomicRangesList(SortedKeyList):
         basic_annotation_parser
     """
 
+    init_args = ('collection',)
+
     @staticmethod
     def _genomic_key_func(item):
         """Returns item attributes as key for sorting.
@@ -1436,11 +1439,6 @@ class BaseGenomicRangesList(SortedKeyList):
             None
         """
         super().__init__(iterable=collection, key=self._genomic_key_func)
-
-    @property
-    def init_args(self):
-        """Returns tuple of __init__ arguments."""
-        return ('collection',)
 
     def __repr__(self):
         """Returns code representation of the list of genomic ranges.
@@ -1823,6 +1821,7 @@ class GenomicRangesList(BaseGenomicRangesList):
                  'bed3': 'exclusive',
                  'bed6': 'exclusive',
                  'bed12': 'exclusive'}
+    init_args = ('collection', 'sequence_file_path')
 
     def __init__(self, collection, sequence_file_path):
         """Initializes GenomicRangesList instance.
@@ -1843,11 +1842,6 @@ class GenomicRangesList(BaseGenomicRangesList):
                                     else SequencePath(sequence_file_path))
         self.sequence_file = FastaSeqFile(self.sequence_file_path)
         self._name_mapping = defaultdict(list)
-
-    @property
-    def init_args(self):
-        """Returns a tuple of essential *__init__* arguments."""
-        return ('collection', 'sequence_file_path')
 
     def __repr__(self):
         """Returns code representation of the list of genomic ranges.
