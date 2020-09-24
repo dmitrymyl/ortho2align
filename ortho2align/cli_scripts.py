@@ -556,7 +556,7 @@ def align_two_ranges_blast(query, subject, **kwargs):
 
 def bg_from_inter_ranges():
     import random
-    from .genomicranges import BaseGenomicRangesList, GenomicRangesList
+    from .genomicranges import BaseGenomicRangesList
     from .parsing import parse_annotation
 
     parser = argparse.ArgumentParser(description='Generate background set of genomic ranges from intergenic ranges.',
@@ -568,6 +568,12 @@ def bg_from_inter_ranges():
                         nargs='?',
                         required=True,
                         help='Gene annotation filename to use for composing intergenic ranges.')
+    parser.add_argument('-name_regex',
+                        type=str,
+                        nargs='?',
+                        default=None,
+                        help='Regular expression for extracting gene names from the genes annotation (.gff and .gtf only). '\
+                             'Must contain one catching group.')
     parser.add_argument('-observations',
                         type=int,
                         nargs='?',
@@ -588,14 +594,12 @@ def bg_from_inter_ranges():
     random.seed(args.seed)
 
     genes_filename = args.genes
-    genes_fileformat = genes_filename.split('.')[-1]
-    if genes_fileformat == 'bed':
-        genes_fileformat += args.bed
+    name_regex = args.name_regex
     observations = args.observations
     output_filename = args.output
 
     with open(genes_filename, 'r') as infile:
-        genes = parse_annotation(infile)
+        genes = parse_annotation(infile, name_regex=name_regex)
 
     inter_genes = genes.inter_ranges()
     if len(inter_genes) < observations:
