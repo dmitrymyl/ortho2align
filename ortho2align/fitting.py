@@ -290,10 +290,10 @@ class KernelFitter(AbstractFitter):
         """
         single_value = False
         if isinstance(data, int) or isinstance(data, float):
-            data = [data]
+            data = (data, )
             single_value = True
-        cdf = ndtr(np.subtract.outer(data, self.estimator.dataset[0]) / self.estimator.factor).mean(axis=1)
-        # cdf = [self.estimator.integrate_box_1d(np.NINF, value) for value in data]
+        cdf = tuple(ndtr((item - self.estimator.dataset[0]) / self.estimator.factor).mean()
+                    for item in data)
         if single_value:
             return cdf[0]
         return np.array(cdf)
@@ -307,6 +307,15 @@ class KernelFitter(AbstractFitter):
         Returns:
             (number or np.array) sf values of the items in data.
         """
+        # single_value = False
+        # if isinstance(data, int) or isinstance(data, float):
+        #     data = (data, )
+        #     single_value = True
+        # cdf = tuple(self.estimator.integrate_box_1d(item, np.inf)
+        #             for item in data)
+        # if single_value:
+        #     return cdf[0]
+        # return np.array(cdf)
         return 1 - self.cdf(data)
 
     def ppf(self, data):

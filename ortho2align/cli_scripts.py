@@ -973,7 +973,7 @@ def liftover_short(query_genes, query_genome_filename, subject_genome_filename,
 
 
 def liftover_lift(query_genes, query_genome_filename, subject_genome_filename,
-                  subject_chromsizes, liftover_chains, liftover_origin, neighbour_dist,
+                  subject_chromsizes, liftover_chains, liftover_origin,
                   merge_dist, flank_dist, min_ratio=0.05, allow_duplications=True):
     from .genomicranges import GenomicRangesList
 
@@ -997,7 +997,7 @@ def liftover_lift(query_genes, query_genome_filename, subject_genome_filename,
         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
                                                                                        chromsizes=subject_chromsizes)
         query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
-                                                                       sequence_file_path=query_genome_filename)
+                                                                sequence_file_path=query_genome_filename)
         query_prepared.append(query_gene)
 
     query_prepared_genes = GenomicRangesList(query_prepared,
@@ -1250,7 +1250,7 @@ def get_alignments():
                     query_prepared_genes, query_unalignable_genes = liftover_short(*process_args)
             elif program_mode == 'liftover_lift':
                 process_args = [query_genes, query_genome_filename, subject_genome_filename,
-                                subject_chromsizes, liftover_chains, liftover_origin, neighbour_dist,
+                                subject_chromsizes, liftover_chains, liftover_origin,
                                 merge_dist, flank_dist, min_ratio]
                 query_prepared_genes, query_unalignable_genes = liftover_lift(*process_args)
             else:
@@ -1331,7 +1331,9 @@ def build(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
                 pvals = background.sf([hsp.score
                                        for hsp in alignment.HSPs])
                 qvals = pvals * len(pvals) / ranking(pvals)
+                del pvals
                 alignment.filter_by_array(qvals, pval_threshold, side='l')
+                del qvals
             else:
                 alignment.filter_by_score(score_threshold)
             alignment.srange.name = alignment.qrange.name
