@@ -1325,7 +1325,7 @@ def build(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
         aligned = False
         query_orthologs = list()
         subject_orthologs = list()
-        query_unaligned = list()
+        query_dropped = list()
         for alignment in query_gene_alignments:
             if fdr:
                 pvals = background.sf([hsp.score
@@ -1344,10 +1344,10 @@ def build(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
                 subject_orthologs.append(record[1])
                 aligned = True
             except ValueError:
-                query_unaligned = [alignment.qrange]
+                query_dropped = [alignment.qrange]
         if aligned:
-            query_unaligned = list()
-        return query_orthologs, subject_orthologs, query_unaligned
+            query_dropped = list()
+        return query_orthologs, subject_orthologs, query_dropped
     except Exception as e:
         raise ExceptionLogger(e, query_gene_alignments[0].qrange)
 
@@ -1397,11 +1397,11 @@ def build_orthologs():
                         nargs='?',
                         required=True,
                         help='output .bed12 filename for subject orthologs.')
-    parser.add_argument('-query_unaligned',
+    parser.add_argument('-query_dropped',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='output .bed6 filename for unaligned query ranges.')
+                        help='output .bed6 filename for dropped query ranges.')
     parser.add_argument('-query_exceptions',
                         type=str,
                         nargs='?',
@@ -1428,7 +1428,7 @@ def build_orthologs():
     fitting_type = args.fitting
     query_output_filename = Path(args.query_orthologs)
     subject_output_filename = Path(args.subject_orthologs)
-    query_unaligned_filename = Path(args.query_unaligned)
+    query_dropped_filename = Path(args.query_dropped)
     query_exceptions_filename = Path(args.query_exceptions)
     pval_threshold = args.threshold
     fdr = args.fdr
@@ -1494,16 +1494,19 @@ def build_orthologs():
         pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
-        query_orthologs, subject_orthologs, query_unaligned = zip(*orthologs)
+        if len(orthologs) == 0:
+            query_orthologs, subject_orthologs, query_dropped = [], [], []
+        else:
+            query_orthologs, subject_orthologs, query_dropped = zip(*orthologs)
         query_orthologs = [ortholog
                            for group in query_orthologs
                            for ortholog in group]
         subject_orthologs = [ortholog
                              for group in subject_orthologs
                              for ortholog in group]
-        query_unaligned = BaseGenomicRangesList([grange
-                                                 for group in query_unaligned
-                                                 for grange in group])
+        query_dropped = BaseGenomicRangesList([grange
+                                               for group in query_dropped
+                                               for grange in group])
         query_exception_list = BaseGenomicRangesList(query_exception_ranges)
 
         with open(query_output_filename, 'w') as outfile:
@@ -1512,8 +1515,8 @@ def build_orthologs():
         with open(subject_output_filename, 'w') as outfile:
             for record in subject_orthologs:
                 outfile.write(record + "\n")
-        with open(query_unaligned_filename, 'w') as outfile:
-            query_unaligned.to_bed6(outfile)
+        with open(query_dropped_filename, 'w') as outfile:
+            query_dropped.to_bed6(outfile)
         with open(query_exceptions_filename, 'w') as outfile:
             query_exception_list.to_bed6(outfile)
 
