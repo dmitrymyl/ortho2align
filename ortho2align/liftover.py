@@ -14,7 +14,9 @@ class DeletedInNewError(LiftOverException):
 
     def __init__(self, grange):
         self.grange = grange
-        super().__init__(f'Genomic range {self.grange} intersects none provided chains.')
+
+    def __str__(self):
+        return f'Genomic range {self.grange} intersects none provided chains.'
 
 
 class PartiallyDeletedInNewError(LiftOverException):
@@ -23,7 +25,9 @@ class PartiallyDeletedInNewError(LiftOverException):
     def __init__(self, grange, chain):
         self.grange = grange
         self.chain = chain
-        super().__init(f'Genomic range {self.grange} insufficiently intersects one chain: {self.chain}.')
+
+    def __str__(self):
+        return f'Genomic range {self.grange} insufficiently intersects one chain: {self.chain}.'
 
 
 class SplitInNewError(LiftOverException):
@@ -32,7 +36,9 @@ class SplitInNewError(LiftOverException):
     def __init__(self, grange, chains):
         self.grange = grange
         self.chains = chains
-        super().__init__(f'Genomic range {self.grange} insufficiently intersects multiple chains: {self.chains}.')
+
+    def __str__(self):
+        return f'Genomic range {self.grange} insufficiently intersects multiple chains: {self.chains}.'
 
 
 class DuplicatedInNewError(LiftOverException):
@@ -41,8 +47,10 @@ class DuplicatedInNewError(LiftOverException):
     def __init__(self, grange, chains):
         self.grange = grange
         self.chains = chains
-        super().__init__(f'Genomic range {self.grange} sufficiently intersects multiple chains: {self.chains} ' \
-                         'and that is undesired situation.')
+
+    def __str__(self):
+        return f'Genomic range {self.grange} sufficiently intersects multiple chains: {self.chains} ' \
+               'and that is undesired situation.'
 
 
 class InsideTheGapError(LiftOverException):
@@ -51,7 +59,9 @@ class InsideTheGapError(LiftOverException):
     def __init__(self, grange, chain):
         self.grange = grange
         self.chain = chain
-        super().__init__(f'Genomic range {self.grange} fully lies within a gap inside a chain {self.chain}.')
+    
+    def __str__(self):
+        return f'Genomic range {self.grange} fully lies within a gap inside a chain {self.chain}.'
 
 
 class Chain:
