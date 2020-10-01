@@ -11,6 +11,11 @@ def calc_precision(TP, FP):
     Returns:
         (float): precision value.
     """
+    if TP == 0:
+        if FP == 0:
+            return 1
+        else:
+            return 0
     return TP / (TP + FP)
 
 
@@ -24,6 +29,11 @@ def calc_recall(TP, FN):
     Returns:
         (float): recall value.
     """
+    if TP == 0:
+        if FN == 0:
+            return 1
+        else:
+            return 0
     return TP / (TP + FN)
 
 
@@ -37,6 +47,11 @@ def calc_specificity(TN, FP):
     Returns:
         (float): specificity value.
     """
+    if TN == 0:
+        if FP == 0:
+            return 1
+        else:
+            return 0
     return TN / (TN + FP)
 
 
@@ -52,7 +67,10 @@ def calc_accuracy(TP, TN, FP, FN):
     Returns:
         (float): accuracy value.
     """
-    return (TP + TN) / (TP + TN + FP + FN)
+    try:
+        return (TP + TN) / (TP + TN + FP + FN)
+    except ZeroDivisionError:
+        return 1
 
 
 def calc_auc(x, y):
@@ -106,33 +124,21 @@ def calc_ortholog_metrics(granges_list,
             ji = [found_grange.calc_JI(real_grange)
                   for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
-            # if len(ji) == 0:
-            #     ji = [0]
             oc = [found_grange.calc_OC(real_grange)
                   for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
-            # if len(oc) == 0:
-            #     oc = [0]
             qf = [grange.calc_fraction(found_grange)
                   for found_grange in grange.relations[found_query_relname]]
-            # if len(qf) == 0:
-            #     qf = [0]
             ff = [real_grange.calc_fraction(found_grange)
                   for real_grange in grange.relations[real_relname]
                   for found_grange in real_grange.relations['trace']]
-            # if len(ff) == 0:
-            #     ff = [0]
             rf = [found_grange.calc_fraction(real_grange)
                   for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
-            # if len(rf) == 0:
-            #     rf = [0]
             cf = [grange.calc_fraction(found_query_grange) * found_subject_grange.calc_fraction(real_grange)
                   for found_query_grange in grange.relations[found_query_relname]
                   for found_subject_grange in found_query_grange.relations[found_query_subject_relanme]
                   for real_grange in found_subject_grange.relations['trace']]
-            # if len(cf) == 0:
-            #     cf = [0]
         elif len(grange.relations[found_subject_relname]) > 0:
             fp = [len(grange.relations[found_subject_relname])]
         else:  # len(grange.relations[real_relname]) > 0
