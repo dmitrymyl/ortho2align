@@ -107,10 +107,11 @@ def calc_ortholog_metrics(granges_list,
     metric_names = ['TP', 'FP', 'TN', 'FN', 'JI', 'OC', 'QF', 'FF', 'RF', 'CF']
     metrics = {name: list() for name in metric_names}
     for grange in granges_list:
-        tp, fp, tn, fn, ji, oc, qf, ff, rf, cf = [[0] for _ in range(len(metric_names))]
         if len(grange.relations[found_subject_relname]) == 0 and \
            len(grange.relations[real_relname]) == 0:
             tn = [1]
+            tp, fp, fn = [[0] for _ in range(3)]
+            ji, oc, qf, ff, rf, cf = [[] for _ in range(6)]
         elif len(grange.relations[found_subject_relname]) > 0 and \
              len(grange.relations[real_relname]) > 0:
             tp = [sum([len(found_grange.relations['trace'])
@@ -121,6 +122,7 @@ def calc_ortholog_metrics(granges_list,
             fn = [len([real_grange
                        for real_grange in grange.relations[real_relname]
                        if len(real_grange.relations['trace']) == 0])]
+            tn = [0]
             ji = [found_grange.calc_JI(real_grange)
                   for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
@@ -141,8 +143,15 @@ def calc_ortholog_metrics(granges_list,
                   for real_grange in found_subject_grange.relations['trace']]
         elif len(grange.relations[found_subject_relname]) > 0:
             fp = [len(grange.relations[found_subject_relname])]
+            qf = [grange.calc_fraction(found_grange)
+                  for found_grange in grange.relations[found_query_relname]]
+            tp, tn, fn = [[0] for _ in range(3)]
+            ji, oc, ff, rf, cf = [[] for _ in range(5)]
         else:  # len(grange.relations[real_relname]) > 0
             fn = [len(grange.relations[real_relname])]
+            tp, tn, fp = [[0] for _ in range(3)]
+            ji, oc, rf, ff = [[0] for _ in range(4)]
+            qf, cf = [[] for _ in range(2)]
         grange_metrics = [tp, fp, tn, fn, ji, oc, qf, ff, rf, cf]
         for name, value in zip(metric_names, grange_metrics):
             metrics[name].append(value)
@@ -155,6 +164,19 @@ def unnest_number_list(collection):
     for value in collection:
         if isinstance(value, list):
             unnested += value
+        else:
+            unnested.append(value)
+    return unnested
+
+
+def unnest_list_with_empties(collection):
+    unnested = list()
+    for value in collection:
+        if isinstance(value, list):
+            if value:
+                unnested += value
+            else:
+                unnested.append(0)
         else:
             unnested.append(value)
     return unnested
