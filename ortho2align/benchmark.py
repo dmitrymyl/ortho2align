@@ -131,10 +131,10 @@ def calc_ortholog_metrics(granges_list,
                   for real_grange in found_grange.relations['trace']]
             qf = [grange.calc_fraction(found_grange)
                   for found_grange in grange.relations[found_query_relname]]
-            ff = [real_grange.calc_fraction(found_grange)
+            rf = [real_grange.calc_fraction(found_grange)
                   for real_grange in grange.relations[real_relname]
                   for found_grange in real_grange.relations['trace']]
-            rf = [found_grange.calc_fraction(real_grange)
+            ff = [found_grange.calc_fraction(real_grange)
                   for found_grange in grange.relations[found_subject_relname]
                   for real_grange in found_grange.relations['trace']]
             cf = [grange.calc_fraction(found_query_grange) * found_subject_grange.calc_fraction(real_grange)
