@@ -416,6 +416,9 @@ class BaseGenomicRange:
         return cls(**{attr: func(dict_)
                       for attr, func in parser_dict.items()})
 
+    def to_bed6(self):
+        return f"{self.chrom}\t{self.start}\t{self.end}\t{self.name}\t.\t{self.strand}"
+
     @property
     def sequence_header(self):
         """Returns sequence header in POSIX-compatible file name system."""

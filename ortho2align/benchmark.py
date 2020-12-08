@@ -1,3 +1,5 @@
+from .utils import numberize
+from .genomicranges import BaseGenomicRange
 from numpy import trapz
 
 
@@ -188,3 +190,68 @@ def calc_ensemble_metric(ortholog_metrics, metric_name):
         return sum(unnest_number_list(ortholog_metrics[metric_name]))
     else:
         raise ValueError(f'metric_name {metric_name} is not one of {ortholog_metrics.keys()}.')
+
+
+blastn_replace_dict = {'q. start': 'qstart',
+                       'q. end': 'qend',
+                       's. start': 'sstart',
+                       's. end': 'send',
+                       'query length': 'qlen',
+                       'subject length': 'slen',
+                       'query acc.ver': 'qchrom',
+                       'subject acc.ver': 'schrom'}
+
+
+def parse_blastn_results(file_object, query_grange):
+    """Parse blastn search results for benchmarking purposes."""
+    line = file_object.readline()
+    if not line.startswith('#'):
+        raise ValueError("Provided file_object is not in accepted file format.")
+
+    for _ in range(100):
+        line = file_object.readline()
+        if line.startswith("# Fields:"):
+            break
+    else:
+        return []
+
+    fields = line.lstrip("# Fields: ").rstrip("\n").split(", ")
+
+    fields = [blastn_replace_dict.get(item, item)
+              for item in fields]
+    hit_number = int(file_object.readline().split(" ")[1])
+    query_HSPs = list()
+    subject_HSPs = list()
+    for i in range(hit_number):
+        hsp = file_object.readline().strip().split("\t")
+        hsp = [numberize(item) for item in hsp]
+        hsp = dict(zip(fields, hsp))
+        query_hsp = BaseGenomicRange(query_grange.chrom,
+                                     hsp['qstart'],
+                                     hsp['qend'],
+                                     name=query_grange.name)
+        subject_hsp = BaseGenomicRange(hsp['schrom'],
+                                       hsp['sstart'],
+                                       hsp['send'],
+                                       name=query_grange.name)
+        if query_grange.strand != '-':
+            query_hsp.start = query_hsp.start + query_grange.start
+            query_hsp.end = query_hsp.end + query_grange.start
+            query_hsp.strand = '+'
+        else:
+            query_hsp.start = query_grange.end - query_hsp.start
+            query_hsp.end = query_grange.end - query_hsp.end
+            query_hsp.strand = '-'
+        # subject sequence
+        if subject_hsp.start <= subject_hsp.end:
+            subject_hsp.strand = query_hsp.strand
+        else:
+            subject_hsp.start = subject_hsp.end
+            subject_hsp.end = subject_hsp.start
+            subject_hsp.strand = "+" if query_hsp.strand == "-" else "-"
+
+        query_hsp.start -= 1
+        subject_hsp.start -= 1
+        query_HSPs.append(query_hsp)
+        subject_HSPs.append(subject_hsp)
+    return query_HSPs, subject_HSPs
