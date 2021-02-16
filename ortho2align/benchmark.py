@@ -105,7 +105,8 @@ def calc_ortholog_metrics(granges_list,
                           found_query_relname='found_query',
                           found_subject_relname='found_subject',
                           found_query_subject_relanme='ortho_link',
-                          real_relname='real'):
+                          real_relname='real',
+                          tp_mode='all'):
     metric_names = ['TP', 'FP', 'TN', 'FN', 'JI', 'OC', 'QF', 'FF', 'RF', 'CF']
     metrics = {name: list() for name in metric_names}
     for grange in granges_list:
@@ -116,8 +117,15 @@ def calc_ortholog_metrics(granges_list,
             ji, oc, qf, ff, rf, cf = [[] for _ in range(6)]
         elif len(grange.relations[found_subject_relname]) > 0 and \
              len(grange.relations[real_relname]) > 0:
-            tp = [sum([len(found_grange.relations['trace'])
-                       for found_grange in grange.relations[found_subject_relname]])]
+            if tp_mode == 'all':
+                tp = [sum([len(found_grange.relations['trace'])
+                           for found_grange in grange.relations[found_subject_relname]])]
+            elif tp_mode == 'single':
+                tp_count = sum([len(found_grange.relations['trace'])
+                                for found_grange in grange.relations[found_subject_relname]])
+                tp = [1 if tp_count > 0 else 0]
+            else:
+                raise ValueError('tp_mode must be one of "all", "single".')
             fp = [len([found_grange
                        for found_grange in grange.relations[found_subject_relname]
                        if len(found_grange.relations['trace']) == 0])]

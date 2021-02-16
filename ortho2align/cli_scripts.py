@@ -1703,6 +1703,12 @@ def benchmark_orthologs():
                         nargs='?',
                         required=True,
                         help='json output filename.')
+    parser.add_argument('-tp_mode',
+                         type=str,
+                         nargs='?',
+                         choices=['all', 'single'],
+                         default='all',
+                         help='how to calculate true positives')
 
     args = parser.parse_args(sys.argv[2:])
     query_genes_filename = args.query_genes
@@ -1718,6 +1724,7 @@ def benchmark_orthologs():
     real_subject_name_regex = args.real_subject_name_regex
     real_map_filename = args.real_map
     out_filename = args.outfile
+    tp_mode = args.tp_mode
 
     with open(query_genes_filename, 'r') as infile:
         query_genes = parse_annotation(infile,
@@ -1757,7 +1764,7 @@ def benchmark_orthologs():
                                                              'ortho_link')
 
     trace_orthologs(query_genes)
-    metrics = calc_ortholog_metrics(query_genes)
+    metrics = calc_ortholog_metrics(query_genes, tp_mode=tp_mode)
 
     with open(out_filename, 'w') as outfile:
         json.dump(metrics, outfile)
