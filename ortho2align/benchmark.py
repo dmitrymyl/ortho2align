@@ -221,7 +221,7 @@ def parse_blastn_results(file_object, query_grange):
         if line.startswith("# Fields:"):
             break
     else:
-        return []
+        return [], []
 
     fields = line.lstrip("# Fields: ").rstrip("\n").split(", ")
 
