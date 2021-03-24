@@ -15,6 +15,7 @@ Translation from other systems:
 1-based exclusive: start += -1, end += -1
 """
 import re
+import json
 from itertools import chain
 from pathlib import Path
 from subprocess import Popen, PIPE
@@ -1257,24 +1258,39 @@ class FastaSeqFile:
         if not self._chromsizes:
 
             self.sequence_file_path.check_correct()
+            chromsizes_path = SequencePath(str(self.sequence_file_path) + ".fai.json")
 
-            with open(self.sequence_file_path, 'r') as infile:
-                chrom, size, start = None, None, None
-                line = infile.readline()
-                while line:
-                    if line.startswith(">"):
-                        self._chromsizes[chrom] = ChromosomeLocation(size,
-                                                                     start)
-                        chrom = line.lstrip(">").rstrip().split()[0]
-                        size = 0
-                        start = None
-                    else:
-                        if start is None:
-                            start = infile.tell() - len(line)
-                        size += len(line.strip())
+            try:
+                chromsizes_path.check_correct()
+                with open(chromsizes_path, 'r') as infile:
+                    chromsizes_dict = json.load(infile)
+                self._chromsizes = {chrom: ChromosomeLocation(location["size"], location["start"])
+                                    for chrom, location in chromsizes_dict.items()}
+            except SequenceFileNotFoundError:
+                with open(self.sequence_file_path, 'r') as infile:
+                    chrom, size, start = None, None, None
                     line = infile.readline()
-                self._chromsizes[chrom] = ChromosomeLocation(size, start)
-                del self._chromsizes[None]
+                    while line:
+                        if line.startswith(">"):
+                            self._chromsizes[chrom] = ChromosomeLocation(size,
+                                                                         start)
+                            chrom = line.lstrip(">").rstrip().split()[0]
+                            size = 0
+                            start = None
+                        else:
+                            if start is None:
+                                start = infile.tell() - len(line)
+                            size += len(line.strip())
+                        line = infile.readline()
+                    self._chromsizes[chrom] = ChromosomeLocation(size, start)
+                    del self._chromsizes[None]
+
+                with open(chromsizes_path, 'w') as outfile:
+                    chromsizes_dict = {chrom: {'size': location.size,
+                                               'start': location.start}
+                                       for chrom, location in self._chromsizes.items()}
+                    json.dump(chromsizes_dict, outfile)
+
         return self._chromsizes
 
     @property
@@ -1422,7 +1438,7 @@ class BaseGenomicRangesList(SortedKeyList):
         Returns:
             tuple: chrom, start, end.
         """
-        return item.chrom, item.start, item.end
+        return item.chrom, item.start, item.end, item.name
 
     def __new__(cls, collection=[], *args, **kwargs):
         """Makes new instance of BaseGenomicRangesList."""

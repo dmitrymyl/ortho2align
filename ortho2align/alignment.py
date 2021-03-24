@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from numpy.lib.shape_base import hsplit
 from .utils import numberize
 
 
@@ -664,6 +665,23 @@ class Alignment:
         self.HSPs = [hsp
                      for hsp, value in zip(self.HSPs, array)
                      if compare(value, score, side)]
+    
+    def filter_by_bool_array(self, array):
+        """Filters HSPs by True/False values in the array.
+
+        Args:
+            self: Alignment instance;
+            array (collection of bools): a sequence of corresponding
+                bool values to `self.HSPs`.
+        Raises:
+            ValueError: in case `len(array) != len(self.HSPs)`.
+        """
+        if len(array) != len(self.HSPs):
+            raise ValueError(f'Length of provided array is not equal to the '\
+                             f'amount of HSPs: {len(array)} vs {len(self.HSPs)}.')
+        self.HSPs = [hsp
+                     for hsp, indicator in zip(self.HSPs, array)
+                     if indicator]
 
     def reset_filter_by_score(self):
         """Resets HSP filtering by score."""

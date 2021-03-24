@@ -2,6 +2,8 @@ import os
 import sys
 import argparse
 import textwrap
+import random
+import json
 from tqdm import tqdm
 from .fitting import ranking
 from .parallel import ExceptionLogger
@@ -64,8 +66,7 @@ def get_orthodb_map():
     import pandas as pd
     from pathlib import Path
     from collections import defaultdict
-    from .orthodb import (load_table, filter_table, query_cached_odb_file,
-                          split_odb_file, filter_odb_file)
+    from .orthodb import load_table, filter_table, query_cached_odb_file, filter_odb_file
 
     external_dbs = ['GOterm',
                     'InterPro',
@@ -420,8 +421,8 @@ def get_orthodb_map():
                         for item in odb_subject_species_ids.to_dict('record')}
         orthologs_with_xrefs = orthologs_with_xrefs.assign(ncbi_tax_id=lambda x: x['odb_species_id'].map(species_dict))
         report_df = (orthologs_with_xrefs.drop_duplicates(subset=['query_xref_id',
-                                                                 'subject_xref_id',
-                                                                 'odb_species_id'])
+                                                                  'subject_xref_id',
+                                                                  'odb_species_id'])
                                          .drop(['odb_gene_id_ortholog',
                                                 'odb_gene_id',
                                                 'odb_species_id'],
@@ -546,14 +547,6 @@ def get_liftover_map():
         json.dump(chain_map, outfile)
 
 
-def align_two_ranges_blast(query, subject, **kwargs):
-    try:
-        return query.align_blast(subject, **kwargs)
-    except Exception as e:
-        raise ExceptionLogger(e, {'query': query,
-                                  'subject': subject})
-
-
 def bg_from_inter_ranges():
     import random
     from .genomicranges import BaseGenomicRangesList
@@ -572,7 +565,7 @@ def bg_from_inter_ranges():
                         type=str,
                         nargs='?',
                         default=None,
-                        help='Regular expression for extracting gene names from the genes annotation (.gff and .gtf only). '\
+                        help='Regular expression for extracting gene names from the genes annotation (.gff and .gtf only). '
                              'Must contain one catching group.')
     parser.add_argument('-observations',
                         type=int,
@@ -614,6 +607,33 @@ def bg_from_inter_ranges():
         samples.to_bed6(outfile)
 
 
+def index_fasta_file():
+    pass
+
+
+def align_two_ranges_blast(query, subject, **kwargs):
+    try:
+        return query.align_blast(subject, **kwargs)
+    except Exception as e:
+        raise ExceptionLogger(e, {'query': query,
+                                  'subject': subject})
+
+
+def estimate_bg_for_single_query(query, bg_ranges, word_size, output_name, sample_size=1000, seed=0):
+    all_scores = list()
+    for bg_range in bg_ranges:
+        alignment = align_two_ranges_blast(query, bg_range, word_size=word_size)
+        scores = [hsp.score for hsp in alignment.HSPs]
+        all_scores += scores
+    score_size = len(all_scores)
+    if score_size > sample_size:
+        random.seed(seed)
+        all_scores = random.sample(all_scores, sample_size)
+    with open(output_name, 'w') as outfile:
+        json.dump(all_scores, outfile)
+    return output_name, score_size
+
+
 def estimate_background():
     import json
     from tempfile import TemporaryDirectory
@@ -645,11 +665,11 @@ def estimate_background():
                         nargs='?',
                         required=True,
                         help='Subject species genome filename (fasta format).')
-    parser.add_argument('-output',
+    parser.add_argument('-outdir',
                         type=str,
                         nargs='?',
                         required=True,
-                        help='JSON filename to save background alignment scores.')
+                        help='Output directory name for background files.')
     parser.add_argument('-cores',
                         type=int,
                         nargs='?',
@@ -659,13 +679,23 @@ def estimate_background():
                         type=str,
                         nargs='?',
                         default=None,
-                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '\
+                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
                              'Must contain one catching group.')
     parser.add_argument('-word_size',
                         type=int,
                         nargs='?',
                         default=6,
                         help='-word_size argument to use in blastn search.')
+    parser.add_argument('-sample_size',
+                        type=int,
+                        nargs='?',
+                        default=1000,
+                        help='number of scores to retain for each query gene.')
+    parser.add_argument('-seed',
+                        type=int,
+                        nargs='?',
+                        default=123,
+                        help='random seed for sampling scores.')
     parser.add_argument('--silent',
                         action='store_true',
                         help='silent CLI if included.')
@@ -676,21 +706,22 @@ def estimate_background():
     bg_ranges_filename = args.bg_ranges
     query_genome_filename = args.query_genome
     subject_genome_filename = args.subject_genome
-    output_filename = args.output
+    outdir = args.outdir
     cores = args.cores
     name_regex = args.name_regex
     word_size = args.word_size
+    sample_size = args.sample_size
+    seed = args.seed
     silent = args.silent
 
     cmd_hints = ['reading annotations...',
                  'getting sample sequences...',
                  'aligning samples...',
-                 'saving to file...',
                  'finished.']
-    cmd_point = 0
-    with tqdm(total=(len(cmd_hints) - 1),
-              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
-              postfix=cmd_hints[cmd_point],
+    with tqdm(cmd_hints,
+              bar_format="{r_bar}",
+              postfix=cmd_hints[0],
+              initial=1,
               disable=silent) as pbar:
 
         with open(query_genes_filename, 'r') as infile:
@@ -699,10 +730,10 @@ def estimate_background():
                                            name_regex=name_regex)
         with open(bg_ranges_filename, 'r') as infile:
             bg_ranges = parse_annotation(infile,
-                                         sequence_file_path=subject_genome_filename)
+                                         sequence_file_path=subject_genome_filename,
+                                         name_regex=name_regex)
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
+        pbar.postfix = pbar.iterable[pbar.n]
         pbar.update()
 
         query_chromsizes = FastaSeqFile(query_genome_filename).chromsizes
@@ -717,87 +748,73 @@ def estimate_background():
             bg_ranges.get_fasta(outfileprefix='bg_',
                                 outdir=tempdir,
                                 chromsizes=subject_chromsizes)
-            all_scores = dict()
 
-            cmd_point += 1
-            pbar.postfix = cmd_hints[cmd_point]
-            pbar.update()
+            pbar.postfix = pbar.iterable[pbar.n]
+            pbar.update()            
 
-            align_two_ranges_blast_word_size = partial(align_two_ranges_blast,
-                                                       word_size=word_size)
-
-            for query in tqdm(query_genes, disable=silent, position=1):
-                sample_pairs = zip((query
-                                    for _ in range(len(bg_ranges))),
-                                   bg_ranges)
-                with NonExceptionalProcessPool(cores, verbose=False) as p:
-                    try:
-                        alignments, exceptions = p.starmap_async(align_two_ranges_blast_word_size,
-                                                                 sample_pairs)
-                    except Exception as e:
-                        raise ExceptionLogger(e, p, 'Consider allocating more RAM or CPU time.')
-
+            if not os.path.exists(outdir):
+                os.mkdir(outdir)
+            data = ((query,
+                     bg_ranges,
+                     word_size,
+                     os.path.join(outdir, f"{query.name}.json"),
+                     sample_size,
+                     seed)
+                    for query in query_genes)
+            try:
+                with NonExceptionalProcessPool(cores, verbose=(not silent)) as p:
+                    results, exceptions = p.starmap_async(estimate_bg_for_single_query, data)
                 if len(exceptions) > 0:
-                    tqdm.write(f'{len(exceptions)} exceptions occured for {query}: ')
+                    tqdm.write(f'{len(exceptions)} exceptions occured.')
                     for exception in exceptions:
                         tqdm.write(str(exception))
-                scores = [hsp.score
-                          for alignment in alignments
-                          for hsp in alignment.HSPs]
-                all_scores[query.name] = scores
-
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-
-        with open(output_filename, 'w') as outfile:
-            json.dump(all_scores, outfile)
-
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
+            except Exception as e:
+                raise ExceptionLogger(e, p, 'Consider allocating more RAM or CPU time.')    
+        
+        pbar.postfix = pbar.iterable[pbar.n]
         pbar.update()
 
 
-def anchor_long(query_genes, query_anchors, query_genome_filename,
-                subject_anchors, subject_genome_filename, subject_chromsizes,
-                ortho_map, neighbour_dist, merge_dist, flank_dist):
-    from .genomicranges import GenomicRangesList
+# def anchor_long(query_genes, query_anchors, query_genome_filename,
+#                 subject_anchors, subject_genome_filename, subject_chromsizes,
+#                 ortho_map, neighbour_dist, merge_dist, flank_dist):
+#     from .genomicranges import GenomicRangesList
 
-    query_anchors.relation_mapping(subject_anchors,
-                                   ortho_map,
-                                   'orthologs')
-    query_genes.get_neighbours(query_anchors,
-                               neighbour_dist,
-                               'neighbours')
-    query_unalignable = list()
-    query_prepared = list()
+#     query_anchors.relation_mapping(subject_anchors,
+#                                    ortho_map,
+#                                    'orthologs')
+#     query_genes.get_neighbours(query_anchors,
+#                                neighbour_dist,
+#                                'neighbours')
+#     query_unalignable = list()
+#     query_prepared = list()
 
-    for query_gene in tqdm(query_genes):
-        if len(query_gene.relations['neighbours']) == 0:
-            query_unalignable.append(query_gene)
-            continue
-        syntenies = [grange
-                     for neighbour in query_gene.relations['neighbours']
-                     for grange in neighbour.relations['orthologs']]
-        synteny_list = GenomicRangesList(syntenies,
-                                         sequence_file_path=subject_genome_filename)
-        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
-                                                                                       chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
-        neighbourhood = query_gene.relations['neighbours'][0]
-        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
-            query_gene.relations['neighbours'] = GenomicRangesList([neighbourhood.merge(query_gene)],
-                                                                   sequence_file_path=query_genome_filename)
-            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
-                                                                                        chromsizes=subject_chromsizes)
+#     for query_gene in tqdm(query_genes):
+#         if len(query_gene.relations['neighbours']) == 0:
+#             query_unalignable.append(query_gene)
+#             continue
+#         syntenies = [grange
+#                      for neighbour in query_gene.relations['neighbours']
+#                      for grange in neighbour.relations['orthologs']]
+#         synteny_list = GenomicRangesList(syntenies,
+#                                          sequence_file_path=subject_genome_filename)
+#         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+#                                                                                        chromsizes=subject_chromsizes)
+#         query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+#         neighbourhood = query_gene.relations['neighbours'][0]
+#         if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+#             query_gene.relations['neighbours'] = GenomicRangesList([neighbourhood.merge(query_gene)],
+#                                                                    sequence_file_path=query_genome_filename)
+#             query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+#                                                                                         chromsizes=subject_chromsizes)
 
-        query_prepared.append(query_gene)
+#         query_prepared.append(query_gene)
 
-    query_prepared_genes = GenomicRangesList(query_prepared,
-                                             sequence_file_path=query_genome_filename)
-    query_unalignable_genes = GenomicRangesList(query_unalignable,
-                                                sequence_file_path=query_genome_filename)
-    return query_prepared_genes, query_unalignable_genes
+#     query_prepared_genes = GenomicRangesList(query_prepared,
+#                                              sequence_file_path=query_genome_filename)
+#     query_unalignable_genes = GenomicRangesList(query_unalignable,
+#                                                 sequence_file_path=query_genome_filename)
+#     return query_prepared_genes, query_unalignable_genes
 
 
 def anchor_short(query_genes, query_anchors, query_genome_filename,
@@ -842,134 +859,134 @@ def anchor_short(query_genes, query_anchors, query_genome_filename,
     return query_prepared_genes, query_unalignable_genes
 
 
-def liftover_long(query_genes, query_genome_filename, subject_genome_filename,
-                  subject_chromsizes, liftover_chains, liftover_origin,
-                  neighbour_dist, merge_dist, flank_dist):
-    from .genomicranges import GenomicRangesList, GenomicRange
+# def liftover_long(query_genes, query_genome_filename, subject_genome_filename,
+#                   subject_chromsizes, liftover_chains, liftover_origin,
+#                   neighbour_dist, merge_dist, flank_dist):
+#     from .genomicranges import GenomicRangesList, GenomicRange
 
-    if liftover_origin == 'query':
-        query_genes.get_neighbours(liftover_chains.query_chains,
-                                   neighbour_dist,
-                                   'neighbours')
-    elif liftover_origin == 'subject':
-        query_genes.get_neighbours(liftover_chains.subject_chains,
-                                   neighbour_dist,
-                                   'neighbours')
-    else:
-        raise ValueError('liftover_chains is not one of "query", "subject".')
+#     if liftover_origin == 'query':
+#         query_genes.get_neighbours(liftover_chains.query_chains,
+#                                    neighbour_dist,
+#                                    'neighbours')
+#     elif liftover_origin == 'subject':
+#         query_genes.get_neighbours(liftover_chains.subject_chains,
+#                                    neighbour_dist,
+#                                    'neighbours')
+#     else:
+#         raise ValueError('liftover_chains is not one of "query", "subject".')
 
-    query_unalignable = list()
-    query_prepared = list()
+#     query_unalignable = list()
+#     query_prepared = list()
 
-    for query_gene in tqdm(query_genes):
-        if len(query_gene.relations['neighbours']) == 0:
-            query_unalignable.append(query_gene)
-            continue
+#     for query_gene in tqdm(query_genes):
+#         if len(query_gene.relations['neighbours']) == 0:
+#             query_unalignable.append(query_gene)
+#             continue
 
-        syntenies = [neighbour.sister
-                     for neighbour in query_gene.relations['neighbours']]
+#         syntenies = [neighbour.sister
+#                      for neighbour in query_gene.relations['neighbours']]
 
-        neighbours = [GenomicRange(chrom=grange.chrom,
-                                   start=grange.start,
-                                   end=grange.end,
-                                   strand=grange.strand,
-                                   name=grange.name,
-                                   genome=query_genome_filename)
-                      for grange in query_gene.relations['neighbours']]
+#         neighbours = [GenomicRange(chrom=grange.chrom,
+#                                    start=grange.start,
+#                                    end=grange.end,
+#                                    strand=grange.strand,
+#                                    name=grange.name,
+#                                    genome=query_genome_filename)
+#                       for grange in query_gene.relations['neighbours']]
 
-        query_gene.relations['neighbours'] = GenomicRangesList(neighbours,
-                                                               sequence_file_path=query_genome_filename)
+#         query_gene.relations['neighbours'] = GenomicRangesList(neighbours,
+#                                                                sequence_file_path=query_genome_filename)
 
-        synteny_list = GenomicRangesList([GenomicRange(chrom=grange.chrom,
-                                                       start=grange.start,
-                                                       end=grange.end,
-                                                       strand=grange.strand,
-                                                       name=grange.name,
-                                                       genome=subject_genome_filename)
-                                          for grange in syntenies],
-                                         sequence_file_path=subject_genome_filename)
+#         synteny_list = GenomicRangesList([GenomicRange(chrom=grange.chrom,
+#                                                        start=grange.start,
+#                                                        end=grange.end,
+#                                                        strand=grange.strand,
+#                                                        name=grange.name,
+#                                                        genome=subject_genome_filename)
+#                                           for grange in syntenies],
+#                                          sequence_file_path=subject_genome_filename)
 
-        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
-                                                                                       chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
-        neighbourhood = query_gene.relations['neighbours'][0]
-        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
-            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
-                                                                                        chromsizes=subject_chromsizes)
+#         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+#                                                                                        chromsizes=subject_chromsizes)
+#         query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+#         neighbourhood = query_gene.relations['neighbours'][0]
+#         if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+#             query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+#                                                                                         chromsizes=subject_chromsizes)
 
-        query_prepared.append(query_gene)
+#         query_prepared.append(query_gene)
 
-    query_prepared_genes = GenomicRangesList(query_prepared,
-                                             sequence_file_path=query_genome_filename)
-    query_unalignable_genes = GenomicRangesList(query_unalignable,
-                                                sequence_file_path=query_genome_filename)
-    return query_prepared_genes, query_unalignable_genes
+#     query_prepared_genes = GenomicRangesList(query_prepared,
+#                                              sequence_file_path=query_genome_filename)
+#     query_unalignable_genes = GenomicRangesList(query_unalignable,
+#                                                 sequence_file_path=query_genome_filename)
+#     return query_prepared_genes, query_unalignable_genes
 
 
-def liftover_short(query_genes, query_genome_filename, subject_genome_filename,
-                   subject_chromsizes, liftover_chains, liftover_origin,
-                   neighbour_dist, merge_dist, flank_dist):
-    from .genomicranges import GenomicRangesList, GenomicRange
+# def liftover_short(query_genes, query_genome_filename, subject_genome_filename,
+#                    subject_chromsizes, liftover_chains, liftover_origin,
+#                    neighbour_dist, merge_dist, flank_dist):
+#     from .genomicranges import GenomicRangesList, GenomicRange
 
-    if liftover_origin == 'query':
-        query_genes.get_neighbours(liftover_chains.query_chains,
-                                   neighbour_dist,
-                                   'neighbours')
-    elif liftover_origin == 'subject':
-        query_genes.get_neighbours(liftover_chains.subject_chains,
-                                   neighbour_dist,
-                                   'neighbours')
-    else:
-        raise ValueError('liftover_chains is not one of "query", "subject".')
+#     if liftover_origin == 'query':
+#         query_genes.get_neighbours(liftover_chains.query_chains,
+#                                    neighbour_dist,
+#                                    'neighbours')
+#     elif liftover_origin == 'subject':
+#         query_genes.get_neighbours(liftover_chains.subject_chains,
+#                                    neighbour_dist,
+#                                    'neighbours')
+#     else:
+#         raise ValueError('liftover_chains is not one of "query", "subject".')
 
-    query_unalignable = list()
-    query_prepared = list()
+#     query_unalignable = list()
+#     query_prepared = list()
 
-    for query_gene in tqdm(query_genes):
-        if len(query_gene.relations['neighbours']) == 0:
-            query_unalignable.append(query_gene)
-            continue
+#     for query_gene in tqdm(query_genes):
+#         if len(query_gene.relations['neighbours']) == 0:
+#             query_unalignable.append(query_gene)
+#             continue
 
-        syntenies = [neighbour.sister
-                     for neighbour in query_gene.relations['neighbours']]
+#         syntenies = [neighbour.sister
+#                      for neighbour in query_gene.relations['neighbours']]
 
-        neighbours = [GenomicRange(chrom=grange.chrom,
-                                   start=grange.start,
-                                   end=grange.end,
-                                   strand=grange.strand,
-                                   name=grange.name,
-                                   genome=query_genome_filename)
-                      for grange in query_gene.relations['neighbours']]
+#         neighbours = [GenomicRange(chrom=grange.chrom,
+#                                    start=grange.start,
+#                                    end=grange.end,
+#                                    strand=grange.strand,
+#                                    name=grange.name,
+#                                    genome=query_genome_filename)
+#                       for grange in query_gene.relations['neighbours']]
 
-        query_gene.relations['neighbours'] = GenomicRangesList(neighbours,
-                                                               sequence_file_path=query_genome_filename)
+#         query_gene.relations['neighbours'] = GenomicRangesList(neighbours,
+#                                                                sequence_file_path=query_genome_filename)
 
-        synteny_list = GenomicRangesList([GenomicRange(chrom=grange.chrom,
-                                                       start=grange.start,
-                                                       end=grange.end,
-                                                       strand=grange.strand,
-                                                       name=grange.name,
-                                                       genome=subject_genome_filename)
-                                          for grange in syntenies],
-                                         sequence_file_path=subject_genome_filename)
+#         synteny_list = GenomicRangesList([GenomicRange(chrom=grange.chrom,
+#                                                        start=grange.start,
+#                                                        end=grange.end,
+#                                                        strand=grange.strand,
+#                                                        name=grange.name,
+#                                                        genome=subject_genome_filename)
+#                                           for grange in syntenies],
+#                                          sequence_file_path=subject_genome_filename)
 
-        query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
-                                                                                       chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
-        neighbourhood = query_gene.relations['neighbours'][0]
-        if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
-            query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
-                                                                                        chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
-                                                               sequence_file_path=query_genome_filename)
+#         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
+#                                                                                        chromsizes=subject_chromsizes)
+#         query_gene.relations['neighbours'] = query_gene.relations['neighbours'].close_merge(float('inf'))
+#         neighbourhood = query_gene.relations['neighbours'][0]
+#         if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
+#             query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
+#                                                                                         chromsizes=subject_chromsizes)
+#         query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+#                                                                sequence_file_path=query_genome_filename)
 
-        query_prepared.append(query_gene)
+#         query_prepared.append(query_gene)
 
-    query_prepared_genes = GenomicRangesList(query_prepared,
-                                             sequence_file_path=query_genome_filename)
-    query_unalignable_genes = GenomicRangesList(query_unalignable,
-                                                sequence_file_path=query_genome_filename)
-    return query_prepared_genes, query_unalignable_genes
+#     query_prepared_genes = GenomicRangesList(query_prepared,
+#                                              sequence_file_path=query_genome_filename)
+#     query_unalignable_genes = GenomicRangesList(query_unalignable,
+#                                                 sequence_file_path=query_genome_filename)
+#     return query_prepared_genes, query_unalignable_genes
 
 
 def liftover_lift(query_genes, query_genome_filename, subject_genome_filename,
@@ -997,7 +1014,7 @@ def liftover_lift(query_genes, query_genome_filename, subject_genome_filename,
         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
                                                                                        chromsizes=subject_chromsizes)
         query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
-                                                                sequence_file_path=query_genome_filename)
+                                                               sequence_file_path=query_genome_filename)
         query_prepared.append(query_gene)
 
     query_prepared_genes = GenomicRangesList(query_prepared,
@@ -1049,7 +1066,7 @@ def get_alignments():
                         type=str,
                         nargs='?',
                         default=None,
-                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '\
+                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
                              'Must contain one catching group.')
     parser.add_argument('-query_anchors',
                         type=str,
@@ -1059,7 +1076,7 @@ def get_alignments():
                         type=str,
                         nargs='?',
                         default=None,
-                        help='Regular expression for extracting gene names from the query anchors annotation (.gff and .gtf only). '\
+                        help='Regular expression for extracting gene names from the query anchors annotation (.gff and .gtf only). '
                              'Must contain one catching group.')
     parser.add_argument('-query_genome',
                         type=str,
@@ -1074,7 +1091,7 @@ def get_alignments():
                         type=str,
                         nargs='?',
                         default=None,
-                        help='Regular expression for extracting gene names from the subject anchors annotation (.gff and .gtf only). '\
+                        help='Regular expression for extracting gene names from the subject anchors annotation (.gff and .gtf only). '
                              'Must contain one catching group.')
     parser.add_argument('-subject_genome',
                         type=str,
@@ -1202,8 +1219,8 @@ def get_alignments():
         subject_genome = FastaSeqFile(subject_genome_filename)
         subject_chromsizes = subject_genome.chromsizes
 
-        if program_mode in ['anchor_long', 'anchor_short']:
-
+        # if program_mode in ['anchor_long', 'anchor_short']:
+        if program_mode == "anchor_short":
             with open(query_anchors_filename, 'r') as infile:
                 query_anchors = parse_annotation(infile,
                                                  sequence_file_path=query_genome_filename,
@@ -1225,14 +1242,15 @@ def get_alignments():
                             subject_anchors, subject_genome_filename, subject_chromsizes,
                             ortho_map, neighbour_dist, merge_dist, flank_dist]
 
-            if program_mode == 'anchor_long':
-                query_prepared_genes, query_unalignable_genes = anchor_long(*process_args)
-            elif program_mode == 'anchor_short':
-                query_prepared_genes, query_unalignable_genes = anchor_short(*process_args)
-            else:
-                raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
+            # if program_mode == 'anchor_long':
+            #     query_prepared_genes, query_unalignable_genes = anchor_long(*process_args)
+            # elif program_mode == 'anchor_short':
+            query_prepared_genes, query_unalignable_genes = anchor_short(*process_args)
+            # else:
+            #     raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
 
-        elif program_mode in ['liftover_long', 'liftover_short', 'liftover_lift']:
+        # elif program_mode in ['liftover_long', 'liftover_short', 'liftover_lift']:
+        elif program_mode == "liftover_lift":
             with open(liftover_chains_filename, 'r') as infile:
                 liftover_chains = LiftOverChains.parse_chain_file(infile)
 
@@ -1240,21 +1258,21 @@ def get_alignments():
             pbar.postfix = cmd_hints[cmd_point]
             pbar.update()
 
-            if program_mode in ['liftover_long', 'liftover_short']:
-                process_args = [query_genes, query_genome_filename, subject_genome_filename,
-                                subject_chromsizes, liftover_chains, liftover_origin,
-                                neighbour_dist, merge_dist, flank_dist]
-                if program_mode == 'liftover_long':
-                    query_prepared_genes, query_unalignable_genes = liftover_long(*process_args)
-                if program_mode == 'liftover_short':
-                    query_prepared_genes, query_unalignable_genes = liftover_short(*process_args)
-            elif program_mode == 'liftover_lift':
-                process_args = [query_genes, query_genome_filename, subject_genome_filename,
-                                subject_chromsizes, liftover_chains, liftover_origin,
-                                merge_dist, flank_dist, min_ratio]
-                query_prepared_genes, query_unalignable_genes = liftover_lift(*process_args)
-            else:
-                raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
+            # if program_mode in ['liftover_long', 'liftover_short']:
+            #     process_args = [query_genes, query_genome_filename, subject_genome_filename,
+            #                     subject_chromsizes, liftover_chains, liftover_origin,
+            #                     neighbour_dist, merge_dist, flank_dist]
+            #     if program_mode == 'liftover_long':
+            #         query_prepared_genes, query_unalignable_genes = liftover_long(*process_args)
+            #     if program_mode == 'liftover_short':
+            #         query_prepared_genes, query_unalignable_genes = liftover_short(*process_args)
+            # elif program_mode == 'liftover_lift':
+            process_args = [query_genes, query_genome_filename, subject_genome_filename,
+                            subject_chromsizes, liftover_chains, liftover_origin,
+                            merge_dist, flank_dist, min_ratio]
+            query_prepared_genes, query_unalignable_genes = liftover_lift(*process_args)
+            # else:
+            #     raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
         else:
             raise ValueError("program_mode is not one of ['anchor_long', 'anchor_short', 'liftover_long', 'liftover_short', 'liftover_lift']")
 
@@ -1320,22 +1338,22 @@ def get_alignments():
 def build(query_gene_alignments, query_bg, fitter, fdr, pval_threshold):
     try:
         background = fitter(query_bg)
-        if not fdr:
-            score_threshold = background.isf(pval_threshold)
+        score_threshold = background.isf(pval_threshold)
         aligned = False
         query_orthologs = list()
         subject_orthologs = list()
         query_dropped = list()
         for alignment in query_gene_alignments:
+            # Applies to FDR also to reduce memory consumption.
+            alignment.filter_by_score(score_threshold)
+            # Heavily optimized FDR_BH procedure.
             if fdr:
                 pvals = background.sf([hsp.score
-                                       for hsp in alignment.HSPs])
-                qvals = pvals * len(pvals) / ranking(pvals)
+                                        for hsp in alignment.HSPs])
+                total_hsps = len(alignment._all_HSPs)
+                retain = pvals <= total_hsps * pval_threshold / ranking(pvals)
                 del pvals
-                alignment.filter_by_array(qvals, pval_threshold, side='l')
-                del qvals
-            else:
-                alignment.filter_by_score(score_threshold)
+                alignment.filter_by_bool_array(retain)
             alignment.srange.name = alignment.qrange.name
             result = alignment.best_chain()
             try:
