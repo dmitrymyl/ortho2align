@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from numpy.lib.shape_base import hsplit
 from .utils import numberize
 
 
@@ -489,7 +488,7 @@ class Alignment:
             sname (str): subject sequence name (default: None).
             qstrand (str): query sequence name.
                 One of "+", "-", "." (default: ".").
-            sstrand (str): subject sequence name. 
+            sstrand (str): subject sequence name.
                 One of "+", "-", "." (default: ".").
             start_type (int): chromosome start coordinate.
                 One of 0, 1 (default: 1).
@@ -637,7 +636,7 @@ class Alignment:
     def filter_by_array(self, array, score, side='g'):
         """Filters HSPs by corresponding values in array.
 
-        There is a corresponding value in `array` for 
+        There is a corresponding value in `array` for
         every HSP in `self.HSPs`. The method filters only
         those HSPs, which corresponding value is greater/less/e.t.c.
         than the `score` (the type of comparison is specified by `side`).
@@ -660,12 +659,12 @@ class Alignment:
             ValueError: in case `len(array) != len(self.HSPs)`.
         """
         if len(array) != len(self.HSPs):
-            raise ValueError(f'Length of provided array is not equal to the '\
+            raise ValueError(f'Length of provided array is not equal to the '
                              f'amount of HSPs: {len(array)} vs {len(self.HSPs)}.')
         self.HSPs = [hsp
                      for hsp, value in zip(self.HSPs, array)
                      if compare(value, score, side)]
-    
+
     def filter_by_bool_array(self, array):
         """Filters HSPs by True/False values in the array.
 
@@ -677,7 +676,7 @@ class Alignment:
             ValueError: in case `len(array) != len(self.HSPs)`.
         """
         if len(array) != len(self.HSPs):
-            raise ValueError(f'Length of provided array is not equal to the '\
+            raise ValueError(f'Length of provided array is not equal to the '
                              f'amount of HSPs: {len(array)} vs {len(self.HSPs)}.')
         self.HSPs = [hsp
                      for hsp, indicator in zip(self.HSPs, array)

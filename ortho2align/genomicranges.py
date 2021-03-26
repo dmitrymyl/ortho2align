@@ -551,7 +551,7 @@ class BaseGenomicRange:
         """Calculates fraction of `self` overlapped with `other`.
 
         Returns the ratio of the length of the intersection
-        of two genomic ranges to the length of `self`. In case division 
+        of two genomic ranges to the length of `self`. In case division
         by zero encountered, returns zero.
 
         Args:
@@ -1155,7 +1155,7 @@ class GenomicRangesAlignmentChain(AlignmentChain):
         if len(self.HSPs) == 0:
             raise ValueError('No HSPs were found in the AlignmentChain.')
         if self.alignment.relative:
-            raise ValueError('Alignment coordinates are not translated to genomic coordinates. '\
+            raise ValueError('Alignment coordinates are not translated to genomic coordinates. '
                              'Use GenomicRangesAlignmentChain.alignment.to_genomic().')
         q_side = self._prepare_side(side='q')
         s_side = self._prepare_side(side='s')
@@ -1846,7 +1846,7 @@ class GenomicRangesList(BaseGenomicRangesList):
         """Initializes GenomicRangesList instance.
 
         Args:
-            collection (iterable of `GenomicRange`): A collection of 
+            collection (iterable of `GenomicRange`): A collection of
                 `GenomicRange` instances.
             sequence_file_path (str, SequencePath): A path to the
                 corresponding genome file in fasta format.
