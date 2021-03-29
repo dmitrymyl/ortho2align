@@ -2079,9 +2079,9 @@ class GenomicRangesList(BaseGenomicRangesList):
                                    desc='Getting fasta',
                                    unit='grange',
                                    disable=not verbose):
-                    grange.sequence_file_path = outdir / (str(outfileprefix) +
-                                                          grange.sequence_header +
-                                                          '.fasta')
+                    grange.sequence_file_path = outdir / (str(outfileprefix)
+                                                          + grange.sequence_header
+                                                          + '.fasta')
                     with open(grange.sequence_file_path, 'w') as output:
                         self.sequence_file.get_fasta_by_coord(grange,
                                                               output,

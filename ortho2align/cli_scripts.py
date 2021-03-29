@@ -5,7 +5,7 @@ from .pipeline import (cache_orthodb_xrefs, get_orthodb_map,
                        get_orthodb_by_taxid, get_liftover_map,
                        bg_from_inter_ranges, estimate_background,
                        get_alignments, build_orthologs, get_best_orthologs,
-                       benchmark_orthologs, run_pipeline)
+                       benchmark_orthologs, annotating_pipeline)
 
 
 def ortho2align():
@@ -47,7 +47,7 @@ def ortho2align():
 
     Run ortho2align <command> -h for help on a specific command.
     '''
-    commands = {'run_pipeline': run_pipeline,
+    commands = {'run_pipeline': annotating_pipeline,
                 'cache_orthodb_xrefs': cache_orthodb_xrefs,
                 'get_orthodb_map': get_orthodb_map,
                 'get_orthodb_by_taxid': get_orthodb_by_taxid,

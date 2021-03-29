@@ -115,8 +115,8 @@ def calc_ortholog_metrics(granges_list,
             tn = [1]
             tp, fp, fn = [[0] for _ in range(3)]
             ji, oc, qf, ff, rf, cf = [[] for _ in range(6)]
-        elif len(grange.relations[found_subject_relname]) > 0 and \
-             len(grange.relations[real_relname]) > 0:
+        elif (len(grange.relations[found_subject_relname]) > 0
+              and len(grange.relations[real_relname]) > 0):
             if tp_mode == 'all':
                 tp = [sum([len(found_grange.relations['trace'])
                            for found_grange in grange.relations[found_subject_relname]])]

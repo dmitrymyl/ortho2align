@@ -565,7 +565,7 @@ bg_from_inter_ranges_parser.add_argument('-name_regex',
                                          default=None,
                                          help='Regular expression for extracting gene names from the genes annotation (.gff and .gtf only). '
                                               'Must contain one catching group.')
-bg_from_inter_ranges_parser.add_argument('-observations',
+bg_from_inter_ranges_parser.add_argument('-sample_size',
                                          type=int,
                                          nargs='?',
                                          required=True,
@@ -581,7 +581,7 @@ bg_from_inter_ranges_parser.add_argument('-seed',
                                          help='random seed number for sampling intergenic regions.')
 
 
-def bg_from_inter_ranges(genes_filename, name_regex, observations, output_filename, seed):
+def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filename, seed):
     import random
 
     from .genomicranges import BaseGenomicRangesList
@@ -593,11 +593,11 @@ def bg_from_inter_ranges(genes_filename, name_regex, observations, output_filena
         genes = parse_annotation(infile, name_regex=name_regex)
 
     inter_genes = genes.inter_ranges()
-    if len(inter_genes) < observations:
-        raise ValueError(f'The number of observations ({observations}) '
+    if len(inter_genes) < sample_size:
+        raise ValueError(f'The number of observations ({sample_size}) '
                          'must be less than the number of intergenic '
                          f'regions ({len(inter_genes)}) derived from genes')
-    samples = BaseGenomicRangesList(random.sample(inter_genes, k=observations))
+    samples = BaseGenomicRangesList(random.sample(inter_genes, k=sample_size))
 
     with open(output_filename, 'w') as outfile:
         samples.to_bed6(outfile)
@@ -611,16 +611,16 @@ def _align_two_ranges_blast(query, subject, **kwargs):
                                   'subject': subject})
 
 
-def _estimate_bg_for_single_query(query, bg_ranges, word_size, output_name, sample_size=1000, seed=0):
+def _estimate_bg_for_single_query(query, bg_ranges, word_size, output_name, observations=1000, seed=0):
     all_scores = list()
     for bg_range in bg_ranges:
         alignment = _align_two_ranges_blast(query, bg_range, word_size=word_size)
         scores = [hsp.score for hsp in alignment.HSPs]
         all_scores += scores
     score_size = len(all_scores)
-    if score_size > sample_size:
+    if score_size > observations:
         random.seed(seed)
-        all_scores = random.sample(all_scores, sample_size)
+        all_scores = random.sample(all_scores, observations)
     with open(output_name, 'w') as outfile:
         json.dump(all_scores, outfile)
     return output_name, score_size
@@ -670,7 +670,7 @@ estimate_background_parser.add_argument('-word_size',
                                         nargs='?',
                                         default=6,
                                         help='-word_size argument to use in blastn search.')
-estimate_background_parser.add_argument('-sample_size',
+estimate_background_parser.add_argument('-observations',
                                         type=int,
                                         nargs='?',
                                         default=1000,
@@ -687,7 +687,7 @@ estimate_background_parser.add_argument('--silent',
 
 def estimate_background(query_genes, bg_ranges, query_genome,
                         subject_genome, outdir, cores, name_regex,
-                        word_size, sample_size, seed, silent=False):
+                        word_size, observations, seed, silent=False):
     from tempfile import TemporaryDirectory
 
     from .genomicranges import FastaSeqFile, SequencePath
@@ -743,7 +743,7 @@ def estimate_background(query_genes, bg_ranges, query_genome,
                      bg_ranges,
                      word_size,
                      os.path.join(outdir, f"{query.name}.json"),
-                     sample_size,
+                     observations,
                      seed)
                     for query in query_genes)
             try:
@@ -964,12 +964,12 @@ get_alignments_parser.add_argument('--silent',
 def get_alignments(mode,
                    query_genes,
                    query_genome,
-                   query_anchors,
-                   subject_anchors,
                    subject_genome,
-                   ortho_map,
-                   liftover_chains,
                    outdir,
+                   query_anchors=None,
+                   subject_anchors=None,
+                   ortho_map=None,
+                   liftover_chains=None,
                    query_name_regex=None,
                    query_anchors_name_regex=None,
                    subject_anchors_name_regex=None,
@@ -998,18 +998,6 @@ def get_alignments(mode,
     ortho_map_filename = ortho_map
     liftover_chains_filename = liftover_chains
 
-    # if program_mode == 'lift':
-    #     if liftover_chains_filename is None:
-    #         parser.error(f'You must supply -liftover_chains with -mode {program_mode}.')
-
-    # if program_mode == 'anchor':
-    #     if query_anchors_filename is None:
-    #         parser.error(f'You must supply -query_anchors with -mode {program_mode}.')
-    #     if subject_anchors_filename is None:
-    #         parser.error(f'You must supply -subject_anchors with -mode {program_mode}.')
-    #     if ortho_map_filename is None:
-    #         parser.error(f'You must supply -ortho_map with -mode {program_mode}.')
-
     cmd_hints = ['reading annotations...',
                  'mapping orthology and neighbour relations, composing syntenies...',
                  'getting sequences...',
@@ -1031,6 +1019,11 @@ def get_alignments(mode,
         subject_chromsizes = subject_genome.chromsizes
 
         if program_mode == "anchor":
+            if any([arg is None
+                    for arg in (query_anchors_filename,
+                                subject_anchors_filename,
+                                ortho_map_filename)]):
+                raise ValueError('Arguments query_anchors, subject_anchors, ortho_map cannot be None for mode anchor.')
             with open(query_anchors_filename, 'r') as infile:
                 query_anchors = parse_annotation(infile,
                                                  sequence_file_path=query_genome_filename,
@@ -1058,7 +1051,8 @@ def get_alignments(mode,
             cmd_point += 1
             pbar.postfix = cmd_hints[cmd_point]
             pbar.update()
-
+            if liftover_chains_filename is None:
+                raise ValueError('Argument liftover_chains cannot be None for mode lift.')
             process_args = [query_genes, query_genome_filename, subject_genome_filename,
                             subject_chromsizes, liftover_chains_filename,
                             merge_dist, flank_dist, min_ratio]
@@ -1447,6 +1441,59 @@ def get_best_orthologs(query_orthologs,
         json.dump(the_map, outfile)
 
 
+annotate_orthologs_parser = argparse.ArgumentParser(description='Annotate found orthologs with provided annotation of subject genome lncRNAs.',
+                                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+annotate_orthologs_parser.add_argument('-subject_orthologs',
+                                       type=str,
+                                       nargs='?',
+                                       required=True,
+                                       help='subject orthologs filename generated with get_best_orthologs.')
+annotate_orthologs_parser.add_argument('-subject_annotation',
+                                       type=str,
+                                       nargs='?',
+                                       required=True,
+                                       help='subject genome lncRNA annotation filename.')
+annotate_orthologs_parser.add_argument('-subject_name_regex',
+                                       type=str,
+                                       nargs='?',
+                                       default=None,
+                                       help='Regular expression for extracting gene names from the subject genome lncRNA annotation (.gff and .gtf only). '
+                                            'Must contain one catching group.')
+annotate_orthologs_parser.add_argument('-output',
+                                       type=str,
+                                       nargs='?',
+                                       required=True,
+                                       help='output filename.')
+
+
+def annotate_orthologs(subject_orthologs,
+                       subject_annotation,
+                       output,
+                       subject_name_regex=None):
+
+    from .parsing import parse_annotation
+
+    subject_orthologs_filename = subject_orthologs
+    subject_annotation_filename = subject_annotation
+    output_filename = output
+
+    with open(subject_orthologs_filename, 'r') as infile:
+        subject_orthologs = parse_annotation(infile)
+    with open(subject_annotation_filename, 'r') as infile:
+        subject_annotation = parse_annotation(infile,
+                                              name_regex=subject_name_regex)
+
+    subject_orthologs.get_neighbours(subject_annotation,
+                                     relation='ortholog')
+
+    name_map = {subject_ortholog.name: [grange.name
+                                        for grange in subject_ortholog.relations['ortholog']]
+                for subject_ortholog in subject_orthologs}
+    with open(output_filename, 'w') as outfile:
+        for ortholog_name, annotation_names in name_map.items():
+            outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
+
+
 benchmark_orthologs_parser = argparse.ArgumentParser(description='Compare found orthologs against real orthologs and calculate several performance metrics.',
                                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 benchmark_orthologs_parser.add_argument('-query_genes',
@@ -1599,7 +1646,295 @@ def benchmark_orthologs(query_genes,
         json.dump(metrics, outfile)
 
 
-def run_pipeline(config):
-    # validate the config
+annotating_pipeline_parser = argparse.ArgumentParser(prog='annotating_pipeline',
+                                                     description='',
+                                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+annotating_pipeline_general_parser = argparse.ArgumentParser(add_help=False,
+                                                             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+input_group = annotating_pipeline_general_parser.add_argument_group('Input data')
+input_group.add_argument('-query_genes',
+                         type=str,
+                         nargs='?',
+                         required=True,
+                         help='query genomic ranges.')
+input_group.add_argument('-query_genome',
+                         type=str,
+                         nargs='?',
+                         required=True,
+                         help='Query species genome filename (fasta format).')
+input_group.add_argument('-subject_annotation',
+                         type=str,
+                         nargs='?',
+                         required=True,
+                         help='subject species lncRNA annotation.')
+input_group.add_argument('-subject_genome',
+                         type=str,
+                         nargs='?',
+                         required=True,
+                         help='Subject species genome filename (fasta format).')
+input_group.add_argument('-query_name_regex',
+                         type=str,
+                         nargs='?',
+                         default=None,
+                         help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
+                              'Must contain one catching group.')
+input_group.add_argument('-subject_name_regex',
+                         type=str,
+                         nargs='?',
+                         default=None,
+                         help='Regular expression for extracting gene names from the subject lncRNA annotation (.gff and .gtf only). '
+                              'Must contain one catching group.')
+
+output_group = annotating_pipeline_general_parser.add_argument_group('Output')
+output_group.add_argument('-outdir',
+                          type=str,
+                          nargs='?',
+                          required=True,
+                          help='output directory name.')
+
+processing_group = annotating_pipeline_general_parser.add_argument_group('Processing')
+processing_group.add_argument('-cores',
+                              type=int,
+                              nargs='?',
+                              default=1,
+                              help='Number of cores to use for multiprocessing.')
+processing_group.add_argument('-word_size',
+                              type=int,
+                              nargs='?',
+                              default=6,
+                              help='-word_size argument to use in blastn search.')
+processing_group.add_argument('-seed',
+                              type=int,
+                              nargs='?',
+                              default=0,
+                              help='random seed for sampling procedures.')
+processing_group.add_argument('--silent',
+                              action='store_true',
+                              help='silent CLI if included.')
+
+bg_ranges_group = annotating_pipeline_general_parser.add_argument_group('Making background ranges')
+bg_ranges_group.add_argument('-sample_size',
+                             type=int,
+                             nargs='?',
+                             default=200,
+                             help='Number of background regions to generate.')
+
+estimate_background_group = annotating_pipeline_general_parser.add_argument_group('Estimating background')
+estimate_background_group.add_argument('-observations',
+                                       type=int,
+                                       nargs='?',
+                                       default=1000,
+                                       help='maximum number of background scores to retain for each query gene.')
+
+build_orthologs_group = annotating_pipeline_general_parser.add_argument_group('Building orthologs')
+build_orthologs_group.add_argument('-fitting',
+                                   type=str,
+                                   nargs='?',
+                                   choices=['kde', 'hist'],
+                                   default='kde',
+                                   help='approach to fit background distribution (kde: KDE, hist: Histogram).')
+build_orthologs_group.add_argument('-threshold',
+                                   type=float,
+                                   nargs='?',
+                                   default=0.05,
+                                   help='p-value threshold to filter HSPs by score.')
+build_orthologs_group.add_argument('--fdr',
+                                   action='store_true',
+                                   help='use FDR correction for HSP scores if included.')
+build_orthologs_group.add_argument('-timeout',
+                                   type=int,
+                                   nargs='?',
+                                   default=None,
+                                   help='Time in seconds to terminate a single process of refinement of a single alignment.')
+
+get_best_orthologs_group = annotating_pipeline_general_parser.add_argument_group('Getting best orthologs')
+get_best_orthologs_group.add_argument('-value',
+                                      type=str,
+                                      nargs='?',
+                                      choices=['total_length', 'block_count', 'block_length', 'weight'],
+                                      required=True,
+                                      help='which value of orthologs to use in case of multiple orthologs.')
+get_best_orthologs_group.add_argument('-function',
+                                      type=str,
+                                      nargs='?',
+                                      choices=['max', 'min'],
+                                      required=True,
+                                      help='orthologs with which value to select in case of multiple orthologs.')
+
+annotating_pipeline_mode_subparsers = annotating_pipeline_parser.add_subparsers()
+lift_parser = annotating_pipeline_mode_subparsers.add_parser('lift',
+                                                             parents=[annotating_pipeline_general_parser],
+                                                             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+lift_input_group = lift_parser.add_argument_group('Input for alignments')
+lift_input_group.add_argument('-liftover_chains',
+                              type=str,
+                              nargs='?',
+                              required=True,
+                              help='liftover .chain filename')
+lift_get_alignments_group = lift_parser.add_argument_group('Getting alignments')
+lift_get_alignments_group.add_argument('-min_ratio',
+                                       type=float,
+                                       nargs='?',
+                                       default=0.05,
+                                       help='minimal ratio of gene overlapping liftover chain to consider it for liftover')
+lift_get_alignments_group.add_argument('-merge_dist',
+                                       type=int,
+                                       nargs='?',
+                                       default=0,
+                                       help='how distant two subject anchors can be to be merged into one syntenic region')
+lift_get_alignments_group.add_argument('-flank_dist',
+                                       type=int,
+                                       nargs='?',
+                                       default=0,
+                                       help='how many nts to flank syntenic regions in subject species')
+
+anchor_parser = annotating_pipeline_mode_subparsers.add_parser('anchor',
+                                                               parents=[annotating_pipeline_general_parser],
+                                                               formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+anchor_input_group = anchor_parser.add_argument_group('Input for alignments')
+anchor_input_group.add_argument('-query_anchors',
+                                type=str,
+                                nargs='?',
+                                required=True,
+                                help='query anchors annotation filename')
+anchor_input_group.add_argument('-subject_anchors',
+                                type=str,
+                                nargs='?',
+                                required=True,
+                                help='subject anchors annotation filename')
+anchor_input_group.add_argument('-ortho_map',
+                                type=str,
+                                nargs='?',
+                                required=True,
+                                help='orthology map filename')
+anchor_input_group.add_argument('-query_anchors_name_regex',
+                                type=str,
+                                nargs='?',
+                                default=None,
+                                help='Regular expression for extracting gene names from the query anchors annotation (.gff and .gtf only). '
+                                     'Must contain one catching group.')
+anchor_input_group.add_argument('-subject_anchors_name_regex',
+                                type=str,
+                                nargs='?',
+                                default=None,
+                                help='Regular expression for extracting gene names from the subject anchors annotation (.gff and .gtf only). '
+                                     'Must contain one catching group.')
+anchor_get_alignments_group = anchor_parser.add_argument_group('Getting alignments')
+anchor_get_alignments_group.add_argument('-neighbour_dist',
+                                         type=int,
+                                         nargs='?',
+                                         default=0,
+                                         help='distance to seek anchor neighbours of query genes')
+anchor_get_alignments_group.add_argument('-merge_dist',
+                                         type=int,
+                                         nargs='?',
+                                         default=0,
+                                         help='how distant two subject anchors can be to be merged into one syntenic region')
+anchor_get_alignments_group.add_argument('-flank_dist',
+                                         type=int,
+                                         nargs='?',
+                                         default=0,
+                                         help='how many nts to flank syntenic regions in subject species')
+
+
+def annotating_pipeline(query_genes,
+                        query_genome,
+                        subject_annotation,
+                        subject_genome,
+                        outdir,
+                        query_anchors=None,
+                        subject_anchors=None,
+                        ortho_map=None,
+                        liftover_chains=None,
+                        query_anchors_name_regex=None,
+                        subject_anchors_name_regex=None,
+                        query_name_regex=None,
+                        subject_name_regex=None,
+                        sample_size=200,
+                        observations=1000,
+                        mode='lift',
+                        min_ratio=0.05,
+                        neighbour_dist=0,
+                        merge_dist=0,
+                        flank_dist=0,
+                        fitting='kde',
+                        threshold=0.05,
+                        fdr=False,
+                        timeout=None,
+                        value='total_length',
+                        function='max',
+                        cores=1,
+                        word_size=6,
+                        seed=0,
+                        silent=False):
     # combine functions above with data from the config
-    pass
+    bg_filename = os.path.join(outdir, 'inter_bg.bed')
+    bg_outdir = os.path.join(outdir, 'bg_files')
+    align_outdir = os.path.join(outdir, 'align_files')
+    query_orthologs = os.path.join(outdir, 'query_orthologs.bed')
+    subject_orthologs = os.path.join(outdir, 'subject_orthologs.bed')
+    query_dropped = os.path.join(outdir, 'query_dropped.bed')
+    query_exceptions = os.path.join(outdir, 'query_exceptions.bed')
+    best_query_orthologs = os.path.join(outdir, 'best.query_orthologs.bed')
+    best_subject_orthologs = os.path.join(outdir, 'best.subject_orthologs.bed')
+    the_map = os.path.join(outdir, 'the_map.json')
+    annotation_output = os.path.join(outdir, 'best.ortholog_annotation.tsv')
+
+    bg_from_inter_ranges(genes_filename=subject_annotation,
+                         name_regex=subject_name_regex,
+                         sample_size=sample_size,
+                         output_filename=bg_filename,
+                         seed=seed)
+    estimate_background(query_genes=query_genes,
+                        bg_ranges=bg_filename,
+                        query_genome=query_genome,
+                        subject_genome=subject_genome,
+                        outdir=bg_outdir,
+                        cores=cores,
+                        name_regex=query_name_regex,
+                        word_size=word_size,
+                        observations=observations,
+                        seed=seed,
+                        silent=silent)
+    get_alignments(mode=mode,
+                   query_genes=query_genes,
+                   query_genome=query_genome,
+                   subject_genome=subject_genome,
+                   outdir=align_outdir,
+                   query_anchors=query_anchors,
+                   subject_anchors=subject_anchors,
+                   ortho_map=ortho_map,
+                   liftover_chains=liftover_chains,
+                   query_name_regex=query_name_regex,
+                   query_anchors_name_regex=query_anchors_name_regex,
+                   subject_anchors_name_regex=subject_anchors_name_regex,
+                   cores=cores,
+                   min_ratio=min_ratio,
+                   neighbour_dist=neighbour_dist,
+                   merge_dist=merge_dist,
+                   flank_dist=flank_dist,
+                   word_size=word_size,
+                   silent=silent)
+    build_orthologs(alignments=align_outdir,
+                    background=bg_outdir,
+                    fitting=fitting,
+                    query_orthologs=query_orthologs,
+                    subject_orthologs=subject_orthologs,
+                    query_dropped=query_dropped,
+                    query_exceptions=query_exceptions,
+                    threshold=threshold,
+                    fdr=fdr,
+                    cores=cores,
+                    timeout=timeout,
+                    silent=silent)
+    get_best_orthologs(query_orthologs=query_orthologs,
+                       subject_orthologs=subject_orthologs,
+                       value=value,
+                       function=function,
+                       outfile_query=best_query_orthologs,
+                       outfile_subject=best_subject_orthologs,
+                       outfile_map=the_map)
+    annotate_orthologs(subject_orthologs=best_subject_orthologs,
+                       subject_annotation=subject_annotation,
+                       output=annotation_output,
+                       subject_name_regex=subject_name_regex)
