@@ -1029,7 +1029,10 @@ def annotate_orthologs(subject_orthologs,
                 for subject_ortholog in subject_orthologs}
     with open(output_filename, 'w') as outfile:
         for ortholog_name, annotation_names in name_map.items():
-            outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
+            if annotation_names:
+                outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
+            else:
+                outfile.write(f"{ortholog_name}\tNotAnnotated\n")
 
 
 def benchmark_orthologs(query_genes,
@@ -1136,6 +1139,8 @@ def run_pipeline(query_genes,
                  seed=0,
                  silent=False,
                  annotate=False):
+    if not os.path.exists(outdir):
+        os.mkdir(outdir)
     bg_filename = os.path.join(outdir, 'inter_bg.bed')
     bg_outdir = os.path.join(outdir, 'bg_files')
     align_outdir = os.path.join(outdir, 'align_files')
