@@ -465,6 +465,24 @@ def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filenam
         pbar.update()
 
 
+def bg_from_shuffled_ranges(genes_filename, genome_filename, name_regex, sample_size, output_filename, seed):
+    from .parsing import parse_annotation
+
+    with open(genes_filename, 'r') as infile:
+        genes = parse_annotation(infile,
+                                 name_regex=name_regex,
+                                 sequence_file_path=genome_filename)
+    if len(genes) < sample_size:
+        raise ValueError(f'The number of observations ({sample_size}) '
+                         'must be less than the number of genes '
+                         f'({len(genes)})')
+    shuffled_genes = genes.shuffle_inside_chrom(seed=seed)
+    sample_shuffled_genes = shuffled_genes.sample_granges(n=sample_size, seed=seed)
+
+    with open(output_filename, 'w') as outfile:
+        sample_shuffled_genes.to_bed6(outfile)
+
+
 def _align_two_ranges_blast(query, subject, **kwargs):
     try:
         return query.align_blast(subject, **kwargs)
@@ -473,13 +491,39 @@ def _align_two_ranges_blast(query, subject, **kwargs):
                                   'subject': subject})
 
 
-def _estimate_bg_for_single_query(query, bg_ranges, word_size, output_name, observations=1000, seed=0):
+def _align_range_seqfile(query, seqfile, **kwargs):
+    try:
+        return query.align_blast_seqfile(seqfile, **kwargs)
+    except Exception as e:
+        raise ExceptionLogger(e, {'query': query,
+                                  'seqfile': seqfile})
+
+
+def _estimate_bg_for_single_query_blast(query, bg_ranges, word_size, output_name, observations=1000, seed=0):
     scores = list()
     try:
         for bg_range in bg_ranges:
             alignment = _align_two_ranges_blast(query, bg_range, word_size=word_size)
             alignment_scores = [hsp.score for hsp in alignment.HSPs]
             scores += alignment_scores
+        score_size = len(scores)
+        if score_size > observations:
+            random.seed(seed)
+            scores = random.sample(scores, observations)
+        with open(output_name, 'w') as outfile:
+            json.dump(scores, outfile)
+        return output_name, score_size
+    except Exception as e:
+        raise ExceptionLogger(e, query)
+
+
+def _estimate_bg_for_single_query_seqfile(query, seqfile, word_size, output_name, observations=1000, seed=0):
+    try:
+        alignment = _align_range_seqfile(query,
+                                         seqfile,
+                                         word_size=word_size,
+                                         max_target_seqs=observations)
+        scores = [hsp.score for hsp in alignment.HSPs]
         score_size = len(scores)
         if score_size > observations:
             random.seed(seed)
@@ -529,16 +573,21 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
             query_genes.get_fasta(outfileprefix='query_',
                                   outdir=tempdir,
                                   chromsizes=query_chromsizes)
-            bg_ranges.get_fasta(outfileprefix='bg_',
-                                outdir=tempdir,
-                                chromsizes=subject_chromsizes)
+            # bg_ranges.get_fasta(outfileprefix='bg_',
+            #                     outdir=tempdir,
+            #                     chromsizes=subject_chromsizes)
+            bg_seqfile = bg_ranges.get_fasta(outfileprefix='bg_seqfile',
+                                             outdir=tempdir,
+                                             chromsizes=subject_chromsizes,
+                                             mode='bulk')
 
             pbar.update()
 
             if not os.path.exists(outdir):
                 os.mkdir(outdir)
             data = ((query,
-                     bg_ranges,
+                    #  bg_ranges,
+                     bg_seqfile,
                      word_size,
                      os.path.join(outdir, f"{query.name}.json"),
                      observations,
@@ -546,7 +595,8 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
                     for query in query_genes)
             try:
                 with NonExceptionalProcessPool(cores, verbose=(not silent)) as p:
-                    results, exceptions = p.starmap_async(_estimate_bg_for_single_query, data)
+                    # results, exceptions = p.starmap_async(_estimate_bg_for_single_query_blast, data)
+                    results, exceptions = p.starmap_async(_estimate_bg_for_single_query_seqfile, data)
                 if len(exceptions) > 0:
                     pbar.write(f'{len(exceptions)} exceptions occured.')
                     for exception in exceptions:
@@ -1176,11 +1226,12 @@ def run_pipeline(query_genes,
     the_map = os.path.join(outdir, 'the_map.json')
     annotation_output = os.path.join(outdir, 'best.ortholog_annotation.tsv')
 
-    bg_from_inter_ranges(genes_filename=subject_annotation,
-                         name_regex=subject_name_regex,
-                         sample_size=sample_size,
-                         output_filename=bg_filename,
-                         seed=seed)
+    bg_from_shuffled_ranges(genes_filename=subject_annotation,
+                            genome_filename=subject_genome,
+                            name_regex=subject_name_regex,
+                            sample_size=sample_size,
+                            output_filename=bg_filename,
+                            seed=seed)
     estimate_background(query_genes_filename=query_genes,
                         bg_ranges_filename=bg_filename,
                         query_genome_filename=query_genome,

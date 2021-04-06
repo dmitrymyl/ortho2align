@@ -15,6 +15,7 @@ Translation from other systems:
 1-based exclusive: start += -1, end += -1
 """
 import re
+import random
 import json
 from itertools import chain
 from pathlib import Path
@@ -921,6 +922,93 @@ class GenomicRange(BaseGenomicRange):
             stream.close()
         return alignment
 
+    def align_blast_seqfile(self, seqfile, program='blastn', task='blastn', **kwargs):
+        """Aligns genomic range to many sequences.
+
+        Aligns genomic range and given sequences with
+        standalone blastn and specified parameters.
+        Alignment file format is "7 std score".
+        Standalone blast package should be installed
+        manually.
+
+        Args:
+            seqfile (str): nucleotide fasta sequences file
+                to align genomic range with.
+            program (str, default "blastn"): A program name
+                from Standalone BLAST to use.
+            task (str, default "blastn"): Which task from a BLAST
+                program to use.
+            kwargs (dict): Any command line arguments
+                to blastn in the following scheme:
+                ``{'flag': 'value'}``.
+
+        Returns:
+            Alignment: Aligned range pair, which associates
+            self genomic range and its alignment.
+
+        Raises:
+            FilePathNotSpecifiedError: In case
+                genomic range does not have separate
+                sequence file.
+        """
+        self.sequence_file_path.check_correct()
+        command = [program,
+                   '-task', task,
+                   '-query', self.sequence_file_path,
+                   '-subject', seqfile,
+                   '-outfmt', "7 std score"]
+        add_args = sum((['-' + str(key), str(value)]
+                        for key, value in kwargs.items()),
+                       [])
+        with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
+            stream = TextIOWrapper(proc.stdout)
+            alignment = Alignment.from_file_blast(stream)
+            stream.close()
+        return alignment
+
+    def align_blastdb(self, dbfile, program='blastn', task='blastn', **kwargs):
+        """Aligns genomic range to BLAST DB.
+
+        Aligns genomic range and given BLAST DB with
+        standalone blastn and specified parameters.
+        Alignment file format is "7 std score".
+        Standalone blast package should be installed
+        manually.
+
+        Args:
+            dbfile (str): nucleotide BLAST DB file
+                to align genomic range with.
+            program (str, default "blastn"): A program name
+                from Standalone BLAST to use.
+            task (str, default "blastn"): Which task from a BLAST
+                program to use.
+            kwargs (dict): Any command line arguments
+                to blastn in the following scheme:
+                ``{'flag': 'value'}``.
+
+        Returns:
+            Alignment: Aligned range pair, which associates
+            self genomic range and its alignment.
+
+        Raises:
+            FilePathNotSpecifiedError: In case
+                genomic range does not have separate
+                sequence file.
+        """
+        command = [program,
+                   '-task', task,
+                   '-query', self.sequence_file_path,
+                   '-subject', dbfile,
+                   '-outfmt', "7 std score"]
+        add_args = sum((['-' + str(key), str(value)]
+                        for key, value in kwargs.items()),
+                       [])
+        with Popen(command + add_args, stdout=PIPE, stderr=PIPE) as proc:
+            stream = TextIOWrapper(proc.stdout)
+            alignment = Alignment.from_file_blast(stream)
+            stream.close()
+        return alignment
+
 
 class GenomicRangesAlignment(Alignment):
     __slots__ = ('qrange', 'srange', 'relative')
@@ -1669,6 +1757,38 @@ class BaseGenomicRangesList(SortedKeyList):
                   for attr in set(self.init_args) - used_args}
         return self.__class__(inverted_granges, **kwargs)
 
+    def shuffle_inside_chrom(self, seed=0):
+        shuffled_granges = []
+        for grange in self:
+            chromsize = self.sequence_file.chromsizes.get(grange.chrom)
+            if chromsize is None:
+                end = grange.end
+            else:
+                end = chromsize.size - len(grange)
+            try:
+                shuffled_start = random.randint(0, end)
+            except ValueError:
+                shuffled_start = 0
+            shuffled_end = shuffled_start + len(grange)
+            shuffled_grange = grange.__class__(chrom=grange.chrom,
+                                               start=shuffled_start,
+                                               end=shuffled_end,
+                                               strand=grange.strand)
+            shuffled_granges.append(shuffled_grange)
+        used_args = {'collection', }
+        kwargs = {attr: getattr(self, attr)
+                  for attr in set(self.init_args) - used_args}
+        return self.__class__(shuffled_granges, **kwargs)
+
+    def sample_granges(self, n, seed=0):
+        if n > len(self):
+            raise ValueError(f'Value of n={n} is greater than number of genomic ranges: {len(self)}.')
+        sample = random.sample(self, n)
+        used_args = {'collection', }
+        kwargs = {attr: getattr(self, attr)
+                  for attr in set(self.init_args) - used_args}
+        return self.__class__(sample, **kwargs)
+
     def to_bed6(self, fileobj):
         """Writes contents in bed6 format to a file object.
 
@@ -2064,7 +2184,8 @@ class GenomicRangesList(BaseGenomicRangesList):
                 of processing granges in split mode.
 
         Returns:
-            None
+            (list or str): collection of output filenames in case of split mode
+                or one output filename in case of bulk mode.
 
         Raises:
             ValueError: An error in cases the extraction mode is not
@@ -2095,7 +2216,7 @@ class GenomicRangesList(BaseGenomicRangesList):
                         self.sequence_file.get_fasta_by_coord(grange,
                                                               output,
                                                               chromsizes=chromsizes)
-                filenames = [outfilename]
+                filenames = outfilename
         else:
             raise ValueError(f"get_fasta mode {mode} is not "
                              f"one of ['split', 'bulk'].")

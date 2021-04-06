@@ -1,7 +1,7 @@
 import argparse
 from .pipeline import (cache_orthodb_xrefs, get_orthodb_map,
                        get_orthodb_by_taxid, get_liftover_map,
-                       bg_from_inter_ranges, estimate_background,
+                       bg_from_inter_ranges, bg_from_shuffled_ranges, estimate_background,
                        get_alignments, build_orthologs, get_best_orthologs,
                        annotate_orthologs, benchmark_orthologs, run_pipeline)
 
@@ -310,6 +310,50 @@ bg_from_inter_ranges_output_group.add_argument('-output',
                                                help='Output filename for background regions annotation in bed6 format.')
 
 
+bg_from_shuffled_ranges_parser = ortho2align_subparsers.add_parser('bg_from_shuffled_ranges',
+                                                                   help='Generate background set of genomic ranges from shuffled ranges.',
+                                                                   description='Generate background set of genomic ranges from intergenic ranges.',
+                                                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+bg_from_shuffled_ranges_parser.set_defaults(func=bg_from_shuffled_ranges)
+bg_from_shuffled_ranges_input_group = bg_from_shuffled_ranges_parser.add_argument_group('Input')
+bg_from_shuffled_ranges_input_group.add_argument('-genes',
+                                                 type=str,
+                                                 nargs='?',
+                                                 required=True,
+                                                 dest='genes_filename',
+                                                 help='Gene annotation filename to use for composing shuffled ranges.')
+bg_from_shuffled_ranges_input_group.add_argument('-genome',
+                                                 type=str,
+                                                 nargs='?',
+                                                 required=True,
+                                                 dest='genome_filename',
+                                                 help='Genome file for checking of chromosome sizes.')
+bg_from_shuffled_ranges_input_group.add_argument('-name_regex',
+                                                 type=str,
+                                                 nargs='?',
+                                                 default=None,
+                                                 help='Regular expression for extracting gene names from the genes annotation (.gff and .gtf only). '
+                                                      'Must contain one catching group.')
+bg_from_shuffled_ranges_processing_group = bg_from_shuffled_ranges_parser.add_argument_group('Processing')
+bg_from_shuffled_ranges_processing_group.add_argument('-sample_size',
+                                                      type=int,
+                                                      nargs='?',
+                                                      required=True,
+                                                      help='Number of background regions to generate.')
+bg_from_shuffled_ranges_processing_group.add_argument('-seed',
+                                                      type=int,
+                                                      nargs='?',
+                                                      default=123,
+                                                      help='random seed number for sampling intergenic regions.')
+bg_from_shuffled_ranges_output_group = bg_from_shuffled_ranges_parser.add_argument_group('Output')
+bg_from_shuffled_ranges_output_group.add_argument('-output',
+                                                  type=str,
+                                                  nargs='?',
+                                                  required=True,
+                                                  dest='output_filename',
+                                                  help='Output filename for background regions annotation in bed6 format.')
+
+
 estimate_background_parser = ortho2align_subparsers.add_parser('estimate_background',
                                                                help='Estimate background alignment scores.',
                                                                description='Estimate background alignment scores.',
@@ -601,6 +645,7 @@ get_best_orthologs_parameters_group.add_argument('-value',
                                                  nargs='?',
                                                  choices=['total_length', 'block_count', 'block_length', 'weight'],
                                                  required=True,
+                                                 default='total_length',
                                                  help='which value of orthologs to use in case of multiple orthologs.')
 get_best_orthologs_parameters_group.add_argument('-function',
                                                  type=str,
