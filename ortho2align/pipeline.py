@@ -606,8 +606,8 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
 
 
 def _anchor(query_genes, query_anchors, query_genome_filename,
-            subject_anchors, subject_genome_filename, subject_chromsizes,
-            ortho_map, neighbour_dist, merge_dist, flank_dist):
+            subject_anchors, subject_genome_filename, query_chromsizes,
+            subject_chromsizes, ortho_map, neighbour_dist, merge_dist, flank_dist):
     from .genomicranges import GenomicRangesList
 
     query_anchors.relation_mapping(subject_anchors,
@@ -635,8 +635,10 @@ def _anchor(query_genes, query_anchors, query_genome_filename,
         if query_gene.end > neighbourhood.end or query_gene.start < neighbourhood.start:
             query_gene.relations['syntenies'] = query_gene.relations['syntenies'].flank(neighbour_dist + query_gene.end - query_gene.start,
                                                                                         chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+        query_gene.relations['neighbours'] = GenomicRangesList([query_gene],
                                                                sequence_file_path=query_genome_filename)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].flank(flank_dist,
+                                                                                      chromsizes=query_chromsizes)
 
         query_prepared.append(query_gene)
 
@@ -647,9 +649,9 @@ def _anchor(query_genes, query_anchors, query_genome_filename,
     return query_prepared_genes, query_unalignable_genes
 
 
-def _lift(query_genes, query_genome_filename, subject_genome_filename,
+def _lift(query_genes, query_genome_filename, subject_genome_filename, query_chromsizes,
           subject_chromsizes, liftover_chains,
-          merge_dist, flank_dist, min_ratio=0.05, allow_duplications=True):
+          merge_dist, flank_dist, min_ratio=0.05):
     from subprocess import run, DEVNULL
 
     from .genomicranges import GenomicRangesList
@@ -679,8 +681,10 @@ def _lift(query_genes, query_genome_filename, subject_genome_filename,
                                          sequence_file_path=subject_genome_filename)
         query_gene.relations['syntenies'] = synteny_list.close_merge(merge_dist).flank(flank_dist,
                                                                                        chromsizes=subject_chromsizes)
-        query_gene.relations['neighbours'] = GenomicRangesList([query_gene.flank(flank_dist)],
+        query_gene.relations['neighbours'] = GenomicRangesList([query_gene],
                                                                sequence_file_path=query_genome_filename)
+        query_gene.relations['neighbours'] = query_gene.relations['neighbours'].flank(flank_dist,
+                                                                                      chromsizes=query_chromsizes)
         query_prepared.append(query_gene)
 
     query_prepared_genes = GenomicRangesList(query_prepared,
@@ -763,7 +767,8 @@ def get_alignments(mode,
             query_genes = parse_annotation(infile,
                                            sequence_file_path=query_genome_filename,
                                            name_regex=query_name_regex)
-
+        query_genome = FastaSeqFile(query_genome_filename)
+        query_chromsizes = query_genome.chromsizes
         subject_genome = FastaSeqFile(subject_genome_filename)
         subject_chromsizes = subject_genome.chromsizes
 
@@ -789,8 +794,8 @@ def get_alignments(mode,
             pbar.update()
 
             process_args = [query_genes, query_anchors, query_genome_filename,
-                            subject_anchors, subject_genome_filename, subject_chromsizes,
-                            ortho_map, neighbour_dist, merge_dist, flank_dist]
+                            subject_anchors, subject_genome_filename, query_chromsizes,
+                            subject_chromsizes, ortho_map, neighbour_dist, merge_dist, flank_dist]
 
             query_prepared_genes, query_unalignable_genes = _anchor(*process_args)
 
@@ -799,7 +804,7 @@ def get_alignments(mode,
             if liftover_chains_filename is None:
                 raise ValueError('Argument liftover_chains cannot be None for mode lift.')
             process_args = [query_genes, query_genome_filename, subject_genome_filename,
-                            subject_chromsizes, liftover_chains_filename,
+                            query_chromsizes, subject_chromsizes, liftover_chains_filename,
                             merge_dist, flank_dist, min_ratio]
             query_prepared_genes, query_unalignable_genes = _lift(*process_args)
         else:
