@@ -31,12 +31,30 @@ class IncorrectBlockSizes(ParserException):
         return f"Incorrect blockSizes value: {self.blockSizes}"
 
 
+class InconsistentBlockSizes(IncorrectBlockSizes):
+    def __init__(self, blockSizes, blockCount):
+        self.blockSizes = blockSizes
+        self.blockCount = blockCount
+
+    def __str__(self):
+        return f"blockSizes field '{self.blockSizes}' is inconsistent with blockCount field '{self.blockCount}'."
+
+
 class IncorrectBlockStarts(ParserException):
     def __init__(self, blockStarts):
-        self.blockSizes = blockStarts
+        self.blockStarts = blockStarts
 
     def __str__(self):
         return f"Incorrect blockStarts value: {self.blockStarts}"
+
+
+class InconsistentBlockStarts(IncorrectBlockStarts):
+    def __init__(self, blockStarts, blockCount):
+        self.blockStarts = blockStarts
+        self.blockCount = blockCount
+
+    def __str__(self):
+        return f"blockStarts field '{self.blockStarts}' is inconsistent with blockCount field '{self.blockCount}'."
 
 
 class IncorrectPhase(ParserException):
@@ -114,7 +132,7 @@ class IncorrectLine(ParserException):
 
 class EmptyAnnotation(ParserException):
     def __str__(self):
-        return f"Provided annotation file is empty or consist only of comment lines."
+        return "Provided annotation file is empty or consist only of comment lines."
 
 
 class UnrecognizedFormat(ParserException):
@@ -254,9 +272,9 @@ def bed12_parser(fileobj, verbose=False, sequence_file_path=None):
                       for key, func, item in zip(colnames, dtypes, data)}
 
             if len(record['blockSizes']) != record['blockCount']:
-                raise ParserException
+                raise InconsistentBlockSizes(record['blockSizes'], record['blockCount'])
             if len(record['blockStarts']) != record['blockCount']:
-                raise ParserException
+                raise IncorrectBlockStarts(record['blockStarts'], record['blockCount'])
             granges.append(GenomicRange(**record))
         except Exception:
             raise IncorrectLine(line, line_no + 1)
@@ -458,7 +476,7 @@ def check_bed3(line):
     try:
         record = line.strip().split('\t')
         if len(record) != 3:
-            raise ParserException
+            raise InconsistentBED3(line)
         dummy = {key: func(item)
                  for (key, func), item in zip(bed_fields.items(), record)}
         return True
@@ -470,7 +488,7 @@ def check_bed6(line):
     try:
         record = line.strip().split('\t')
         if len(record) != 6:
-            raise ParserException
+            raise InconsistentBED6(line)
         dummy = {key: func(item)
                  for (key, func), item in zip(bed_fields.items(), record)}
         return True
@@ -482,7 +500,7 @@ def check_bed12(line):
     try:
         record = line.strip().split('\t')
         if len(record) != 12:
-            raise ParserException
+            raise InconsistentBED12(line)
         dummy = {key: func(item)
                  for (key, func), item in zip(bed_fields.items(), record)}
         return True
@@ -494,7 +512,7 @@ def check_gtf(line):
     try:
         record = line.strip().split('\t')
         if len(record) != 9:
-            raise ParserException
+            raise InconsistentGTF(line)
         dummy = {key: func(item)
                  for (key, func), item in zip(gtf_fields.items(), record)}
         return True
@@ -506,7 +524,7 @@ def check_gff(line):
     try:
         record = line.strip().split('\t')
         if len(record) != 9:
-            raise ParserException
+            raise InconsistentGFF(line)
         dummy = {key: func(item)
                  for (key, func), item in zip(gff_fields.items(), record)}
         return True
@@ -520,7 +538,7 @@ def annotation_sniffer(fileobj, comment='#', separator='\t'):
     while line.startswith(comment):
         line = fileobj.readline()
     if line == '':
-        raise ParserException
+        raise EmptyAnnotation
     record = line.strip().split(separator)
 
     if len(record) == 3:

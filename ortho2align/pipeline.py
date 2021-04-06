@@ -11,6 +11,32 @@ from .genomicranges import GenomicRangesAlignment
 from .parallel import ExceptionLogger
 
 
+class CmdProgressBar(tqdm):
+    # A solution from https://github.com/tqdm/tqdm/issues/509#issuecomment-410537096 for correct nesting.
+    def __new__(cls, *args, **kwargs):
+        try:
+            cls._instances = tqdm._instances
+        except AttributeError:
+            pass
+
+        instance = super().__new__(cls, *args, **kwargs)
+
+        tqdm._instances = cls._instances
+        return instance
+
+    def __init__(self, cmd_hints, desc, disable=False):
+        super().__init__(cmd_hints,
+                         bar_format="{desc}: {n_fmt}/{total_fmt}, {elapsed}{postfix}]",
+                         desc=desc,
+                         postfix=cmd_hints[0],
+                         initial=1,
+                         disable=disable)
+
+    def update(self):
+        self.postfix = self.iterable[self.n]
+        super().update()
+
+
 def cache_orthodb_xrefs(orthodb_path, cache_path, orthodb_prefix, xref_suffix):
 
     from pathlib import Path
@@ -403,7 +429,7 @@ def get_liftover_map(chain_file, liftover_map, query_anchors, subject_anchors):
         json.dump(chain_map, outfile)
 
 
-def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filename, seed):
+def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filename, seed, silent=False):
     import random
 
     from .genomicranges import BaseGenomicRangesList
@@ -411,18 +437,32 @@ def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filenam
 
     random.seed(seed)
 
-    with open(genes_filename, 'r') as infile:
-        genes = parse_annotation(infile, name_regex=name_regex)
+    cmd_hints = ['parsing the annotation...',
+                 'sampling intergenic regions...',
+                 'writing results to file...',
+                 'finished.']
+    with CmdProgressBar(cmd_hints,
+                        'Sampling background from intergenic regions',
+                        disable=silent) as pbar:
 
-    inter_genes = genes.inter_ranges()
-    if len(inter_genes) < sample_size:
-        raise ValueError(f'The number of observations ({sample_size}) '
-                         'must be less than the number of intergenic '
-                         f'regions ({len(inter_genes)}) derived from genes')
-    samples = BaseGenomicRangesList(random.sample(inter_genes, k=sample_size))
+        with open(genes_filename, 'r') as infile:
+            genes = parse_annotation(infile, name_regex=name_regex)
 
-    with open(output_filename, 'w') as outfile:
-        samples.to_bed6(outfile)
+        pbar.update()
+
+        inter_genes = genes.inter_ranges()
+        if len(inter_genes) < sample_size:
+            raise ValueError(f'The number of observations ({sample_size}) '
+                             'must be less than the number of intergenic '
+                             f'regions ({len(inter_genes)}) derived from genes')
+        samples = BaseGenomicRangesList(random.sample(inter_genes, k=sample_size))
+
+        pbar.update()
+
+        with open(output_filename, 'w') as outfile:
+            samples.to_bed6(outfile)
+
+        pbar.update()
 
 
 def _align_two_ranges_blast(query, subject, **kwargs):
@@ -434,54 +474,50 @@ def _align_two_ranges_blast(query, subject, **kwargs):
 
 
 def _estimate_bg_for_single_query(query, bg_ranges, word_size, output_name, observations=1000, seed=0):
-    all_scores = list()
-    for bg_range in bg_ranges:
-        alignment = _align_two_ranges_blast(query, bg_range, word_size=word_size)
-        scores = [hsp.score for hsp in alignment.HSPs]
-        all_scores += scores
-    score_size = len(all_scores)
-    if score_size > observations:
-        random.seed(seed)
-        all_scores = random.sample(all_scores, observations)
-    with open(output_name, 'w') as outfile:
-        json.dump(all_scores, outfile)
-    return output_name, score_size
+    scores = list()
+    try:
+        for bg_range in bg_ranges:
+            alignment = _align_two_ranges_blast(query, bg_range, word_size=word_size)
+            alignment_scores = [hsp.score for hsp in alignment.HSPs]
+            scores += alignment_scores
+        score_size = len(scores)
+        if score_size > observations:
+            random.seed(seed)
+            scores = random.sample(scores, observations)
+        with open(output_name, 'w') as outfile:
+            json.dump(scores, outfile)
+        return output_name, score_size
+    except Exception as e:
+        raise ExceptionLogger(e, query)
 
 
-def estimate_background(query_genes, bg_ranges, query_genome,
-                        subject_genome, outdir, cores, name_regex,
-                        word_size, observations, seed, silent=False):
+def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_filename,
+                        subject_genome_filename, outdir, cores, word_size, observations,
+                        seed, query_name_regex=None, bg_name_regex=None, silent=False):
     from tempfile import TemporaryDirectory
 
     from .genomicranges import FastaSeqFile, SequencePath
     from .parallel import NonExceptionalProcessPool
     from .parsing import parse_annotation
 
-    query_genes_filename = query_genes
-    bg_ranges_filename = bg_ranges
-    query_genome_filename = query_genome
-    subject_genome_filename = subject_genome
-
     cmd_hints = ['reading annotations...',
                  'getting sample sequences...',
                  'aligning samples...',
                  'finished.']
-    with tqdm(cmd_hints,
-              bar_format="{r_bar}",
-              postfix=cmd_hints[0],
-              initial=1,
-              disable=silent) as pbar:
+
+    with CmdProgressBar(cmd_hints,
+                        'Estimating background',
+                        disable=silent) as pbar:
 
         with open(query_genes_filename, 'r') as infile:
             query_genes = parse_annotation(infile,
                                            sequence_file_path=query_genome_filename,
-                                           name_regex=name_regex)
+                                           name_regex=query_name_regex)
         with open(bg_ranges_filename, 'r') as infile:
             bg_ranges = parse_annotation(infile,
                                          sequence_file_path=subject_genome_filename,
-                                         name_regex=name_regex)
+                                         name_regex=bg_name_regex)
 
-        pbar.postfix = pbar.iterable[pbar.n]
         pbar.update()
 
         query_chromsizes = FastaSeqFile(query_genome_filename).chromsizes
@@ -497,7 +533,6 @@ def estimate_background(query_genes, bg_ranges, query_genome,
                                 outdir=tempdir,
                                 chromsizes=subject_chromsizes)
 
-            pbar.postfix = pbar.iterable[pbar.n]
             pbar.update()
 
             if not os.path.exists(outdir):
@@ -513,13 +548,15 @@ def estimate_background(query_genes, bg_ranges, query_genome,
                 with NonExceptionalProcessPool(cores, verbose=(not silent)) as p:
                     results, exceptions = p.starmap_async(_estimate_bg_for_single_query, data)
                 if len(exceptions) > 0:
-                    tqdm.write(f'{len(exceptions)} exceptions occured.')
+                    pbar.write(f'{len(exceptions)} exceptions occured.')
                     for exception in exceptions:
-                        tqdm.write(str(exception))
+                        pbar.write(str(exception))
+                with open(os.path.join(outdir, 'exceptions.bed'), 'w') as outfile:
+                    for exception in exceptions:
+                        outfile.write(exception.variable.to_bed6() + '\n')
             except Exception as e:
                 raise ExceptionLogger(e, p, 'Consider allocating more RAM or CPU time.')
 
-        pbar.postfix = pbar.iterable[pbar.n]
         pbar.update()
 
 
@@ -537,7 +574,7 @@ def _anchor(query_genes, query_anchors, query_genome_filename,
     query_unalignable = list()
     query_prepared = list()
 
-    for query_gene in tqdm(query_genes):
+    for query_gene in query_genes:
         if len(query_gene.relations['neighbours']) == 0:
             query_unalignable.append(query_gene)
             continue
@@ -568,7 +605,7 @@ def _anchor(query_genes, query_anchors, query_genome_filename,
 def _lift(query_genes, query_genome_filename, subject_genome_filename,
           subject_chromsizes, liftover_chains,
           merge_dist, flank_dist, min_ratio=0.05, allow_duplications=True):
-    from subprocess import run
+    from subprocess import run, DEVNULL
 
     from .genomicranges import GenomicRangesList
 
@@ -581,11 +618,13 @@ def _lift(query_genes, query_genome_filename, subject_genome_filename,
         temp_unmapped_filename = os.path.join(tempdirname, 'unmapped.bed')
         with open(temp_query_filename, 'w') as outfile:
             query_genes.to_bed6(outfile)
-        run(f"liftOver -minMatch={min_ratio} -multiple -noSerial {temp_query_filename} {liftover_chains} {temp_result_filename} {temp_unmapped_filename}", shell=True)
+        run(f"liftOver -minMatch={min_ratio} -multiple -noSerial {temp_query_filename} {liftover_chains} {temp_result_filename} {temp_unmapped_filename}",
+            shell=True,
+            stderr=DEVNULL)
         with open(temp_result_filename, 'r') as infile:
             lifted = parse_annotation(infile)
 
-    for query_gene in tqdm(query_genes):
+    for query_gene in query_genes:
         if lifted.name_mapping.get(query_gene.name) is None:
             query_unalignable.append(query_gene)
             continue
@@ -670,11 +709,10 @@ def get_alignments(mode,
                  'getting alignments...',
                  'saving alignments...',
                  'finished.']
-    cmd_point = 0
-    with tqdm(total=(len(cmd_hints) - 1),
-              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
-              postfix=cmd_hints[cmd_point],
-              disable=silent) as pbar:
+
+    with CmdProgressBar(cmd_hints,
+                        'Getting alignments',
+                        disable=silent) as pbar:
 
         with open(query_genes_filename, 'r') as infile:
             query_genes = parse_annotation(infile,
@@ -703,8 +741,6 @@ def get_alignments(mode,
             with open(ortho_map_filename, 'r') as mapfile:
                 ortho_map = json.load(mapfile)
 
-            cmd_point += 1
-            pbar.postfix = cmd_hints[cmd_point]
             pbar.update()
 
             process_args = [query_genes, query_anchors, query_genome_filename,
@@ -714,8 +750,6 @@ def get_alignments(mode,
             query_prepared_genes, query_unalignable_genes = _anchor(*process_args)
 
         elif program_mode == "lift":
-            cmd_point += 1
-            pbar.postfix = cmd_hints[cmd_point]
             pbar.update()
             if liftover_chains_filename is None:
                 raise ValueError('Argument liftover_chains cannot be None for mode lift.')
@@ -726,15 +760,13 @@ def get_alignments(mode,
         else:
             raise ValueError("program_mode is not one of ['anchor', 'lift']")
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
         query_chromsizes = query_prepared_genes.sequence_file.chromsizes
 
         with TemporaryDirectory() as tempdirname:
             tempdir = SequencePath(tempdirname)
-            for query_gene in tqdm(query_prepared_genes):
+            for query_gene in query_prepared_genes:
                 query_gene.relations['neighbours'].get_fasta(outfileprefix='neigh_',
                                                              outdir=tempdir,
                                                              chromsizes=query_chromsizes)
@@ -742,8 +774,6 @@ def get_alignments(mode,
                                                             outdir=tempdir,
                                                             chromsizes=subject_chromsizes)
 
-            cmd_point += 1
-            pbar.postfix = cmd_hints[cmd_point]
             pbar.update()
 
             if not os.path.exists(outdir):
@@ -759,13 +789,11 @@ def get_alignments(mode,
 
         query_exception_ranges = list()
         if len(exceptions) > 0:
-            tqdm.write(f'{len(exceptions)} exceptions occured:')
+            pbar.write(f'{len(exceptions)} exceptions occured:')
             for exception in exceptions:
-                tqdm.write(str(exception))
+                pbar.write(str(exception))
                 query_exception_ranges.append(exception.variable)
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
         query_exception_list = BaseGenomicRangesList(query_exception_ranges)
@@ -776,8 +804,6 @@ def get_alignments(mode,
         with open(os.path.join(outdir, "exceptions.bed"), 'w') as outfile:
             query_exception_list.to_bed6(outfile)
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
 
@@ -827,10 +853,7 @@ def _build(query_gene_alignments_filename, query_bg_filename, fitter, fdr, pval_
 def build_orthologs(alignments,
                     background,
                     fitting,
-                    query_orthologs,
-                    subject_orthologs,
-                    query_dropped,
-                    query_exceptions='build_orthologs_exceptions.bed',
+                    outdir,
                     threshold=0.05,
                     fdr=False,
                     cores=1,
@@ -846,10 +869,6 @@ def build_orthologs(alignments,
     alignments_dir = Path(alignments)
     background_dir = Path(background)
     fitting_type = fitting
-    query_output_filename = Path(query_orthologs)
-    subject_output_filename = Path(subject_orthologs)
-    query_dropped_filename = Path(query_dropped)
-    query_exceptions_filename = Path(query_exceptions)
     pval_threshold = threshold
 
     cmd_hints = ['reading alignments...',
@@ -857,11 +876,10 @@ def build_orthologs(alignments,
                  'refining alignments and calling orthologs...',
                  'saving to files...',
                  'finished.']
-    cmd_point = 0
-    with tqdm(total=(len(cmd_hints) - 1),
-              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
-              postfix=cmd_hints[cmd_point],
-              disable=silent) as pbar:
+
+    with CmdProgressBar(cmd_hints,
+                        'Building orthologs',
+                        disable=silent) as pbar:
 
         alignments_files = [os.path.join(alignments_dir, filename)
                             for filename in os.listdir(alignments_dir)
@@ -869,8 +887,6 @@ def build_orthologs(alignments,
         bg_files = [os.path.join(background_dir, os.path.basename(alignments_file))
                     for alignments_file in alignments_files]
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
         if fitting_type == 'hist':
@@ -878,8 +894,6 @@ def build_orthologs(alignments,
         elif fitting_type == 'kde':
             fitter = KernelFitter
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
         build_partial = partial(_build,
@@ -898,13 +912,11 @@ def build_orthologs(alignments,
 
         query_exception_ranges = list()
         if len(exceptions) > 0:
-            tqdm.write(f'{len(exceptions)} exceptions occured:')
+            pbar.write(f'{len(exceptions)} exceptions occured:')
             for exception in exceptions:
-                tqdm.write(str(exception))
+                pbar.write(str(exception))
                 query_exception_ranges.append(exception.variable)
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
         if len(orthologs) == 0:
@@ -922,6 +934,13 @@ def build_orthologs(alignments,
                                                for grange in group])
         query_exception_list = BaseGenomicRangesList(query_exception_ranges)
 
+        if not os.path.exists(outdir):
+            os.mkdir(outdir)
+        query_output_filename = os.path.join(outdir, 'query_orthologs.bed')
+        subject_output_filename = os.path.join(outdir, 'subject_orthologs.bed')
+        query_dropped_filename = os.path.join(outdir, 'query_dropped.bed')
+        query_exceptions_filename = os.path.join(outdir, 'query_exceptions.bed')
+
         with open(query_output_filename, 'w') as outfile:
             for record in query_orthologs:
                 outfile.write(record + "\n")
@@ -933,8 +952,6 @@ def build_orthologs(alignments,
         with open(query_exceptions_filename, 'w') as outfile:
             query_exception_list.to_bed6(outfile)
 
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
         pbar.update()
 
 
@@ -1009,14 +1026,18 @@ def annotate_orthologs(subject_orthologs,
                        output,
                        subject_name_regex=None):
 
-    from .parsing import parse_annotation
+    from .parsing import parse_annotation, ParserException
 
     subject_orthologs_filename = subject_orthologs
     subject_annotation_filename = subject_annotation
     output_filename = output
 
-    with open(subject_orthologs_filename, 'r') as infile:
-        subject_orthologs = parse_annotation(infile)
+    try:
+        with open(subject_orthologs_filename, 'r') as infile:
+            subject_orthologs = parse_annotation(infile)
+    except ParserException:
+        with open(output_filename, 'w') as outfile:
+            outfile.write('Query\tOrtholog\n')
     with open(subject_annotation_filename, 'r') as infile:
         subject_annotation = parse_annotation(infile,
                                               name_regex=subject_name_regex)
@@ -1028,6 +1049,7 @@ def annotate_orthologs(subject_orthologs,
                                         for grange in subject_ortholog.relations['ortholog']]
                 for subject_ortholog in subject_orthologs}
     with open(output_filename, 'w') as outfile:
+        outfile.write('Query\tOrtholog\n')
         for ortholog_name, annotation_names in name_map.items():
             if annotation_names:
                 outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
@@ -1144,10 +1166,11 @@ def run_pipeline(query_genes,
     bg_filename = os.path.join(outdir, 'inter_bg.bed')
     bg_outdir = os.path.join(outdir, 'bg_files')
     align_outdir = os.path.join(outdir, 'align_files')
-    query_orthologs = os.path.join(outdir, 'query_orthologs.bed')
-    subject_orthologs = os.path.join(outdir, 'subject_orthologs.bed')
-    query_dropped = os.path.join(outdir, 'query_dropped.bed')
-    query_exceptions = os.path.join(outdir, 'query_exceptions.bed')
+    build_outdir = os.path.join(outdir, 'build_files')
+    query_orthologs = os.path.join(build_outdir, 'query_orthologs.bed')
+    subject_orthologs = os.path.join(build_outdir, 'subject_orthologs.bed')
+    # query_dropped = os.path.join(build_outdir, 'query_dropped.bed')
+    # query_exceptions = os.path.join(build_outdir, 'query_exceptions.bed')
     best_query_orthologs = os.path.join(outdir, 'best.query_orthologs.bed')
     best_subject_orthologs = os.path.join(outdir, 'best.subject_orthologs.bed')
     the_map = os.path.join(outdir, 'the_map.json')
@@ -1158,13 +1181,13 @@ def run_pipeline(query_genes,
                          sample_size=sample_size,
                          output_filename=bg_filename,
                          seed=seed)
-    estimate_background(query_genes=query_genes,
-                        bg_ranges=bg_filename,
-                        query_genome=query_genome,
-                        subject_genome=subject_genome,
+    estimate_background(query_genes_filename=query_genes,
+                        bg_ranges_filename=bg_filename,
+                        query_genome_filename=query_genome,
+                        subject_genome_filename=subject_genome,
                         outdir=bg_outdir,
                         cores=cores,
-                        name_regex=query_name_regex,
+                        query_name_regex=query_name_regex,
                         word_size=word_size,
                         observations=observations,
                         seed=seed,
@@ -1191,10 +1214,7 @@ def run_pipeline(query_genes,
     build_orthologs(alignments=align_outdir,
                     background=bg_outdir,
                     fitting=fitting,
-                    query_orthologs=query_orthologs,
-                    subject_orthologs=subject_orthologs,
-                    query_dropped=query_dropped,
-                    query_exceptions=query_exceptions,
+                    outdir=build_outdir,
                     threshold=threshold,
                     fdr=fdr,
                     cores=cores,
