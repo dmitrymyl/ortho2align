@@ -573,9 +573,6 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
             query_genes.get_fasta(outfileprefix='query_',
                                   outdir=tempdir,
                                   chromsizes=query_chromsizes)
-            # bg_ranges.get_fasta(outfileprefix='bg_',
-            #                     outdir=tempdir,
-            #                     chromsizes=subject_chromsizes)
             bg_seqfile = bg_ranges.get_fasta(outfileprefix='bg_seqfile',
                                              outdir=tempdir,
                                              chromsizes=subject_chromsizes,
@@ -586,7 +583,6 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
             if not os.path.exists(outdir):
                 os.mkdir(outdir)
             data = ((query,
-                    #  bg_ranges,
                      bg_seqfile,
                      word_size,
                      os.path.join(outdir, f"{query.name}.json"),
@@ -595,7 +591,6 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
                     for query in query_genes)
             try:
                 with NonExceptionalProcessPool(cores, verbose=(not silent)) as p:
-                    # results, exceptions = p.starmap_async(_estimate_bg_for_single_query_blast, data)
                     results, exceptions = p.starmap_async(_estimate_bg_for_single_query_seqfile, data)
                 if len(exceptions) > 0:
                     pbar.write(f'{len(exceptions)} exceptions occured.')
@@ -1196,7 +1191,7 @@ def run_pipeline(query_genes,
                  sample_size=200,
                  observations=1000,
                  mode='lift',
-                 min_ratio=0.05,
+                 min_ratio=0.01,
                  neighbour_dist=0,
                  merge_dist=0,
                  flank_dist=0,
@@ -1204,7 +1199,7 @@ def run_pipeline(query_genes,
                  threshold=0.05,
                  fdr=False,
                  timeout=None,
-                 value='total_length',
+                 value='block_length',
                  function='max',
                  cores=1,
                  word_size=6,
@@ -1213,14 +1208,12 @@ def run_pipeline(query_genes,
                  annotate=False):
     if not os.path.exists(outdir):
         os.mkdir(outdir)
-    bg_filename = os.path.join(outdir, 'inter_bg.bed')
+    bg_filename = os.path.join(outdir, 'shuffle_bg.bed')
     bg_outdir = os.path.join(outdir, 'bg_files')
     align_outdir = os.path.join(outdir, 'align_files')
     build_outdir = os.path.join(outdir, 'build_files')
     query_orthologs = os.path.join(build_outdir, 'query_orthologs.bed')
     subject_orthologs = os.path.join(build_outdir, 'subject_orthologs.bed')
-    # query_dropped = os.path.join(build_outdir, 'query_dropped.bed')
-    # query_exceptions = os.path.join(build_outdir, 'query_exceptions.bed')
     best_query_orthologs = os.path.join(outdir, 'best.query_orthologs.bed')
     best_subject_orthologs = os.path.join(outdir, 'best.subject_orthologs.bed')
     the_map = os.path.join(outdir, 'the_map.json')

@@ -512,17 +512,17 @@ get_alignments_anchor_params_group.add_argument('-word_size',
 get_alignments_anchor_params_group.add_argument('-neighbour_dist',
                                                 type=int,
                                                 nargs='?',
-                                                default=500000,
+                                                default=1000000,
                                                 help='distance to seek anchor neighbours of query genes')
 get_alignments_anchor_params_group.add_argument('-merge_dist',
                                                 type=int,
                                                 nargs='?',
-                                                default=1000000,
+                                                default=2000000,
                                                 help='how distant two subject anchors can be to be merged into one syntenic region')
 get_alignments_anchor_params_group.add_argument('-flank_dist',
                                                 type=int,
                                                 nargs='?',
-                                                default=50000,
+                                                default=200000,
                                                 help='how many nts to flank syntenic regions in subject species')
 get_alignments_lift_input_parser = argparse.ArgumentParser(add_help=False)
 get_alignments_lift_input_group = get_alignments_lift_input_parser.add_argument_group('Input for alignments')
@@ -546,12 +546,12 @@ get_alignments_lift_params_group.add_argument('-word_size',
 get_alignments_lift_params_group.add_argument('-merge_dist',
                                               type=int,
                                               nargs='?',
-                                              default=1000000,
-                                              help='how distant two subject anchors can be to be merged into one syntenic region')
+                                              default=2000000,
+                                              help='how distant two subject syntenies can be to be merged into one syntenic region')
 get_alignments_lift_params_group.add_argument('-flank_dist',
                                               type=int,
                                               nargs='?',
-                                              default=50000,
+                                              default=200000,
                                               help='how many nts to flank syntenic regions in subject species')
 get_alignments_mode_subparsers = get_alignments_parser.add_subparsers(dest='mode')
 get_alignments_lift_parser = get_alignments_mode_subparsers.add_parser('lift',
@@ -889,7 +889,7 @@ run_pipeline_get_best_orthologs_group.add_argument('-value',
                                                    type=str,
                                                    nargs='?',
                                                    choices=['total_length', 'block_count', 'block_length', 'weight'],
-                                                   default='total_length',
+                                                   default='block_length',
                                                    help='which value of orthologs to use in case of multiple orthologs.')
 run_pipeline_get_best_orthologs_group.add_argument('-function',
                                                    type=str,
@@ -916,12 +916,12 @@ run_pipeline_lift_get_alignments_group.add_argument('-min_ratio',
 run_pipeline_lift_get_alignments_group.add_argument('-merge_dist',
                                                     type=int,
                                                     nargs='?',
-                                                    default=1000000,
-                                                    help='how distant two subject anchors can be to be merged into one syntenic region')
+                                                    default=2000000,
+                                                    help='how distant two subject syntenies can be to be merged into one syntenic region')
 run_pipeline_lift_get_alignments_group.add_argument('-flank_dist',
                                                     type=int,
                                                     nargs='?',
-                                                    default=50000,
+                                                    default=200000,
                                                     help='how many nts to flank syntenic regions in subject species')
 
 run_pipeline_anchor_input_parser = argparse.ArgumentParser(add_help=False)
@@ -959,17 +959,17 @@ run_pipeline_anchor_get_alignments_group = run_pipeline_anchor_params_parser.add
 run_pipeline_anchor_get_alignments_group.add_argument('-neighbour_dist',
                                                       type=int,
                                                       nargs='?',
-                                                      default=0,
+                                                      default=1000000,
                                                       help='distance to seek anchor neighbours of query genes')
 run_pipeline_anchor_get_alignments_group.add_argument('-merge_dist',
                                                       type=int,
                                                       nargs='?',
-                                                      default=0,
+                                                      default=2000000,
                                                       help='how distant two subject anchors can be to be merged into one syntenic region')
 run_pipeline_anchor_get_alignments_group.add_argument('-flank_dist',
                                                       type=int,
                                                       nargs='?',
-                                                      default=0,
+                                                      default=200000,
                                                       help='how many nts to flank syntenic regions in subject species')
 
 run_pipeline_mode_subparsers = run_pipeline_parser.add_subparsers(dest='mode')
