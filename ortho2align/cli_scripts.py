@@ -1,108 +1,10 @@
 import argparse
-from .pipeline import (cache_orthodb_xrefs, get_orthodb_map,
-                       get_orthodb_by_taxid, get_liftover_map,
-                       bg_from_inter_ranges, bg_from_shuffled_ranges, estimate_background,
+from .pipeline import (bg_from_inter_ranges, bg_from_shuffled_ranges, estimate_background,
                        get_alignments, build_orthologs, get_best_orthologs,
-                       annotate_orthologs, benchmark_orthologs, run_pipeline)
+                       annotate_orthologs, run_pipeline)
 
-
-# def cache_orthodb_xrefs(orthodb_path, cache_path, orthodb_prefix, xref_suffix):
-#     print('success')
-
-
-# def get_orthodb_map(query_genes, output_json_file, query_db, subject_db,
-#                     level_taxid, subject_taxids, orthodb_path, cache_path,
-#                     orthodb_prefix, silent, tmp_path):
-#     print('success')
-
-
-# def get_orthodb_by_taxid(orthodb_map_filename, taxid, output_filename):
-#     print('success')
-
-
-# def get_liftover_map(chain_file, liftover_map, query_anchors, subject_anchors):
-#     print('success')
-# def build_orthologs(alignments,
-#                     background,
-#                     fitting,
-#                     query_orthologs,
-#                     subject_orthologs,
-#                     query_dropped,
-#                     query_exceptions='build_orthologs_exceptions.bed',
-#                     threshold=0.05,
-#                     fdr=False,
-#                     cores=1,
-#                     timeout=None,
-#                     silent=False):
-#     print('success')
-
-
-# def get_best_orthologs(query_orthologs,
-#                        subject_orthologs,
-#                        value,
-#                        function,
-#                        outfile_query,
-#                        outfile_subject,
-#                        outfile_map):
-#     print('success')
-
-
-# def annotate_orthologs(subject_orthologs,
-#                        subject_annotation,
-#                        output,
-#                        subject_name_regex=None):
-#     print('success')
-
-
-# def benchmark_orthologs(query_genes,
-#                         query_name_regex,
-#                         found_query,
-#                         found_query_name_regex,
-#                         found_subject,
-#                         found_subject_name_regex,
-#                         found_query_map,
-#                         found_subject_map,
-#                         found_query_subject_map,
-#                         real_subject,
-#                         real_subject_name_regex,
-#                         real_map,
-#                         outfile,
-#                         tp_mode):
-#     print('success')
-
-
-# def run_pipeline(query_genes,
-#                  query_genome,
-#                  subject_annotation,
-#                  subject_genome,
-#                  outdir,
-#                  query_anchors=None,
-#                  subject_anchors=None,
-#                  ortho_map=None,
-#                  liftover_chains=None,
-#                  query_anchors_name_regex=None,
-#                  subject_anchors_name_regex=None,
-#                  query_name_regex=None,
-#                  subject_name_regex=None,
-#                  sample_size=200,
-#                  observations=1000,
-#                  mode='lift',
-#                  min_ratio=0.05,
-#                  neighbour_dist=0,
-#                  merge_dist=0,
-#                  flank_dist=0,
-#                  fitting='kde',
-#                  threshold=0.05,
-#                  fdr=False,
-#                  timeout=None,
-#                  value='block_length',
-#                  function='max',
-#                  cores=1,
-#                  word_size=6,
-#                  seed=0,
-#                  silent=False,
-#                  annotate=False):
-#     print('success')
+# from .orthodb import cache_orthodb_xrefs, get_orthodb_map, get_orthodb_by_taxid, get_liftover_map
+# from .pipeline import benchmark_orthologs
 
 
 ortho2align_parser = argparse.ArgumentParser(prog='ortho2align',
@@ -112,165 +14,165 @@ ortho2align_parser = argparse.ArgumentParser(prog='ortho2align',
 ortho2align_subparsers = ortho2align_parser.add_subparsers(title='Subcommands',
                                                            metavar='SUBCOMMAND')
 
-cache_orthodb_xrefs_parser = ortho2align_subparsers.add_parser('cache_orthodb_xrefs',
-                                                               help='Cache OrthoDB gene ID cross-references into specific directory.',
-                                                               description='Cache OrthoDB gene ID cross-references into specific directory.',
-                                                               formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-cache_orthodb_xrefs_parser.set_defaults(func=cache_orthodb_xrefs)
-cache_orthodb_xrefs_input_group = cache_orthodb_xrefs_parser.add_argument_group('Input')
-cache_orthodb_xrefs_input_group.add_argument('-orthodb_path',
-                                             type=str,
-                                             nargs='?',
-                                             required=True,
-                                             help='Path to OrthoDB folder.')
+# cache_orthodb_xrefs_parser = ortho2align_subparsers.add_parser('cache_orthodb_xrefs',
+#                                                                help='Cache OrthoDB gene ID cross-references into specific directory.',
+#                                                                description='Cache OrthoDB gene ID cross-references into specific directory.',
+#                                                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# cache_orthodb_xrefs_parser.set_defaults(func=cache_orthodb_xrefs)
+# cache_orthodb_xrefs_input_group = cache_orthodb_xrefs_parser.add_argument_group('Input')
+# cache_orthodb_xrefs_input_group.add_argument('-orthodb_path',
+#                                              type=str,
+#                                              nargs='?',
+#                                              required=True,
+#                                              help='Path to OrthoDB folder.')
 
-cache_orthodb_xrefs_output_group = cache_orthodb_xrefs_parser.add_argument_group('Output')
-cache_orthodb_xrefs_output_group.add_argument('-cache_path',
-                                              type=str,
-                                              nargs='?',
-                                              required=True,
-                                              help='Path to where cross-references will be cached.')
+# cache_orthodb_xrefs_output_group = cache_orthodb_xrefs_parser.add_argument_group('Output')
+# cache_orthodb_xrefs_output_group.add_argument('-cache_path',
+#                                               type=str,
+#                                               nargs='?',
+#                                               required=True,
+#                                               help='Path to where cross-references will be cached.')
 
-cache_orthodb_xrefs_configuration_group = cache_orthodb_xrefs_parser.add_argument_group('Configuration')
+# cache_orthodb_xrefs_configuration_group = cache_orthodb_xrefs_parser.add_argument_group('Configuration')
 
-cache_orthodb_xrefs_configuration_group.add_argument('-orthodb_prefix',
-                                                     type=str,
-                                                     nargs='?',
-                                                     default='odb10v0_',
-                                                     help='Prefix of all OrthoDB files in OrthoDB folder.')
-cache_orthodb_xrefs_configuration_group.add_argument('-xref_suffix',
-                                                     type=str,
-                                                     nargs='?',
-                                                     default='gene_xrefs.tab',
-                                                     help='Suffix of OrthoDB cross-references file.')
+# cache_orthodb_xrefs_configuration_group.add_argument('-orthodb_prefix',
+#                                                      type=str,
+#                                                      nargs='?',
+#                                                      default='odb10v0_',
+#                                                      help='Prefix of all OrthoDB files in OrthoDB folder.')
+# cache_orthodb_xrefs_configuration_group.add_argument('-xref_suffix',
+#                                                      type=str,
+#                                                      nargs='?',
+#                                                      default='gene_xrefs.tab',
+#                                                      help='Suffix of OrthoDB cross-references file.')
 
-external_dbs = ['GOterm',
-                'InterPro',
-                'NCBIproteinGI',
-                'UniProt',
-                'ENSEMBL',
-                'NCBIgid',
-                'NCBIgenename']
+# external_dbs = ['GOterm',
+#                 'InterPro',
+#                 'NCBIproteinGI',
+#                 'UniProt',
+#                 'ENSEMBL',
+#                 'NCBIgid',
+#                 'NCBIgenename']
 
-get_orthodb_map_parser = ortho2align_subparsers.add_parser('get_orthodb_map',
-                                                           help='Retrieve mapping between OrthoDB genes in query speices to know orthologs in subject species.',
-                                                           description='Retrieve mapping between OrthoDB genes in query speices to know orthologs in subject species.',
-                                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-get_orthodb_map_parser.set_defaults(func=get_orthodb_map)
-get_orthodb_map_input_group = get_orthodb_map_parser.add_argument_group('Input')
-get_orthodb_map_input_group.add_argument('-query_genes',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='Path to a list of query gene IDs,'
-                                              'one ID per line.')
-get_orthodb_map_input_group.add_argument('-query_db',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         choices=external_dbs,
-                                         help='Database from which query gene IDs '
-                                              'were taken.')
-get_orthodb_map_input_group.add_argument('-subject_db',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         choices=external_dbs,
-                                         help='Database from which return IDs of '
-                                              'query genes orthologs in subject '
-                                              'species.')
-get_orthodb_map_input_group.add_argument('-level_taxid',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='NCBI taxid of level at which '
-                                              'orthologous groups will be found.')
-get_orthodb_map_input_group.add_argument('-subject_taxids',
-                                         type=str,
-                                         nargs='+',
-                                         required=True,
-                                         help='List of subject species NCBI '
-                                              'taxids delimited by a whitespace.')
-get_orthodb_map_input_group.add_argument('-orthodb_path',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='Path to OrthoDB folder.')
-get_orthodb_map_input_group.add_argument('-cache_path',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='Path where OrthoDB cross-'
-                                              'references were cached.')
-get_orthodb_map_output_group = get_orthodb_map_parser.add_argument_group('Output')
-get_orthodb_map_output_group.add_argument('-outfile',
-                                          type=str,
-                                          nargs='?',
-                                          required=True,
-                                          help='Output json filename.')
-get_orthodb_map_configuration_group = get_orthodb_map_parser.add_argument_group('Configuration')
-get_orthodb_map_configuration_group.add_argument('-orthodb_prefix',
-                                                 type=str,
-                                                 nargs='?',
-                                                 default='odb10v1_',
-                                                 help='Prefix of all OrthoDB files in OrthoDB folder.')
-get_orthodb_map_configuration_group.add_argument('-tmp_path',
-                                                 type=str,
-                                                 nargs='?',
-                                                 default='.tmp/',
-                                                 help='Where to put temporary files.')
-get_orthodb_map_configuration_group.add_argument('--silent',
-                                                 action='store_true',
-                                                 help='silent CLI if included.')
+# get_orthodb_map_parser = ortho2align_subparsers.add_parser('get_orthodb_map',
+#                                                            help='Retrieve mapping between OrthoDB genes in query speices to know orthologs in subject species.',
+#                                                            description='Retrieve mapping between OrthoDB genes in query speices to know orthologs in subject species.',
+#                                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# get_orthodb_map_parser.set_defaults(func=get_orthodb_map)
+# get_orthodb_map_input_group = get_orthodb_map_parser.add_argument_group('Input')
+# get_orthodb_map_input_group.add_argument('-query_genes',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='Path to a list of query gene IDs,'
+#                                               'one ID per line.')
+# get_orthodb_map_input_group.add_argument('-query_db',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          choices=external_dbs,
+#                                          help='Database from which query gene IDs '
+#                                               'were taken.')
+# get_orthodb_map_input_group.add_argument('-subject_db',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          choices=external_dbs,
+#                                          help='Database from which return IDs of '
+#                                               'query genes orthologs in subject '
+#                                               'species.')
+# get_orthodb_map_input_group.add_argument('-level_taxid',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='NCBI taxid of level at which '
+#                                               'orthologous groups will be found.')
+# get_orthodb_map_input_group.add_argument('-subject_taxids',
+#                                          type=str,
+#                                          nargs='+',
+#                                          required=True,
+#                                          help='List of subject species NCBI '
+#                                               'taxids delimited by a whitespace.')
+# get_orthodb_map_input_group.add_argument('-orthodb_path',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='Path to OrthoDB folder.')
+# get_orthodb_map_input_group.add_argument('-cache_path',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='Path where OrthoDB cross-'
+#                                               'references were cached.')
+# get_orthodb_map_output_group = get_orthodb_map_parser.add_argument_group('Output')
+# get_orthodb_map_output_group.add_argument('-outfile',
+#                                           type=str,
+#                                           nargs='?',
+#                                           required=True,
+#                                           help='Output json filename.')
+# get_orthodb_map_configuration_group = get_orthodb_map_parser.add_argument_group('Configuration')
+# get_orthodb_map_configuration_group.add_argument('-orthodb_prefix',
+#                                                  type=str,
+#                                                  nargs='?',
+#                                                  default='odb10v1_',
+#                                                  help='Prefix of all OrthoDB files in OrthoDB folder.')
+# get_orthodb_map_configuration_group.add_argument('-tmp_path',
+#                                                  type=str,
+#                                                  nargs='?',
+#                                                  default='.tmp/',
+#                                                  help='Where to put temporary files.')
+# get_orthodb_map_configuration_group.add_argument('--silent',
+#                                                  action='store_true',
+#                                                  help='silent CLI if included.')
 
-get_orthodb_by_taxid_parser = ortho2align_subparsers.add_parser('get_orthodb_by_taxid',
-                                                                help='Retrieve OrthoDB mapping for specific taxid from bulk OrthoDB mapping produced with get_orthodb_map.',
-                                                                description='Retrieve OrthoDB mapping for specific taxid from bulk OrthoDB mapping produced with get_orthodb_map.',
-                                                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-get_orthodb_by_taxid_parser.set_defaults(func=get_orthodb_by_taxid)
-get_orthodb_by_taxid_parser.add_argument('-orthodb_map',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='OrthoDB mapping produced with get_orthodb_map')
-get_orthodb_by_taxid_parser.add_argument('-taxid',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='NCBI taxid to extract mapping for')
-get_orthodb_by_taxid_parser.add_argument('-output',
-                                         type=str,
-                                         nargs='?',
-                                         required=True,
-                                         help='json output filename')
+# get_orthodb_by_taxid_parser = ortho2align_subparsers.add_parser('get_orthodb_by_taxid',
+#                                                                 help='Retrieve OrthoDB mapping for specific taxid from bulk OrthoDB mapping produced with get_orthodb_map.',
+#                                                                 description='Retrieve OrthoDB mapping for specific taxid from bulk OrthoDB mapping produced with get_orthodb_map.',
+#                                                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# get_orthodb_by_taxid_parser.set_defaults(func=get_orthodb_by_taxid)
+# get_orthodb_by_taxid_parser.add_argument('-orthodb_map',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='OrthoDB mapping produced with get_orthodb_map')
+# get_orthodb_by_taxid_parser.add_argument('-taxid',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='NCBI taxid to extract mapping for')
+# get_orthodb_by_taxid_parser.add_argument('-output',
+#                                          type=str,
+#                                          nargs='?',
+#                                          required=True,
+#                                          help='json output filename')
 
-get_liftover_map_parser = ortho2align_subparsers.add_parser('get_liftover_map',
-                                                            help='Retrieve mapping and annotation of syntenic regions from liftOver chain file.',
-                                                            description='Retrieve mapping and annotation of syntenic regions from liftOver chain file.',
-                                                            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-get_liftover_map_parser.set_defaults(func=get_liftover_map)
-get_liftover_map_input_group = get_liftover_map_parser.add_argument_group('Input')
-get_liftover_map_input_group.add_argument('-chain_file',
-                                          type=str,
-                                          nargs='?',
-                                          required=True,
-                                          help='Input liftOver chain file.')
-get_liftover_map_output_group = get_liftover_map_parser.add_argument_group('Output')
-get_liftover_map_output_group.add_argument('-liftover_map',
-                                           type=str,
-                                           nargs='?',
-                                           required=True,
-                                           help='Output json map file.')
-get_liftover_map_output_group.add_argument('-query_anchors',
-                                           type=str,
-                                           nargs='?',
-                                           required=True,
-                                           help='output query anchors bed file.')
-get_liftover_map_output_group.add_argument('-subject_anchors',
-                                           type=str,
-                                           nargs='?',
-                                           required=True,
-                                           help='output subject anchors bed file.')
+# get_liftover_map_parser = ortho2align_subparsers.add_parser('get_liftover_map',
+#                                                             help='Retrieve mapping and annotation of syntenic regions from liftOver chain file.',
+#                                                             description='Retrieve mapping and annotation of syntenic regions from liftOver chain file.',
+#                                                             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# get_liftover_map_parser.set_defaults(func=get_liftover_map)
+# get_liftover_map_input_group = get_liftover_map_parser.add_argument_group('Input')
+# get_liftover_map_input_group.add_argument('-chain_file',
+#                                           type=str,
+#                                           nargs='?',
+#                                           required=True,
+#                                           help='Input liftOver chain file.')
+# get_liftover_map_output_group = get_liftover_map_parser.add_argument_group('Output')
+# get_liftover_map_output_group.add_argument('-liftover_map',
+#                                            type=str,
+#                                            nargs='?',
+#                                            required=True,
+#                                            help='Output json map file.')
+# get_liftover_map_output_group.add_argument('-query_anchors',
+#                                            type=str,
+#                                            nargs='?',
+#                                            required=True,
+#                                            help='output query anchors bed file.')
+# get_liftover_map_output_group.add_argument('-subject_anchors',
+#                                            type=str,
+#                                            nargs='?',
+#                                            required=True,
+#                                            help='output subject anchors bed file.')
 
 bg_from_inter_ranges_parser = ortho2align_subparsers.add_parser('bg_from_inter_ranges',
                                                                 help='Generate background set of genomic ranges from intergenic ranges.',
@@ -700,86 +602,86 @@ annotate_orthologs_output_group.add_argument('-output',
                                              help='output filename.')
 
 
-benchmark_orthologs_parser = ortho2align_subparsers.add_parser('benchmark_orthologs',
-                                                               help='Compare found orthologs against real orthologs and calculate several performance metrics.',
-                                                               description='Compare found orthologs against real orthologs and calculate several performance metrics.',
-                                                               formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-benchmark_orthologs_parser.set_defaults(func=benchmark_orthologs)
-benchmark_orthologs_parser.add_argument('-query_genes',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='query genomic ranges.')
-benchmark_orthologs_parser.add_argument('-query_name_regex',
-                                        type=str,
-                                        nargs='?',
-                                        default=None,
-                                        help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
-                                             'Must contain one catching group.')
-benchmark_orthologs_parser.add_argument('-found_query',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='found orthologs of query genomic ranges in query genome.')
-benchmark_orthologs_parser.add_argument('-found_query_name_regex',
-                                        type=str,
-                                        nargs='?',
-                                        default=None,
-                                        help='Regular expression for extracting gene names from the found query orthologs annotation (.gff and .gtf only). '
-                                             'Must contain one catching group.')
-benchmark_orthologs_parser.add_argument('-found_subject',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='found orthologs of query genomic ranges in subject genome.')
-benchmark_orthologs_parser.add_argument('-found_subject_name_regex',
-                                        type=str,
-                                        nargs='?',
-                                        default=None,
-                                        help='Regular expression for extracting gene names from the found subject orthologs annotation (.gff and .gtf only). '
-                                             'Must contain one catching group.')
-benchmark_orthologs_parser.add_argument('-found_query_map',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='json map linking query genes names and names of corresponding found query orthologs.')
-benchmark_orthologs_parser.add_argument('-found_subject_map',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='json map linking query genes names and names of corresponding found subject orthologs.')
-benchmark_orthologs_parser.add_argument('-found_query_subject_map',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='json map linking query orthologs names and corresponding subject orthologs names.')
-benchmark_orthologs_parser.add_argument('-real_subject',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='real orthologs of query genomic ranges in subject genome.')
-benchmark_orthologs_parser.add_argument('-real_subject_name_regex',
-                                        type=str,
-                                        nargs='?',
-                                        default=None,
-                                        help='Regular expression for extracting gene names from the real subject orthologs annotation (.gff and .gtf only). '
-                                             'Must contain one catching group.')
-benchmark_orthologs_parser.add_argument('-real_map',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='json map linking query genes names and names of corresponding real orthologs.')
-benchmark_orthologs_parser.add_argument('-tp_mode',
-                                        type=str,
-                                        nargs='?',
-                                        choices=['all', 'single'],
-                                        default='all',
-                                        help='how to calculate true positives')
-benchmark_orthologs_parser.add_argument('-outfile',
-                                        type=str,
-                                        nargs='?',
-                                        required=True,
-                                        help='json output filename.')
+# benchmark_orthologs_parser = ortho2align_subparsers.add_parser('benchmark_orthologs',
+#                                                                help='Compare found orthologs against real orthologs and calculate several performance metrics.',
+#                                                                description='Compare found orthologs against real orthologs and calculate several performance metrics.',
+#                                                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+# benchmark_orthologs_parser.set_defaults(func=benchmark_orthologs)
+# benchmark_orthologs_parser.add_argument('-query_genes',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='query genomic ranges.')
+# benchmark_orthologs_parser.add_argument('-query_name_regex',
+#                                         type=str,
+#                                         nargs='?',
+#                                         default=None,
+#                                         help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
+#                                              'Must contain one catching group.')
+# benchmark_orthologs_parser.add_argument('-found_query',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='found orthologs of query genomic ranges in query genome.')
+# benchmark_orthologs_parser.add_argument('-found_query_name_regex',
+#                                         type=str,
+#                                         nargs='?',
+#                                         default=None,
+#                                         help='Regular expression for extracting gene names from the found query orthologs annotation (.gff and .gtf only). '
+#                                              'Must contain one catching group.')
+# benchmark_orthologs_parser.add_argument('-found_subject',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='found orthologs of query genomic ranges in subject genome.')
+# benchmark_orthologs_parser.add_argument('-found_subject_name_regex',
+#                                         type=str,
+#                                         nargs='?',
+#                                         default=None,
+#                                         help='Regular expression for extracting gene names from the found subject orthologs annotation (.gff and .gtf only). '
+#                                              'Must contain one catching group.')
+# benchmark_orthologs_parser.add_argument('-found_query_map',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='json map linking query genes names and names of corresponding found query orthologs.')
+# benchmark_orthologs_parser.add_argument('-found_subject_map',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='json map linking query genes names and names of corresponding found subject orthologs.')
+# benchmark_orthologs_parser.add_argument('-found_query_subject_map',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='json map linking query orthologs names and corresponding subject orthologs names.')
+# benchmark_orthologs_parser.add_argument('-real_subject',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='real orthologs of query genomic ranges in subject genome.')
+# benchmark_orthologs_parser.add_argument('-real_subject_name_regex',
+#                                         type=str,
+#                                         nargs='?',
+#                                         default=None,
+#                                         help='Regular expression for extracting gene names from the real subject orthologs annotation (.gff and .gtf only). '
+#                                              'Must contain one catching group.')
+# benchmark_orthologs_parser.add_argument('-real_map',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='json map linking query genes names and names of corresponding real orthologs.')
+# benchmark_orthologs_parser.add_argument('-tp_mode',
+#                                         type=str,
+#                                         nargs='?',
+#                                         choices=['all', 'single'],
+#                                         default='all',
+#                                         help='how to calculate true positives')
+# benchmark_orthologs_parser.add_argument('-outfile',
+#                                         type=str,
+#                                         nargs='?',
+#                                         required=True,
+#                                         help='json output filename.')
 
 
 run_pipeline_parser = ortho2align_subparsers.add_parser('run_pipeline',

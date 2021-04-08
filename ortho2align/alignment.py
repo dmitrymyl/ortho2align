@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from .utils import numberize
 
 
@@ -112,11 +111,11 @@ class HSP:
 
     def __eq__(self, other):
         """Equality magic method."""
-        return (self.qstart == other.qstart and
-                self.qend == other.qend and
-                self.sstart == other.sstart and
-                self.send == other.send and
-                self.score == other.score)
+        return (self.qstart == other.qstart
+                and self.qend == other.qend
+                and self.sstart == other.sstart
+                and self.send == other.send
+                and self.score == other.score)
 
     def precede(self, other):
         """Infers HSP precedence.
@@ -132,9 +131,9 @@ class HSP:
             Precedence is defined only for HSPs of same
             orientation (except for None orientation).
         """
-        if (self.orientation != other.orientation and
-            (self.orientation is not None) and
-            (other.orientation is not None)):
+        if self.orientation != other.orientation \
+           and (self.orientation is not None) \
+           and (other.orientation is not None):
             raise ValueError(f"HSPs have inconsistent orientations: "
                              f"{self.orientation} for {self} and "
                              f"{other.orientation} for {other}.")
@@ -174,9 +173,9 @@ class HSP:
             Distance is defined only for HSPs of same
             orientation (except for None orientation).
         """
-        if (self.orientation != other.orientation and
-            (self.orientation is not None) and
-            (other.orientation is not None)):
+        if self.orientation != other.orientation \
+           and (self.orientation is not None) \
+           and (other.orientation is not None):
             raise ValueError(f"HSPs have inconsistent orientations: "
                              f"{self.orientation} for {self} and "
                              f"{other.orientation} for {other}.")
@@ -250,23 +249,23 @@ class HSP:
 
         if type_ == 'qleft':
             fraction = (hsp.qend - point) / (hsp.qend - hsp.qstart)
-            hsp.sstart = round((point - hsp.qstart) *
-                               (hsp.send - hsp.sstart) /
-                               (hsp.qend - hsp.qstart) +
-                               hsp.sstart)
+            hsp.sstart = round((point - hsp.qstart)
+                               * (hsp.send - hsp.sstart)
+                               / (hsp.qend - hsp.qstart)
+                               + hsp.sstart)
             hsp.qstart = point
         elif type_ == 'qright':
             fraction = (point - hsp.qstart) / (hsp.qend - hsp.qstart)
-            hsp.send = round((point - hsp.qstart) *
-                             (hsp.send - hsp.sstart) /
-                             (hsp.qend - hsp.qstart) +
-                             hsp.sstart)
+            hsp.send = round((point - hsp.qstart)
+                             * (hsp.send - hsp.sstart)
+                             / (hsp.qend - hsp.qstart)
+                             + hsp.sstart)
             hsp.qend = point
         elif type_ == 'sleft':
-            qpoint = round((point - hsp.sstart) *
-                           (hsp.qend - hsp.qstart) /
-                           (hsp.send - hsp.sstart) +
-                           hsp.qstart)
+            qpoint = round((point - hsp.sstart)
+                           * (hsp.qend - hsp.qstart)
+                           / (hsp.send - hsp.sstart)
+                           + hsp.qstart)
             if hsp.orientation == 'direct':
                 fraction = (hsp.send - point) / (hsp.send - hsp.sstart)
                 hsp.qstart = qpoint
@@ -276,10 +275,10 @@ class HSP:
                 hsp.qend = qpoint
                 hsp.send = point
         elif type_ == 'sright':
-            qpoint = round((point - hsp.sstart) *
-                           (hsp.qend - hsp.qstart) /
-                           (hsp.send - hsp.sstart) +
-                           hsp.qstart)
+            qpoint = round((point - hsp.sstart)
+                           * (hsp.qend - hsp.qstart)
+                           / (hsp.send - hsp.sstart)
+                           + hsp.qstart)
             if hsp.orientation == 'direct':
                 fraction = (point - hsp.sstart) / (hsp.send - hsp.sstart)
                 hsp.qend = qpoint
@@ -450,22 +449,22 @@ class Alignment:
     def chain_class(self):
         return AlignmentChain
 
-    def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None, main_color='black', all_color='grey'):
-        """Plots alignment map."""
-        if self.filtered:
-            hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
-                          for hsp in self._all_HSPs)
-            qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
-            plt.plot([qstarts, qends], [sstarts, sends], color=all_color)
+    # def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None, main_color='black', all_color='grey'):
+    #     """Plots alignment map."""
+    #     if self.filtered:
+    #         hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
+    #                       for hsp in self._all_HSPs)
+    #         qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
+    #         plt.plot([qstarts, qends], [sstarts, sends], color=all_color)
 
-        hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
-                      for hsp in self.HSPs)
-        qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
-        plt.plot([qstarts, qends], [sstarts, sends], color=main_color)
-        plt.xlim(qleft, qright)
-        plt.ylim(sleft, sright)
-        plt.xlabel("Query")
-        plt.ylabel("Subject")
+    #     hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
+    #                   for hsp in self.HSPs)
+    #     qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
+    #     plt.plot([qstarts, qends], [sstarts, sends], color=main_color)
+    #     plt.xlim(qleft, qright)
+    #     plt.ylim(sleft, sright)
+    #     plt.xlabel("Query")
+    #     plt.ylabel("Subject")
 
     @classmethod
     def from_file_blast(cls,
@@ -1067,33 +1066,33 @@ class AlignmentChain:
         score = dict_.get('score')
         return cls(HSPs, alignment, score)
 
-    def plot_chain(self, color='red', link_color='blue'):
-        """Plots alignment chain with corresponding alignment.
+    # def plot_chain(self, color='red', link_color='blue'):
+    #     """Plots alignment chain with corresponding alignment.
 
-        First plots corresponding alignment in black, then
-        alignment chains's HSPs with solid lines and connections
-        between them with dashed lines.
+    #     First plots corresponding alignment in black, then
+    #     alignment chains's HSPs with solid lines and connections
+    #     between them with dashed lines.
 
-        Args:
-            color (str): a color name to plot alignment chain's
-                HSPs;
-            link_color (str): a color name to plot connections
-                between alignment chain's HSPs.
+    #     Args:
+    #         color (str): a color name to plot alignment chain's
+    #             HSPs;
+    #         link_color (str): a color name to plot connections
+    #             between alignment chain's HSPs.
 
-        Returns:
-            None
-        """
-        self.alignment.plot_alignment()
-        hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
-                      for hsp in self.HSPs)
-        qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
-        plt.plot([qstarts, qends], [sstarts, sends], color=color)
-        link_coords = ((self.HSPs[i].qend,
-                        self.HSPs[i + 1].qstart,
-                        self.HSPs[i].send,
-                        self.HSPs[i + 1].sstart)
-                       for i in range(len(self.HSPs) - 1))
-        lqstarts, lqends, lsstarts, lsends = list(zip(*link_coords))
-        plt.plot([lqstarts, lqends], [lsstarts, lsends],
-                 color=link_color,
-                 linestyle='dashed')
+    #     Returns:
+    #         None
+    #     """
+    #     self.alignment.plot_alignment()
+    #     hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
+    #                   for hsp in self.HSPs)
+    #     qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
+    #     plt.plot([qstarts, qends], [sstarts, sends], color=color)
+    #     link_coords = ((self.HSPs[i].qend,
+    #                     self.HSPs[i + 1].qstart,
+    #                     self.HSPs[i].send,
+    #                     self.HSPs[i + 1].sstart)
+    #                    for i in range(len(self.HSPs) - 1))
+    #     lqstarts, lqends, lsstarts, lsends = list(zip(*link_coords))
+    #     plt.plot([lqstarts, lqends], [lsstarts, lsends],
+    #              color=link_color,
+    #              linestyle='dashed')

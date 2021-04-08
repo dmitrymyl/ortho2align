@@ -1,14 +1,25 @@
 import json
 import os
 import random
+import time
+from collections import defaultdict
+from functools import partial
+from pathlib import Path
+from resource import getrusage, RUSAGE_SELF
+from subprocess import DEVNULL, run
 from tempfile import TemporaryDirectory
 
 from tqdm import tqdm
 
-from .parsing import parse_annotation
-from .fitting import ranking
-from .genomicranges import GenomicRangesAlignment
-from .parallel import ExceptionLogger
+from .benchmark import calc_ortholog_metrics, trace_orthologs
+from .fitting import HistogramFitter, KernelFitter, ranking
+from .genomicranges import (BaseGenomicRangesList, FastaSeqFile,
+                            GenomicRangesAlignment, GenomicRangesList,
+                            SequencePath)
+from .parallel import (ExceptionLogger, NonExceptionalProcessPool,
+                       TimeoutProcessPool)
+from .parsing import ParserException, parse_annotation
+from .utils import simple_hist, slplot
 
 
 class CmdProgressBar(tqdm):
@@ -37,404 +48,7 @@ class CmdProgressBar(tqdm):
         super().update()
 
 
-def cache_orthodb_xrefs(orthodb_path, cache_path, orthodb_prefix, xref_suffix):
-
-    from pathlib import Path
-
-    from .orthodb import split_odb_file
-
-    orthodb_path = Path(orthodb_path)
-    cache_path = Path(cache_path)
-
-    gene_xrefs_colnames = ['odb_gene_id',
-                           'external_gene_id',
-                           'external_db']
-
-    if not cache_path.exists():
-        os.mkdir(cache_path)
-
-    split_odb_file(xref_suffix,
-                   orthodb_path,
-                   orthodb_prefix,
-                   'external_db',
-                   gene_xrefs_colnames,
-                   cache_path)
-
-
-def get_orthodb_map(query_genes, output_json_file, query_db, subject_db,
-                    level_taxid, subject_taxids, orthodb_path, cache_path,
-                    orthodb_prefix, silent, tmp_path):
-
-    import json
-    from collections import defaultdict
-    from pathlib import Path
-
-    import pandas as pd
-
-    from .orthodb import (filter_odb_file, filter_table, load_table,
-                          query_cached_odb_file)
-
-    query_genes = Path(query_genes)
-    output_json_file = Path(output_json_file)
-    orthodb_path = Path(orthodb_path)
-    cache_path = Path(cache_path)
-    tmp_path = Path(tmp_path)
-    process_id = os.getpid()
-
-    if not tmp_path.exists():
-        os.mkdir(tmp_path)
-    tmp_proc = tmp_path.joinpath(str(process_id))
-    os.mkdir(tmp_proc)
-
-    with open(query_genes, 'r') as infile:
-        query_accessions = {line.strip() for line in infile}
-
-    cmd_hints = ['loading xrefs of query genes from cached file...',
-                 'levelling OGs...',
-                 'finding OGs for query genes...',
-                 'getting OrthoDB IDs for subject species...',
-                 'getting subject species genes...',
-                 'getting subject species genes in leveled OGs...',
-                 'finding orthologs for query genes...',
-                 'getting odb_gene_id for subject xref db...',
-                 'filtering subject xref db with found orthologs...',
-                 'finding xref for orthologs of query genes...',
-                 'saving to file...',
-                 'removing temporary files and directories...',
-                 'finished']
-    cmd_point = 0
-    with tqdm(total=(len(cmd_hints) - 1),
-              bar_format='{n_fmt}/{total_fmt} {elapsed}<{remaining} {postfix}',
-              postfix=cmd_hints[cmd_point],
-              disable=silent) as pbar:
-
-        # Load xrefs of query genes from cached file.
-        gene_xrefs_colnames = ['odb_gene_id',
-                               'external_gene_id',
-                               'external_db']
-        query_cache_filename = query_cached_odb_file("gene_xrefs.tab",
-                                                     orthodb_path,
-                                                     orthodb_prefix,
-                                                     'external_db',
-                                                     query_db,
-                                                     gene_xrefs_colnames,
-                                                     cache_path)
-        query_xref_filename = tmp_proc.joinpath('query_xref.tab')
-
-        query_xref_colnames = ['odb_gene_id',
-                               'query_xref_id']
-        query_xref_dtypes = {'odb_gene_id': 'str',
-                             'query_xref_id': 'str'}
-
-        with open(query_cache_filename, 'r') as infile:
-            with open(query_xref_filename, 'w') as outfile:
-                filter_table(infile,
-                             outfile,
-                             'query_xref_id',
-                             query_accessions,
-                             query_xref_colnames,
-                             '\t')
-        query_genes_with_odb_id = load_table(query_xref_filename,
-                                             query_xref_colnames,
-                                             query_xref_dtypes)
-
-        # Leveling OGs.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        OGs_colnames = ['og_id',
-                        'level_taxid',
-                        'og_name']
-
-        leveled_ogs_filename = query_cached_odb_file('OGs.tab',
-                                                     orthodb_path,
-                                                     orthodb_prefix,
-                                                     'level_taxid',
-                                                     level_taxid,
-                                                     OGs_colnames,
-                                                     tmp_proc)
-
-        leveled_OGs_colnames = ['og_id',
-                                'og_name']
-        leveled_OGs_dtypes = {'og_id': 'str',
-                              'og_name': 'str'}
-        leveled_OGs = load_table(leveled_ogs_filename,
-                                 leveled_OGs_colnames,
-                                 leveled_OGs_dtypes,
-                                 usecols=['og_id'])
-
-        # Finding OGs for query genes.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        OG2genes_colnames = ['og_id',
-                             'odb_gene_id']
-        OG2genes_dtypes = {'og_id': 'category',
-                           'odb_gene_id': 'category'}
-        genes_in_leveled_OGs_filename = filter_odb_file('OG2genes.tab',
-                                                        orthodb_path,
-                                                        orthodb_prefix,
-                                                        'og_id',
-                                                        set(leveled_OGs['og_id']),
-                                                        OG2genes_colnames,
-                                                        tmp_proc,
-                                                        'leveled_OGs')
-
-        OGs_for_query_genes_filename = tmp_proc.joinpath('query_genes_OGs.tab')
-        with open(genes_in_leveled_OGs_filename, 'r') as infile:
-            with open(OGs_for_query_genes_filename, 'w') as outfile:
-                filter_table(infile,
-                             outfile,
-                             'odb_gene_id',
-                             set(query_genes_with_odb_id['odb_gene_id']),
-                             OG2genes_colnames,
-                             '\t')
-
-        OGs_for_query_genes = load_table(OGs_for_query_genes_filename,
-                                         OG2genes_colnames,
-                                         OG2genes_dtypes)
-        OGs_for_query_genes = pd.merge(OGs_for_query_genes,
-                                       query_genes_with_odb_id,
-                                       on='odb_gene_id')
-
-        # Getting OrthoDB IDs for subject species.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        species_colnames = ['ncbi_tax_id',
-                            'odb_species_id',
-                            'name',
-                            'genome_assembly_id',
-                            'clustered_count',
-                            'OG_count',
-                            'mapping']
-        species_dtypes = {'ncbi_tax_id': 'str',
-                          'ob_species_id': 'str',
-                          'name': 'str',
-                          'genome_assembly_id': 'str',
-                          'clustered_count': 'int',
-                          'OG_count': 'int',
-                          'mapping': 'category'}
-        odb_subject_species_ids_filename = filter_odb_file('species.tab',
-                                                           orthodb_path,
-                                                           orthodb_prefix,
-                                                           'ncbi_tax_id',
-                                                           subject_taxids,
-                                                           species_colnames,
-                                                           tmp_proc,
-                                                           'species')
-        odb_subject_species_ids = load_table(odb_subject_species_ids_filename,
-                                             species_colnames,
-                                             species_dtypes,
-                                             usecols=['ncbi_tax_id',
-                                                      'odb_species_id'])
-
-        # Getting subject species genes.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        genes_colnames = ['odb_gene_id',
-                          'odb_species_id',
-                          'protein_seq_id',
-                          'synonyms',
-                          'UniProt',
-                          'ENSEMBL',
-                          'NCBIgid',
-                          'description']
-        genes_dtypes = {'odb_gene_id': 'str',
-                        'odb_species_id': 'category',
-                        'protein_seq_id': 'str',
-                        'synonyms': 'str',
-                        'UniProt': 'str',
-                        'ENSEMBL': 'str',
-                        'NCBIgid': 'str',
-                        'description': 'str'}
-
-        subject_species_genes_filename = filter_odb_file('genes.tab',
-                                                         orthodb_path,
-                                                         orthodb_prefix,
-                                                         'odb_species_id',
-                                                         set(odb_subject_species_ids['odb_species_id']),
-                                                         genes_colnames,
-                                                         tmp_proc,
-                                                         'species')
-        subject_species_genes = load_table(subject_species_genes_filename,
-                                           genes_colnames,
-                                           genes_dtypes,
-                                           usecols=['odb_gene_id',
-                                                    'odb_species_id'])
-
-        # Getting subject species genes in leveled OGs.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        subject_genes_in_leveled_OGs_filename = tmp_proc.joinpath('subject_genes_in_leveled_OGs.tab')
-        with open(genes_in_leveled_OGs_filename, 'r') as infile:
-            with open(subject_genes_in_leveled_OGs_filename, 'w') as outfile:
-                filter_table(infile,
-                             outfile,
-                             'odb_gene_id',
-                             set(subject_species_genes['odb_gene_id']),
-                             OG2genes_colnames,
-                             '\t')
-        subject_genes_in_leveled_OGs = load_table(subject_genes_in_leveled_OGs_filename,
-                                                  OG2genes_colnames,
-                                                  OG2genes_dtypes)
-        subject_genes_in_leveled_OGs = pd.merge(subject_genes_in_leveled_OGs,
-                                                subject_species_genes,
-                                                on='odb_gene_id')
-
-        # Finding orthologs for query genes.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        orthologs_for_query_genes = pd.merge(OGs_for_query_genes,
-                                             subject_genes_in_leveled_OGs,
-                                             on='og_id',
-                                             suffixes=('', '_ortholog'))
-
-        # Getting odb_gene_id for subject xref db.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        subject_cache_filename = query_cached_odb_file("gene_xrefs.tab",
-                                                       orthodb_path,
-                                                       orthodb_prefix,
-                                                       'external_db',
-                                                       subject_db,
-                                                       gene_xrefs_colnames,
-                                                       cache_path)
-
-        # Filtering subject xref db with found orthologs.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        subject_xref_colnames = ['odb_gene_id',
-                                 'subject_xref_id']
-        subject_xref_dtypes = {'odb_gene_id': 'str',
-                               'subject_xref_id': 'str'}
-        orthologs_xrefs_filename = tmp_proc.joinpath('orthologs_xrefs.tab')
-
-        with open(subject_cache_filename, 'r') as infile:
-            with open(orthologs_xrefs_filename, 'w') as outfile:
-                filter_table(infile,
-                             outfile,
-                             'odb_gene_id',
-                             set(orthologs_for_query_genes['odb_gene_id_ortholog']),
-                             subject_xref_colnames,
-                             '\t')
-
-        orthologs_xrefs = load_table(orthologs_xrefs_filename,
-                                     subject_xref_colnames,
-                                     subject_xref_dtypes)
-
-        # Finding xref for orthologs of query genes.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        orthologs_with_xrefs = pd.merge(orthologs_for_query_genes,
-                                        orthologs_xrefs,
-                                        left_on='odb_gene_id_ortholog',
-                                        right_on='odb_gene_id',
-                                        suffixes=("", "_ortholog"))
-        # Saving to file.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        species_dict = {item['odb_species_id']: item['ncbi_tax_id']
-                        for item in odb_subject_species_ids.to_dict('record')}
-        orthologs_with_xrefs = orthologs_with_xrefs.assign(ncbi_tax_id=lambda x: x['odb_species_id'].map(species_dict))
-        report_df = (orthologs_with_xrefs.drop_duplicates(subset=['query_xref_id',
-                                                                  'subject_xref_id',
-                                                                  'odb_species_id'])
-                                         .drop(['odb_gene_id_ortholog',
-                                                'odb_gene_id',
-                                                'odb_species_id'],
-                                               axis=1))
-        map_df = (report_df.drop(['og_id'], axis=1)
-                           .groupby(['query_xref_id', 'ncbi_tax_id'])
-                           .agg(list)
-                           .applymap(lambda x: x if isinstance(x, list) else []))
-        json_map = defaultdict(dict)
-        for key, value in map_df.to_dict()['subject_xref_id'].items():
-            subject_xref_id = key[0]
-            ncbi_tax_id = key[1]
-            json_map[subject_xref_id][ncbi_tax_id] = value
-
-        with open(output_json_file, 'w') as outfile:
-            json.dump(json_map, outfile)
-
-        # Remove temporary files and directories.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-        for file in tmp_proc.glob("*"):
-            os.remove(file)
-        os.rmdir(tmp_proc)
-        # Finished.
-        cmd_point += 1
-        pbar.postfix = cmd_hints[cmd_point]
-        pbar.update()
-
-
-def get_orthodb_by_taxid(orthodb_map_filename, taxid, output_filename):
-    import json
-    from pathlib import Path
-
-    from .genomicranges import extract_taxid_mapping
-
-    orthodb_map_filename = Path(orthodb_map_filename)
-    output_filename = Path(output_filename)
-
-    with open(orthodb_map_filename, 'r') as infile:
-        orthodb_map = json.load(infile)
-
-    taxid_map = extract_taxid_mapping(orthodb_map, taxid)
-
-    with open(output_filename, 'w') as outfile:
-        json.dump(taxid_map, outfile)
-
-
-def get_liftover_map(chain_file, liftover_map, query_anchors, subject_anchors):
-    import json
-    from collections import defaultdict, namedtuple
-    from pathlib import Path
-
-    chain_filename = Path(chain_file)
-    liftover_map_filename = Path(liftover_map)
-    query_anchors_filename = Path(query_anchors)
-    subject_anchors_filename = Path(subject_anchors)
-
-    Chain = namedtuple('Chain',
-                       'chain score qchrom qsize qstrand qstart qend schrom ssize sstrand sstart send name')
-    QueryBed = namedtuple('QueryBed',
-                          'qchrom qstart qend name score qstrand')
-    SubjectBed = namedtuple('SubjectBed',
-                            'schrom sstart send name score sstrand')
-    chain_map = defaultdict(list)
-
-    with open(chain_filename, 'r') as chainfile, \
-         open(query_anchors_filename, 'w') as qoutfile, \
-         open(subject_anchors_filename, 'w') as soutfile:
-        for line in chainfile:
-            if line.startswith('chain'):
-                chain = Chain(*line.strip().split())
-                query_bed = QueryBed(*(chain._asdict()[k] for k in QueryBed._fields))
-                subject_bed = SubjectBed(*(chain._asdict()[k] for k in SubjectBed._fields))
-                chain_map[chain.name].append(chain.name)
-                qoutfile.write('\t'.join(query_bed) + '\n')
-                soutfile.write('\t'.join(subject_bed) + '\n')
-
-    with open(liftover_map_filename, 'w') as outfile:
-        json.dump(chain_map, outfile)
-
-
 def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filename, seed, silent=False):
-    import random
-
-    from .genomicranges import BaseGenomicRangesList
-    from .parsing import parse_annotation
-
     random.seed(seed)
 
     cmd_hints = ['parsing the annotation...',
@@ -466,8 +80,6 @@ def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filenam
 
 
 def bg_from_shuffled_ranges(genes_filename, genome_filename, name_regex, sample_size, output_filename, seed):
-    from .parsing import parse_annotation
-
     with open(genes_filename, 'r') as infile:
         genes = parse_annotation(infile,
                                  name_regex=name_regex,
@@ -530,20 +142,24 @@ def _estimate_bg_for_single_query_seqfile(query, seqfile, word_size, output_name
             scores = random.sample(scores, observations)
         with open(output_name, 'w') as outfile:
             json.dump(scores, outfile)
-        return output_name, score_size
+        return score_size
     except Exception as e:
         raise ExceptionLogger(e, query)
 
 
-def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_filename,
-                        subject_genome_filename, outdir, cores, word_size, observations,
-                        seed, query_name_regex=None, bg_name_regex=None, silent=False):
-    from tempfile import TemporaryDirectory
-
-    from .genomicranges import FastaSeqFile, SequencePath
-    from .parallel import NonExceptionalProcessPool
-    from .parsing import parse_annotation
-
+def estimate_background(query_genes_filename,
+                        bg_ranges_filename,
+                        query_genome_filename,
+                        subject_genome_filename,
+                        outdir,
+                        cores=1,
+                        word_size=6,
+                        observations=1000,
+                        seed=0,
+                        query_name_regex=None,
+                        bg_name_regex=None,
+                        silent=False,
+                        stats_filename=None):
     cmd_hints = ['reading annotations...',
                  'getting sample sequences...',
                  'aligning samples...',
@@ -563,6 +179,8 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
                                          name_regex=bg_name_regex)
 
         pbar.update()
+
+        total_query_genes = len(query_genes)
 
         query_chromsizes = FastaSeqFile(query_genome_filename).chromsizes
         subject_chromsizes = FastaSeqFile(subject_genome_filename).chromsizes
@@ -592,7 +210,8 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
             try:
                 with NonExceptionalProcessPool(cores, verbose=(not silent)) as p:
                     results, exceptions = p.starmap_async(_estimate_bg_for_single_query_seqfile, data)
-                if len(exceptions) > 0:
+                total_exceptions = len(exceptions)
+                if total_exceptions > 0:
                     pbar.write(f'{len(exceptions)} exceptions occured.')
                     for exception in exceptions:
                         pbar.write(str(exception))
@@ -601,15 +220,25 @@ def estimate_background(query_genes_filename, bg_ranges_filename, query_genome_f
                         outfile.write(exception.variable.to_bed6() + '\n')
             except Exception as e:
                 raise ExceptionLogger(e, p, 'Consider allocating more RAM or CPU time.')
-
         pbar.update()
+        stats_msg = "-----------------------\n" \
+                    f"estimate_background stats:\n" \
+                    f"Recieved {total_query_genes} transcripts.\n" \
+                    f"Estimated background for {total_query_genes - total_exceptions} of them.\n" \
+                    f"Caught {total_exceptions} exceptions.\n" \
+                    f"Distribution of amount of found background HSPs:\n{slplot(results)}\n" \
+                    f"Reported at most {observations} HSPs for each transcript.\n" \
+                    "-----------------------"
+        if isinstance(stats_filename, str):
+            with open(stats_filename, 'w') as stats_file:
+                pbar.write(stats_msg, file=stats_file)
+        else:
+            pbar.write(stats_msg)
 
 
 def _anchor(query_genes, query_anchors, query_genome_filename,
             subject_anchors, subject_genome_filename, query_chromsizes,
             subject_chromsizes, ortho_map, neighbour_dist, merge_dist, flank_dist):
-    from .genomicranges import GenomicRangesList
-
     query_anchors.relation_mapping(subject_anchors,
                                    ortho_map,
                                    'orthologs')
@@ -652,9 +281,6 @@ def _anchor(query_genes, query_anchors, query_genome_filename,
 def _lift(query_genes, query_genome_filename, subject_genome_filename, query_chromsizes,
           subject_chromsizes, liftover_chains,
           merge_dist, flank_dist, min_ratio=0.05):
-    from subprocess import run, DEVNULL
-
-    from .genomicranges import GenomicRangesList
 
     query_unalignable = list()
     query_prepared = list()
@@ -709,7 +335,7 @@ def _align_syntenies(grange, word_size, outdir):
         with open(os.path.join(outdir, f"{grange.name}.json"), 'w') as outfile:
             json.dump(alignments, outfile)
 
-        return grange.name, len(alignments)
+        return len(alignments)
 
     except Exception as e:
         raise ExceptionLogger(e, grange)
@@ -733,15 +359,8 @@ def get_alignments(mode,
                    merge_dist=0,
                    flank_dist=0,
                    word_size=6,
-                   silent=False):
-    import json
-    from functools import partial
-    from tempfile import TemporaryDirectory
-
-    from .genomicranges import (BaseGenomicRangesList, FastaSeqFile,
-                                SequencePath)
-    from .parallel import NonExceptionalProcessPool
-    from .parsing import parse_annotation
+                   silent=False,
+                   stats_filename=None):
 
     program_mode = mode
     query_genes_filename = query_genes
@@ -767,6 +386,7 @@ def get_alignments(mode,
             query_genes = parse_annotation(infile,
                                            sequence_file_path=query_genome_filename,
                                            name_regex=query_name_regex)
+        total_query_genes = len(query_genes)
         query_genome = FastaSeqFile(query_genome_filename)
         query_chromsizes = query_genome.chromsizes
         subject_genome = FastaSeqFile(subject_genome_filename)
@@ -810,6 +430,8 @@ def get_alignments(mode,
         else:
             raise ValueError("program_mode is not one of ['anchor', 'lift']")
 
+        total_unalignable_genes = len(query_unalignable_genes)
+
         pbar.update()
 
         query_chromsizes = query_prepared_genes.sequence_file.chromsizes
@@ -838,7 +460,8 @@ def get_alignments(mode,
                     raise ExceptionLogger(e, p, 'Consider allocating more RAM or CPU time.')
 
         query_exception_ranges = list()
-        if len(exceptions) > 0:
+        total_exceptions = len(exceptions)
+        if total_exceptions > 0:
             pbar.write(f'{len(exceptions)} exceptions occured:')
             for exception in exceptions:
                 pbar.write(str(exception))
@@ -855,6 +478,20 @@ def get_alignments(mode,
             query_exception_list.to_bed6(outfile)
 
         pbar.update()
+        stats_msg = "-----------------------\n" \
+                    f"get_alignments stats:\n" \
+                    f"Recieved {total_query_genes} transcripts.\n" \
+                    f"Aligned {total_query_genes - total_unalignable_genes - total_exceptions} of them.\n" \
+                    f"Estimated as unalignable {total_unalignable_genes} transcripts.\n" \
+                    f"Caught {total_exceptions} exceptions.\n" \
+                    f"Distribution of amount of alignments:\n{simple_hist(results)}\n" \
+                    f"Reported all alignments for each transcript.\n"\
+                    "-----------------------"
+        if isinstance(stats_filename, str):
+            with open(stats_filename, 'a') as stats_file:
+                pbar.write(stats_msg, file=stats_file)
+        else:
+            pbar.write(stats_msg)
 
 
 def _build(query_gene_alignments_filename, query_bg_filename, fitter, fdr, pval_threshold):
@@ -908,13 +545,8 @@ def build_orthologs(alignments,
                     fdr=False,
                     cores=1,
                     timeout=None,
-                    silent=False):
-    from functools import partial
-    from pathlib import Path
-
-    from .fitting import HistogramFitter, KernelFitter
-    from .genomicranges import BaseGenomicRangesList
-    from .parallel import TimeoutProcessPool
+                    silent=False,
+                    stats_filename=None):
 
     alignments_dir = Path(alignments)
     background_dir = Path(background)
@@ -934,8 +566,10 @@ def build_orthologs(alignments,
         alignments_files = [os.path.join(alignments_dir, filename)
                             for filename in os.listdir(alignments_dir)
                             if filename.endswith('json')]
+        total_alignments = len(alignments_files)
         bg_files = [os.path.join(background_dir, os.path.basename(alignments_file))
                     for alignments_file in alignments_files]
+        total_bgs = len(bg_files)
 
         pbar.update()
 
@@ -960,8 +594,9 @@ def build_orthologs(alignments,
             except Exception as e:
                 raise ExceptionLogger(e, p, 'Consider allocating more RAM or CPU time.')
 
+        total_exceptions = len(exceptions)
         query_exception_ranges = list()
-        if len(exceptions) > 0:
+        if total_exceptions > 0:
             pbar.write(f'{len(exceptions)} exceptions occured:')
             for exception in exceptions:
                 pbar.write(str(exception))
@@ -973,6 +608,8 @@ def build_orthologs(alignments,
             query_orthologs, subject_orthologs, query_dropped = [], [], []
         else:
             query_orthologs, subject_orthologs, query_dropped = zip(*orthologs)
+
+        dist_found = [len(group) for group in query_orthologs]
         query_orthologs = [ortholog
                            for group in query_orthologs
                            for ortholog in group]
@@ -982,6 +619,7 @@ def build_orthologs(alignments,
         query_dropped = BaseGenomicRangesList([grange
                                                for group in query_dropped
                                                for grange in group])
+        total_dropped = len(query_dropped)
         query_exception_list = BaseGenomicRangesList(query_exception_ranges)
 
         if not os.path.exists(outdir):
@@ -1003,6 +641,20 @@ def build_orthologs(alignments,
             query_exception_list.to_bed6(outfile)
 
         pbar.update()
+        stats_msg = "-----------------------\n" \
+                    f"build_orthologs stats:\n" \
+                    f"Recieved {total_alignments} transcript alignments and {total_bgs} backgrounds.\n" \
+                    f"Built orthologs for {total_alignments - total_dropped - total_exceptions} of transcripts.\n" \
+                    f"Found only unsignificant orthologs for {total_dropped} transcripts.\n" \
+                    f"Caught {total_exceptions} exceptions.\n" \
+                    f"Distribution of amount of orthologs:\n{simple_hist(dist_found)}\n" \
+                    f"Reported all orthologs for each transcript.\n" \
+                    "-----------------------"
+        if isinstance(stats_filename, str):
+            with open(stats_filename, 'a') as stats_file:
+                pbar.write(stats_msg, file=stats_file)
+        else:
+            pbar.write(stats_msg)
 
 
 def get_best_orthologs(query_orthologs,
@@ -1012,9 +664,6 @@ def get_best_orthologs(query_orthologs,
                        outfile_query,
                        outfile_subject,
                        outfile_map):
-    import json
-    from collections import defaultdict
-    from pathlib import Path
 
     query_filename = Path(query_orthologs)
     subject_filename = Path(subject_orthologs)
@@ -1074,9 +723,8 @@ def get_best_orthologs(query_orthologs,
 def annotate_orthologs(subject_orthologs,
                        subject_annotation,
                        output,
-                       subject_name_regex=None):
-
-    from .parsing import parse_annotation, ParserException
+                       subject_name_regex=None,
+                       stats_filename=None):
 
     subject_orthologs_filename = subject_orthologs
     subject_annotation_filename = subject_annotation
@@ -1100,11 +748,26 @@ def annotate_orthologs(subject_orthologs,
                 for subject_ortholog in subject_orthologs}
     with open(output_filename, 'w') as outfile:
         outfile.write('Query\tOrtholog\n')
+        dist_annot_amounts = list()
         for ortholog_name, annotation_names in name_map.items():
             if annotation_names:
                 outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
+                dist_annot_amounts.append(len(annotation_names))
             else:
                 outfile.write(f"{ortholog_name}\tNotAnnotated\n")
+                dist_annot_amounts.append(0)
+
+    stats_msg = "-----------------------\n" \
+                f"annotate_orthologs stats:\n" \
+                f"Recieved {len(subject_orthologs)} orthologs.\n" \
+                f"Distribution of amount of annotations:\n{simple_hist(dist_annot_amounts)}\n" \
+                f"Reported all annotations for each ortholog.\n" \
+                "-----------------------"
+    if isinstance(stats_filename, str):
+        with open(stats_filename, 'a') as stats_file:
+            stats_file.write(stats_msg + '\n')
+    else:
+        print(stats_msg)
 
 
 def benchmark_orthologs(query_genes,
@@ -1121,10 +784,6 @@ def benchmark_orthologs(query_genes,
                         real_map,
                         outfile,
                         tp_mode):
-    import json
-
-    from .benchmark import calc_ortholog_metrics, trace_orthologs
-    from .parsing import parse_annotation
 
     query_genes_filename = query_genes
     found_query_filename = found_query
@@ -1211,6 +870,8 @@ def run_pipeline(query_genes,
                  seed=0,
                  silent=False,
                  annotate=False):
+
+    start = time.time()
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     bg_filename = os.path.join(outdir, 'shuffle_bg.bed')
@@ -1223,6 +884,7 @@ def run_pipeline(query_genes,
     best_subject_orthologs = os.path.join(outdir, 'best.subject_orthologs.bed')
     the_map = os.path.join(outdir, 'the_map.json')
     annotation_output = os.path.join(outdir, 'best.ortholog_annotation.tsv')
+    stats_filename = os.path.join(outdir, 'stats.txt')
 
     bg_from_shuffled_ranges(genes_filename=subject_annotation,
                             genome_filename=subject_genome,
@@ -1240,7 +902,8 @@ def run_pipeline(query_genes,
                         word_size=word_size,
                         observations=observations,
                         seed=seed,
-                        silent=silent)
+                        silent=silent,
+                        stats_filename=stats_filename)
     get_alignments(mode=mode,
                    query_genes=query_genes,
                    query_genome=query_genome,
@@ -1259,7 +922,8 @@ def run_pipeline(query_genes,
                    merge_dist=merge_dist,
                    flank_dist=flank_dist,
                    word_size=word_size,
-                   silent=silent)
+                   silent=silent,
+                   stats_filename=stats_filename)
     build_orthologs(alignments=align_outdir,
                     background=bg_outdir,
                     fitting=fitting,
@@ -1268,7 +932,8 @@ def run_pipeline(query_genes,
                     fdr=fdr,
                     cores=cores,
                     timeout=timeout,
-                    silent=silent)
+                    silent=silent,
+                    stats_filename=stats_filename)
     get_best_orthologs(query_orthologs=query_orthologs,
                        subject_orthologs=subject_orthologs,
                        value=value,
@@ -1280,4 +945,11 @@ def run_pipeline(query_genes,
         annotate_orthologs(subject_orthologs=best_subject_orthologs,
                            subject_annotation=subject_annotation,
                            output=annotation_output,
-                           subject_name_regex=subject_name_regex)
+                           subject_name_regex=subject_name_regex,
+                           stats_filename=stats_filename)
+    end = time.time()
+    elapsed_time = time.strftime("%H:%M:%S", time.gmtime(end - start))
+    used_ram_mb = getrusage(RUSAGE_SELF).ru_maxrss / 1024
+    with open(stats_filename, 'a') as stats_file:
+        stats_file.write(f'Elapsed time: {elapsed_time}.\n')
+        stats_file.write(f"Maximum RAM usage: {used_ram_mb // 1024:.0f} Gb {used_ram_mb % 1024:.0f} Mb.\n")

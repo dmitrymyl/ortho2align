@@ -68,7 +68,7 @@ def slplot(data):
     str_split_data = (str_int_to_split(str_int)
                       for str_int in (str(int(item))
                                       for item in sorted(data)))
-    result = ((len_key, f"{digit_key}| {','.join(tuple(item[2] for item in digit_group))}")
+    result = ((len_key, f"{digit_key}| {','.join(tuple(item[2] for item in digit_group))},")
               for len_key, len_group in groupby(str_split_data, lambda item: item[0])
               for digit_key, digit_group in groupby(len_group, lambda item: item[1]))
     str_result = '\n-----\n'.join('\n'.join(item[1] for item in group) for key, group in groupby(result, lambda item: item[0]))
@@ -81,4 +81,5 @@ def simple_hist(data):
     result = {key: value
               for key, value in sorted(counts.items(),
                                        key=lambda i: (i[1], i[0]))}
-    return result
+    str_result = "\n".join([f"{key}: {value}" for key, value in result.items()])
+    return str_result
