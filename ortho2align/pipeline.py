@@ -5,7 +5,7 @@ import time
 from collections import defaultdict
 from functools import partial
 from pathlib import Path
-from resource import getrusage, RUSAGE_SELF
+from resource import getrusage, RUSAGE_SELF, RUSAGE_CHILDREN
 from subprocess import DEVNULL, run
 from tempfile import TemporaryDirectory
 
@@ -949,7 +949,7 @@ def run_pipeline(query_genes,
                            stats_filename=stats_filename)
     end = time.time()
     elapsed_time = time.strftime("%H:%M:%S", time.gmtime(end - start))
-    used_ram_mb = getrusage(RUSAGE_SELF).ru_maxrss / 1024
+    used_ram_mb = getrusage(RUSAGE_SELF).ru_maxrss / 1024 + getrusage(RUSAGE_CHILDREN).ru_maxrss / 1024
     with open(stats_filename, 'a') as stats_file:
         stats_file.write(f'Elapsed time: {elapsed_time}.\n')
         stats_file.write(f"Maximum RAM usage: {used_ram_mb // 1024:.0f} Gb {used_ram_mb % 1024:.0f} Mb.\n")

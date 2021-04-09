@@ -80,6 +80,6 @@ def simple_hist(data):
     counts = Counter(data)
     result = {key: value
               for key, value in sorted(counts.items(),
-                                       key=lambda i: (i[1], i[0]))}
+                                       key=lambda i: (i[0], i[1]))}
     str_result = "\n".join([f"{key}: {value}" for key, value in result.items()])
     return str_result

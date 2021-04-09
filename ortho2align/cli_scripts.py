@@ -453,7 +453,7 @@ get_alignments_lift_params_group.add_argument('-merge_dist',
 get_alignments_lift_params_group.add_argument('-flank_dist',
                                               type=int,
                                               nargs='?',
-                                              default=200000,
+                                              default=50000,
                                               help='how many nts to flank syntenic regions in subject species')
 get_alignments_mode_subparsers = get_alignments_parser.add_subparsers(dest='mode')
 get_alignments_lift_parser = get_alignments_mode_subparsers.add_parser('lift',
@@ -823,7 +823,7 @@ run_pipeline_lift_get_alignments_group.add_argument('-merge_dist',
 run_pipeline_lift_get_alignments_group.add_argument('-flank_dist',
                                                     type=int,
                                                     nargs='?',
-                                                    default=200000,
+                                                    default=50000,
                                                     help='how many nts to flank syntenic regions in subject species')
 
 run_pipeline_anchor_input_parser = argparse.ArgumentParser(add_help=False)
