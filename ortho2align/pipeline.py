@@ -503,8 +503,10 @@ def _build(query_gene_alignments_filename, query_bg_filename, fitter, fdr, pval_
             query_bg = json.load(infile)
     else:
         query_bg = [0, 1]  # simple workaround for correct KDE.
-    if all((item == 0 for item in query_bg)):
+    if len(set(query_bg)) <= 1:
         query_bg += [1]
+    if query_bg[0] == 1:
+        query_bg.append(0)
     try:
         background = fitter(query_bg)
         score_threshold = background.isf(pval_threshold)
