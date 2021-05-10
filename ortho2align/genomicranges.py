@@ -1192,7 +1192,7 @@ class GenomicRangesAlignmentChain(AlignmentChain):
             if strand == "+":
                 blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
             else:
-                blockStarts = [hsp.qend - chromStart for hsp in self.HSPs]
+                blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
                 blockSizes.reverse()
                 blockStarts.reverse()
         elif side == 's':
