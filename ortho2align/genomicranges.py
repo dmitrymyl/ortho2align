@@ -1193,6 +1193,8 @@ class GenomicRangesAlignmentChain(AlignmentChain):
                 blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
             else:
                 blockStarts = [hsp.qend - chromStart for hsp in self.HSPs]
+                blockSizes.reverse()
+                blockStarts.reverse()
         elif side == 's':
             chrom = self.alignment.srange.chrom
             chromStart = min(min(self.HSPs, key=lambda i: i.sstart).sstart,
@@ -1207,12 +1209,14 @@ class GenomicRangesAlignmentChain(AlignmentChain):
                 blockStarts = [hsp.sstart - chromStart for hsp in self.HSPs]
             else:
                 blockStarts = [hsp.send - chromStart for hsp in self.HSPs]
+                blockSizes.reverse()
+                blockStarts.reverse()
         else:
             raise ValueError(f'side argument {side} is not one of ["q", "s"]')
         score = self.score
         thickStart = chromStart
         thickEnd = chromEnd
-        itemRgb = '.'
+        itemRgb = '0'
         blockCount = len(self.HSPs)
         side = [chrom,
                 chromStart,
