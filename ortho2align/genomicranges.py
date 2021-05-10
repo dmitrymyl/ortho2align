@@ -1189,12 +1189,13 @@ class GenomicRangesAlignmentChain(AlignmentChain):
             strand = nxor_strands(self.HSPs[0].qstrand,
                                   self.alignment.qrange.strand)
             blockSizes = [abs(hsp.qend - hsp.qstart) for hsp in self.HSPs]
-            if strand == "+":
-                blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
-            else:
-                blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
-                blockSizes.reverse()
-                blockStarts.reverse()
+            blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
+            # if strand == "+":
+            #     blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
+            # else:
+            #     blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
+            #     blockSizes.reverse()
+            #     blockStarts.reverse()
         elif side == 's':
             chrom = self.alignment.srange.chrom
             chromStart = min(min(self.HSPs, key=lambda i: i.sstart).sstart,
