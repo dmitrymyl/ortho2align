@@ -170,7 +170,7 @@ def parse_strand(field):
 
 def parse_itemRgb(field):
     try:
-        if field == '.':
+        if field in ('0', '.'):
             return field
         record = tuple(int(x) for x in field.split(','))
         if len(record) != 3:

@@ -740,33 +740,38 @@ def annotate_orthologs(subject_orthologs,
     except ParserException:
         with open(output_filename, 'w') as outfile:
             outfile.write('Query\tOrtholog\n')
-    with open(subject_annotation_filename, 'r') as infile:
-        subject_annotation = parse_annotation(infile,
-                                              name_regex=subject_name_regex)
+        stats_msg = "-----------------------\n" \
+                    f"annotate_orthologs stats:\n" \
+                    f"Recieved {len(subject_orthologs)} orthologs."\
+                    "-----------------------"
+    else:
+        with open(subject_annotation_filename, 'r') as infile:
+            subject_annotation = parse_annotation(infile,
+                                                  name_regex=subject_name_regex)
 
-    subject_orthologs.get_neighbours(subject_annotation,
-                                     relation='ortholog')
+        subject_orthologs.get_neighbours(subject_annotation,
+                                         relation='ortholog')
 
-    name_map = {subject_ortholog.name: [grange.name
-                                        for grange in subject_ortholog.relations['ortholog']]
-                for subject_ortholog in subject_orthologs}
-    with open(output_filename, 'w') as outfile:
-        outfile.write('Query\tOrtholog\n')
-        dist_annot_amounts = list()
-        for ortholog_name, annotation_names in name_map.items():
-            if annotation_names:
-                outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
-                dist_annot_amounts.append(len(annotation_names))
-            else:
-                outfile.write(f"{ortholog_name}\tNotAnnotated\n")
-                dist_annot_amounts.append(0)
+        name_map = {subject_ortholog.name: [grange.name
+                                            for grange in subject_ortholog.relations['ortholog']]
+                    for subject_ortholog in subject_orthologs}
+        with open(output_filename, 'w') as outfile:
+            outfile.write('Query\tOrtholog\n')
+            dist_annot_amounts = list()
+            for ortholog_name, annotation_names in name_map.items():
+                if annotation_names:
+                    outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
+                    dist_annot_amounts.append(len(annotation_names))
+                else:
+                    outfile.write(f"{ortholog_name}\tNotAnnotated\n")
+                    dist_annot_amounts.append(0)
 
-    stats_msg = "-----------------------\n" \
-                f"annotate_orthologs stats:\n" \
-                f"Recieved {len(subject_orthologs)} orthologs.\n" \
-                f"Distribution of amount of annotations:\n{simple_hist(dist_annot_amounts)}\n" \
-                f"Reported all annotations for each ortholog.\n" \
-                "-----------------------"
+        stats_msg = "-----------------------\n" \
+                    f"annotate_orthologs stats:\n" \
+                    f"Recieved {len(subject_orthologs)} orthologs.\n" \
+                    f"Distribution of amount of annotations:\n{simple_hist(dist_annot_amounts)}\n" \
+                    f"Reported all annotations for each ortholog.\n" \
+                    "-----------------------"
     if isinstance(stats_filename, str):
         with open(stats_filename, 'a') as stats_file:
             stats_file.write(stats_msg + '\n')
