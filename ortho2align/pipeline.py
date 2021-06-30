@@ -11,7 +11,6 @@ from tempfile import TemporaryDirectory
 
 from tqdm import tqdm
 
-from .benchmark import calc_ortholog_metrics, trace_orthologs
 from .fitting import HistogramFitter, KernelFitter, ranking
 from .genomicranges import (BaseGenomicRangesList, FastaSeqFile,
                             GenomicRangesAlignment, GenomicRangesList,
@@ -778,73 +777,73 @@ def annotate_orthologs(subject_orthologs,
         print(stats_msg)
 
 
-def benchmark_orthologs(query_genes,
-                        query_name_regex,
-                        found_query,
-                        found_query_name_regex,
-                        found_subject,
-                        found_subject_name_regex,
-                        found_query_map,
-                        found_subject_map,
-                        found_query_subject_map,
-                        real_subject,
-                        real_subject_name_regex,
-                        real_map,
-                        outfile,
-                        tp_mode):
+# def benchmark_orthologs(query_genes,
+#                         query_name_regex,
+#                         found_query,
+#                         found_query_name_regex,
+#                         found_subject,
+#                         found_subject_name_regex,
+#                         found_query_map,
+#                         found_subject_map,
+#                         found_query_subject_map,
+#                         real_subject,
+#                         real_subject_name_regex,
+#                         real_map,
+#                         outfile,
+#                         tp_mode):
 
-    query_genes_filename = query_genes
-    found_query_filename = found_query
-    found_subject_filename = found_subject
-    found_query_map_filename = found_query_map
-    found_subject_map_filename = found_subject_map
-    found_query_subject_map_filename = found_query_subject_map
-    real_subject_filename = real_subject
-    real_map_filename = real_map
-    out_filename = outfile
+#     query_genes_filename = query_genes
+#     found_query_filename = found_query
+#     found_subject_filename = found_subject
+#     found_query_map_filename = found_query_map
+#     found_subject_map_filename = found_subject_map
+#     found_query_subject_map_filename = found_query_subject_map
+#     real_subject_filename = real_subject
+#     real_map_filename = real_map
+#     out_filename = outfile
 
-    with open(query_genes_filename, 'r') as infile:
-        query_genes = parse_annotation(infile,
-                                       name_regex=query_name_regex)
+#     with open(query_genes_filename, 'r') as infile:
+#         query_genes = parse_annotation(infile,
+#                                        name_regex=query_name_regex)
 
-    with open(found_query_filename, 'r') as infile:
-        found_query_genes = parse_annotation(infile,
-                                             name_regex=found_query_name_regex)
+#     with open(found_query_filename, 'r') as infile:
+#         found_query_genes = parse_annotation(infile,
+#                                              name_regex=found_query_name_regex)
 
-    with open(found_subject_filename, 'r') as infile:
-        found_subject_genes = parse_annotation(infile,
-                                               name_regex=found_subject_name_regex)
+#     with open(found_subject_filename, 'r') as infile:
+#         found_subject_genes = parse_annotation(infile,
+#                                                name_regex=found_subject_name_regex)
 
-    with open(real_subject_filename, 'r') as infile:
-        real_subject_genes = parse_annotation(infile,
-                                              name_regex=real_subject_name_regex)
+#     with open(real_subject_filename, 'r') as infile:
+#         real_subject_genes = parse_annotation(infile,
+#                                               name_regex=real_subject_name_regex)
 
-    with open(found_query_map_filename, 'r') as infile:
-        found_query_map = json.load(infile)
+#     with open(found_query_map_filename, 'r') as infile:
+#         found_query_map = json.load(infile)
 
-    with open(found_subject_map_filename, 'r') as infile:
-        found_subject_map = json.load(infile)
+#     with open(found_subject_map_filename, 'r') as infile:
+#         found_subject_map = json.load(infile)
 
-    with open(found_query_subject_map_filename, 'r') as infile:
-        found_query_subject_map = json.load(infile)
+#     with open(found_query_subject_map_filename, 'r') as infile:
+#         found_query_subject_map = json.load(infile)
 
-    with open(real_map_filename, 'r') as infile:
-        real_map = json.load(infile)
+#     with open(real_map_filename, 'r') as infile:
+#         real_map = json.load(infile)
 
-    query_genes.relation_mapping(found_query_genes, found_query_map, 'found_query')
-    query_genes.relation_mapping(found_subject_genes, found_subject_map, 'found_subject')
-    query_genes.relation_mapping(real_subject_genes, real_map, 'real')
+#     query_genes.relation_mapping(found_query_genes, found_query_map, 'found_query')
+#     query_genes.relation_mapping(found_subject_genes, found_subject_map, 'found_subject')
+#     query_genes.relation_mapping(real_subject_genes, real_map, 'real')
 
-    for query_gene in query_genes:
-        query_gene.relations['found_query'].relation_mapping(query_gene.relations['found_subject'],
-                                                             found_query_subject_map,
-                                                             'ortho_link')
+#     for query_gene in query_genes:
+#         query_gene.relations['found_query'].relation_mapping(query_gene.relations['found_subject'],
+#                                                              found_query_subject_map,
+#                                                              'ortho_link')
 
-    trace_orthologs(query_genes)
-    metrics = calc_ortholog_metrics(query_genes, tp_mode=tp_mode)
+#     trace_orthologs(query_genes)
+#     metrics = calc_ortholog_metrics(query_genes, tp_mode=tp_mode)
 
-    with open(out_filename, 'w') as outfile:
-        json.dump(metrics, outfile)
+#     with open(out_filename, 'w') as outfile:
+#         json.dump(metrics, outfile)
 
 
 def run_pipeline(query_genes,

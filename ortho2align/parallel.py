@@ -294,7 +294,7 @@ class TimeoutProcessPool:
         suppress_exceptions: if True, exceptions won't be
             recordered (default: False).
     Notes:
-        There are 2 methods for multiprocessing: `map`, `starmap`. 
+        There are 2 methods for multiprocessing: `map`, `starmap`.
         `map` allows multiprocessing of one-argument function execution.
         `starmap` allows multiprocessing of many-arguments function execution.
         Each method takes function and iterable containing arguments one argument

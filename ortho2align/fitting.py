@@ -111,7 +111,7 @@ def inverse_approximator(value, function, left, right, epsilon, increasing=True,
 
     """
     if right <= left:
-        raise ValueError(f"`right` must be greater than `left`.")
+        raise ValueError("`right` must be greater than `left`.")
     point = (right + left) / 2
     result = function(point)
     counter = 0
