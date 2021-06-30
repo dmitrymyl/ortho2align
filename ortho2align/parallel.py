@@ -294,7 +294,7 @@ class TimeoutProcessPool:
         suppress_exceptions: if True, exceptions won't be
             recordered (default: False).
     Notes:
-        There are 2 methods for multiprocessing: `map`, `starmap`. 
+        There are 2 methods for multiprocessing: `map`, `starmap`.
         `map` allows multiprocessing of one-argument function execution.
         `starmap` allows multiprocessing of many-arguments function execution.
         Each method takes function and iterable containing arguments one argument
@@ -457,3 +457,14 @@ class TimeoutProcessPool:
         """
         return self._map(func, iterable, timeout=timeout, applier=starapply)
 
+
+class ExceptionLogger(Exception):
+
+    def __init__(self, exception, variable, message=""):
+        self.exception = exception
+        self.variable = variable
+        self.message = message
+
+    def __str__(self):
+        return f'The exception "{self.exception}" has been raised. ' \
+               f'Important variable is {self.variable}. {self.message}'

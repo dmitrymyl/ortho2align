@@ -1,4 +1,1 @@
-from .orthodb import *
-from .genomicranges import *
-from .alignment import *
-from .fitting import *
+from . import alignment, fitting, genomicranges, parallel, parsing, pipeline, utils
