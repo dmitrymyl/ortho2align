@@ -335,8 +335,7 @@ get_alignments_parser = ortho2align_subparsers.add_parser('get_alignments',
                                                           description='Compute orthologous alignments of provided query genes and subject species genome.',
                                                           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 get_alignments_parser.set_defaults(func=get_alignments)
-get_alignments_input_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_input_group = get_alignments_input_parser.add_argument_group('Input')
+get_alignments_input_group = get_alignments_parser.add_argument_group('Input')
 get_alignments_input_group.add_argument('-query_genes',
                                         type=str,
                                         nargs='?',
@@ -358,15 +357,39 @@ get_alignments_input_group.add_argument('-query_name_regex',
                                         default=None,
                                         help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
                                              'Must contain one catching group.')
-get_alignments_output_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_output_group = get_alignments_output_parser.add_argument_group('Output')
+get_alignments_input_group.add_argument('-liftover_chains',
+                                        type=str,
+                                        nargs='?',
+                                        required=True,
+                                        help='liftover .chain filename')
+get_alignments_params_group = get_alignments_parser.add_argument_group('Parameters')
+get_alignments_params_group.add_argument('-min_ratio',
+                                         type=float,
+                                         nargs='?',
+                                         default=0.05,
+                                         help='minimal ratio of gene overlapping liftover chain to consider it for liftover')
+get_alignments_params_group.add_argument('-word_size',
+                                         type=int,
+                                         nargs='?',
+                                         default=6,
+                                         help='-word_size parameter to use in blastn.')
+get_alignments_params_group.add_argument('-merge_dist',
+                                         type=int,
+                                         nargs='?',
+                                         default=2000000,
+                                         help='how distant two subject syntenies can be to be merged into one syntenic region')
+get_alignments_params_group.add_argument('-flank_dist',
+                                         type=int,
+                                         nargs='?',
+                                         default=50000,
+                                         help='how many nts to flank syntenic regions in subject species')
+get_alignments_output_group = get_alignments_parser.add_argument_group('Output')
 get_alignments_output_group.add_argument('-outdir',
                                          type=str,
                                          nargs='?',
                                          required=True,
                                          help='output directory name')
-get_alignments_processing_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_processing_group = get_alignments_processing_parser.add_argument_group('Processing')
+get_alignments_processing_group = get_alignments_parser.add_argument_group('Processing')
 get_alignments_processing_group.add_argument('-cores',
                                              type=int,
                                              nargs='?',
@@ -375,103 +398,6 @@ get_alignments_processing_group.add_argument('-cores',
 get_alignments_processing_group.add_argument('--silent',
                                              action='store_true',
                                              help='silent CLI if included.')
-get_alignments_anchor_input_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_anchor_input_group = get_alignments_anchor_input_parser.add_argument_group('Input for alignments')
-get_alignments_anchor_input_group.add_argument('-query_anchors',
-                                               type=str,
-                                               nargs='?',
-                                               required=True,
-                                               help='query anchors annotation filename')
-get_alignments_anchor_input_group.add_argument('-subject_anchors',
-                                               type=str,
-                                               nargs='?',
-                                               required=True,
-                                               help='subject anchors annotation filename')
-get_alignments_anchor_input_group.add_argument('-ortho_map',
-                                               type=str,
-                                               nargs='?',
-                                               required=True,
-                                               help='orthology map filename')
-get_alignments_anchor_input_group.add_argument('-query_anchors_name_regex',
-                                               type=str,
-                                               nargs='?',
-                                               default=None,
-                                               help='Regular expression for extracting gene names from the query anchors annotation (.gff and .gtf only). '
-                                                    'Must contain one catching group.')
-get_alignments_anchor_input_group.add_argument('-subject_anchors_name_regex',
-                                               type=str,
-                                               nargs='?',
-                                               default=None,
-                                               help='Regular expression for extracting gene names from the subject anchors annotation (.gff and .gtf only). '
-                                                    'Must contain one catching group.')
-get_alignments_anchor_params_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_anchor_params_group = get_alignments_anchor_params_parser.add_argument_group('Alignments parameters')
-get_alignments_anchor_params_group.add_argument('-word_size',
-                                                type=int,
-                                                nargs='?',
-                                                default=6,
-                                                help='-word_size parameter to use in blastn.')
-get_alignments_anchor_params_group.add_argument('-neighbour_dist',
-                                                type=int,
-                                                nargs='?',
-                                                default=1000000,
-                                                help='distance to seek anchor neighbours of query genes')
-get_alignments_anchor_params_group.add_argument('-merge_dist',
-                                                type=int,
-                                                nargs='?',
-                                                default=2000000,
-                                                help='how distant two subject anchors can be to be merged into one syntenic region')
-get_alignments_anchor_params_group.add_argument('-flank_dist',
-                                                type=int,
-                                                nargs='?',
-                                                default=200000,
-                                                help='how many nts to flank syntenic regions in subject species')
-get_alignments_lift_input_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_lift_input_group = get_alignments_lift_input_parser.add_argument_group('Input for alignments')
-get_alignments_lift_input_group.add_argument('-liftover_chains',
-                                             type=str,
-                                             nargs='?',
-                                             required=True,
-                                             help='liftover .chain filename')
-get_alignments_lift_params_parser = argparse.ArgumentParser(add_help=False)
-get_alignments_lift_params_group = get_alignments_lift_params_parser.add_argument_group('Alignments parameters')
-get_alignments_lift_params_group.add_argument('-min_ratio',
-                                              type=float,
-                                              nargs='?',
-                                              default=0.05,
-                                              help='minimal ratio of gene overlapping liftover chain to consider it for liftover')
-get_alignments_lift_params_group.add_argument('-word_size',
-                                              type=int,
-                                              nargs='?',
-                                              default=6,
-                                              help='-word_size parameter to use in blastn.')
-get_alignments_lift_params_group.add_argument('-merge_dist',
-                                              type=int,
-                                              nargs='?',
-                                              default=2000000,
-                                              help='how distant two subject syntenies can be to be merged into one syntenic region')
-get_alignments_lift_params_group.add_argument('-flank_dist',
-                                              type=int,
-                                              nargs='?',
-                                              default=50000,
-                                              help='how many nts to flank syntenic regions in subject species')
-get_alignments_mode_subparsers = get_alignments_parser.add_subparsers(dest='mode')
-get_alignments_lift_parser = get_alignments_mode_subparsers.add_parser('lift',
-                                                                       parents=[get_alignments_input_parser,
-                                                                                get_alignments_lift_input_parser,
-                                                                                get_alignments_output_parser,
-                                                                                get_alignments_lift_params_parser,
-                                                                                get_alignments_processing_parser],
-                                                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-get_alignments_lift_parser.set_defaults(func=get_alignments)
-get_alignments_anchor_parser = get_alignments_mode_subparsers.add_parser('anchor',
-                                                                         parents=[get_alignments_input_parser,
-                                                                                  get_alignments_anchor_input_parser,
-                                                                                  get_alignments_output_parser,
-                                                                                  get_alignments_anchor_params_parser,
-                                                                                  get_alignments_processing_parser],
-                                                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-get_alignments_anchor_parser.set_defaults(func=get_alignments)
 
 build_orthologs_parser = ortho2align_subparsers.add_parser('build_orthologs',
                                                            help='Asses orthologous alignments based on chosen statistical strategy and build orthologs.',
@@ -601,96 +527,13 @@ annotate_orthologs_output_group.add_argument('-output',
                                              required=True,
                                              help='output filename.')
 
-
-# benchmark_orthologs_parser = ortho2align_subparsers.add_parser('benchmark_orthologs',
-#                                                                help='Compare found orthologs against real orthologs and calculate several performance metrics.',
-#                                                                description='Compare found orthologs against real orthologs and calculate several performance metrics.',
-#                                                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-# benchmark_orthologs_parser.set_defaults(func=benchmark_orthologs)
-# benchmark_orthologs_parser.add_argument('-query_genes',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='query genomic ranges.')
-# benchmark_orthologs_parser.add_argument('-query_name_regex',
-#                                         type=str,
-#                                         nargs='?',
-#                                         default=None,
-#                                         help='Regular expression for extracting gene names from the query genes annotation (.gff and .gtf only). '
-#                                              'Must contain one catching group.')
-# benchmark_orthologs_parser.add_argument('-found_query',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='found orthologs of query genomic ranges in query genome.')
-# benchmark_orthologs_parser.add_argument('-found_query_name_regex',
-#                                         type=str,
-#                                         nargs='?',
-#                                         default=None,
-#                                         help='Regular expression for extracting gene names from the found query orthologs annotation (.gff and .gtf only). '
-#                                              'Must contain one catching group.')
-# benchmark_orthologs_parser.add_argument('-found_subject',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='found orthologs of query genomic ranges in subject genome.')
-# benchmark_orthologs_parser.add_argument('-found_subject_name_regex',
-#                                         type=str,
-#                                         nargs='?',
-#                                         default=None,
-#                                         help='Regular expression for extracting gene names from the found subject orthologs annotation (.gff and .gtf only). '
-#                                              'Must contain one catching group.')
-# benchmark_orthologs_parser.add_argument('-found_query_map',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='json map linking query genes names and names of corresponding found query orthologs.')
-# benchmark_orthologs_parser.add_argument('-found_subject_map',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='json map linking query genes names and names of corresponding found subject orthologs.')
-# benchmark_orthologs_parser.add_argument('-found_query_subject_map',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='json map linking query orthologs names and corresponding subject orthologs names.')
-# benchmark_orthologs_parser.add_argument('-real_subject',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='real orthologs of query genomic ranges in subject genome.')
-# benchmark_orthologs_parser.add_argument('-real_subject_name_regex',
-#                                         type=str,
-#                                         nargs='?',
-#                                         default=None,
-#                                         help='Regular expression for extracting gene names from the real subject orthologs annotation (.gff and .gtf only). '
-#                                              'Must contain one catching group.')
-# benchmark_orthologs_parser.add_argument('-real_map',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='json map linking query genes names and names of corresponding real orthologs.')
-# benchmark_orthologs_parser.add_argument('-tp_mode',
-#                                         type=str,
-#                                         nargs='?',
-#                                         choices=['all', 'single'],
-#                                         default='all',
-#                                         help='how to calculate true positives')
-# benchmark_orthologs_parser.add_argument('-outfile',
-#                                         type=str,
-#                                         nargs='?',
-#                                         required=True,
-#                                         help='json output filename.')
-
-
 run_pipeline_parser = ortho2align_subparsers.add_parser('run_pipeline',
                                                         description='Run the whole pipeline.',
                                                         help='Run the whole pipeline.',
                                                         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                                         fromfile_prefix_chars='@')
-run_pipeline_input_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_input_group = run_pipeline_input_parser.add_argument_group('Input')
+run_pipeline_parser.set_defaults(func=run_pipeline)
+run_pipeline_input_group = run_pipeline_parser.add_argument_group('Input')
 run_pipeline_input_group.add_argument('-query_genes',
                                       type=str,
                                       nargs='?',
@@ -723,14 +566,18 @@ run_pipeline_input_group.add_argument('-subject_name_regex',
                                       default=None,
                                       help='Regular expression for extracting gene names from the subject genome annotation (.gff and .gtf only). '
                                            'Must contain one catching group.')
-run_pipeline_out_proc_bg_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_output_group = run_pipeline_out_proc_bg_parser.add_argument_group('Output')
+run_pipeline_input_group.add_argument('-liftover_chains',
+                                      type=str,
+                                      nargs='?',
+                                      required=True,
+                                      help='liftover .chain filename')
+run_pipeline_output_group = run_pipeline_parser.add_argument_group('Output')
 run_pipeline_output_group.add_argument('-outdir',
                                        type=str,
                                        nargs='?',
                                        required=True,
                                        help='output directory name.')
-run_pipeline_processing_group = run_pipeline_out_proc_bg_parser.add_argument_group('Processing')
+run_pipeline_processing_group = run_pipeline_parser.add_argument_group('Processing')
 run_pipeline_processing_group.add_argument('-cores',
                                            type=int,
                                            nargs='?',
@@ -752,21 +599,34 @@ run_pipeline_processing_group.add_argument('--silent',
 run_pipeline_processing_group.add_argument('--annotate',
                                            action='store_true',
                                            help='If included, will annotate found orthologs with subject annotation.')
-run_pipeline_bg_ranges_group = run_pipeline_out_proc_bg_parser.add_argument_group('Making background ranges')
-run_pipeline_bg_ranges_group.add_argument('-sample_size',
-                                          type=int,
-                                          nargs='?',
-                                          default=200,
-                                          help='Number of background regions to generate.')
-run_pipeline_estimate_background_group = run_pipeline_out_proc_bg_parser.add_argument_group('Estimating background')
+run_pipeline_estimate_background_group = run_pipeline_parser.add_argument_group('Estimating background')
+run_pipeline_estimate_background_group.add_argument('-sample_size',
+                                                    type=int,
+                                                    nargs='?',
+                                                    default=200,
+                                                    help='Number of background regions to generate.')
 run_pipeline_estimate_background_group.add_argument('-observations',
                                                     type=int,
                                                     nargs='?',
                                                     default=1000,
                                                     help='maximum number of background scores to retain for each query gene.')
-
-run_pipeline_ortho_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_build_orthologs_group = run_pipeline_ortho_parser.add_argument_group('Building orthologs')
+run_pipeline_get_alignments_group = run_pipeline_parser.add_argument_group('Getting alignments')
+run_pipeline_get_alignments_group.add_argument('-min_ratio',
+                                               type=float,
+                                               nargs='?',
+                                               default=0.05,
+                                               help='minimal ratio of gene overlapping liftover chain to consider it for liftover')
+run_pipeline_get_alignments_group.add_argument('-merge_dist',
+                                               type=int,
+                                               nargs='?',
+                                               default=2000000,
+                                               help='how distant two subject syntenies can be to be merged into one syntenic region')
+run_pipeline_get_alignments_group.add_argument('-flank_dist',
+                                               type=int,
+                                               nargs='?',
+                                               default=50000,
+                                               help='how many nts to flank syntenic regions in subject species')
+run_pipeline_build_orthologs_group = run_pipeline_parser.add_argument_group('Building orthologs')
 run_pipeline_build_orthologs_group.add_argument('-fitting',
                                                 type=str,
                                                 nargs='?',
@@ -786,7 +646,7 @@ run_pipeline_build_orthologs_group.add_argument('-timeout',
                                                 nargs='?',
                                                 default=None,
                                                 help='Time in seconds to terminate a single process of refinement of a single alignment.')
-run_pipeline_get_best_orthologs_group = run_pipeline_ortho_parser.add_argument_group('Getting best orthologs')
+run_pipeline_get_best_orthologs_group = run_pipeline_parser.add_argument_group('Getting best orthologs')
 run_pipeline_get_best_orthologs_group.add_argument('-value',
                                                    type=str,
                                                    nargs='?',
@@ -799,98 +659,6 @@ run_pipeline_get_best_orthologs_group.add_argument('-function',
                                                    choices=['max', 'min'],
                                                    default='max',
                                                    help='orthologs with which value to select in case of multiple orthologs.')
-
-run_pipeline_lift_input_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_lift_input_group = run_pipeline_lift_input_parser.add_argument_group('Input for alignments')
-run_pipeline_lift_input_group.add_argument('-liftover_chains',
-                                           type=str,
-                                           nargs='?',
-                                           required=True,
-                                           help='liftover .chain filename')
-
-run_pipeline_lift_params_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_lift_get_alignments_group = run_pipeline_lift_params_parser.add_argument_group('Getting alignments')
-run_pipeline_lift_get_alignments_group.add_argument('-min_ratio',
-                                                    type=float,
-                                                    nargs='?',
-                                                    default=0.05,
-                                                    help='minimal ratio of gene overlapping liftover chain to consider it for liftover')
-run_pipeline_lift_get_alignments_group.add_argument('-merge_dist',
-                                                    type=int,
-                                                    nargs='?',
-                                                    default=2000000,
-                                                    help='how distant two subject syntenies can be to be merged into one syntenic region')
-run_pipeline_lift_get_alignments_group.add_argument('-flank_dist',
-                                                    type=int,
-                                                    nargs='?',
-                                                    default=50000,
-                                                    help='how many nts to flank syntenic regions in subject species')
-
-run_pipeline_anchor_input_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_anchor_input_group = run_pipeline_anchor_input_parser.add_argument_group('Input for alignments')
-run_pipeline_anchor_input_group.add_argument('-query_anchors',
-                                             type=str,
-                                             nargs='?',
-                                             required=True,
-                                             help='query anchors annotation filename')
-run_pipeline_anchor_input_group.add_argument('-subject_anchors',
-                                             type=str,
-                                             nargs='?',
-                                             required=True,
-                                             help='subject anchors annotation filename')
-run_pipeline_anchor_input_group.add_argument('-ortho_map',
-                                             type=str,
-                                             nargs='?',
-                                             required=True,
-                                             help='orthology map filename')
-run_pipeline_anchor_input_group.add_argument('-query_anchors_name_regex',
-                                             type=str,
-                                             nargs='?',
-                                             default=None,
-                                             help='Regular expression for extracting gene names from the query anchors annotation (.gff and .gtf only). '
-                                                  'Must contain one catching group.')
-run_pipeline_anchor_input_group.add_argument('-subject_anchors_name_regex',
-                                             type=str,
-                                             nargs='?',
-                                             default=None,
-                                             help='Regular expression for extracting gene names from the subject anchors annotation (.gff and .gtf only). '
-                                                  'Must contain one catching group.')
-
-run_pipeline_anchor_params_parser = argparse.ArgumentParser(add_help=False)
-run_pipeline_anchor_get_alignments_group = run_pipeline_anchor_params_parser.add_argument_group('Getting alignments')
-run_pipeline_anchor_get_alignments_group.add_argument('-neighbour_dist',
-                                                      type=int,
-                                                      nargs='?',
-                                                      default=1000000,
-                                                      help='distance to seek anchor neighbours of query genes')
-run_pipeline_anchor_get_alignments_group.add_argument('-merge_dist',
-                                                      type=int,
-                                                      nargs='?',
-                                                      default=2000000,
-                                                      help='how distant two subject anchors can be to be merged into one syntenic region')
-run_pipeline_anchor_get_alignments_group.add_argument('-flank_dist',
-                                                      type=int,
-                                                      nargs='?',
-                                                      default=200000,
-                                                      help='how many nts to flank syntenic regions in subject species')
-
-run_pipeline_mode_subparsers = run_pipeline_parser.add_subparsers(dest='mode')
-run_pipeline_lift_parser = run_pipeline_mode_subparsers.add_parser('lift',
-                                                                   parents=[run_pipeline_input_parser,
-                                                                            run_pipeline_lift_input_parser,
-                                                                            run_pipeline_out_proc_bg_parser,
-                                                                            run_pipeline_lift_params_parser,
-                                                                            run_pipeline_ortho_parser],
-                                                                   formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-run_pipeline_lift_parser.set_defaults(func=run_pipeline)
-run_pipeline_anchor_parser = run_pipeline_mode_subparsers.add_parser('anchor',
-                                                                     parents=[run_pipeline_input_parser,
-                                                                              run_pipeline_anchor_input_parser,
-                                                                              run_pipeline_out_proc_bg_parser,
-                                                                              run_pipeline_anchor_params_parser,
-                                                                              run_pipeline_ortho_parser],
-                                                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-run_pipeline_anchor_parser.set_defaults(func=run_pipeline)
 
 
 def ortho2align():

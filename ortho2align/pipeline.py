@@ -341,8 +341,7 @@ def _align_syntenies(grange, word_size, outdir):
         raise ExceptionLogger(e, grange)
 
 
-def get_alignments(mode,
-                   query_genes,
+def get_alignments(query_genes,
                    query_genome,
                    subject_genome,
                    outdir,
@@ -362,7 +361,7 @@ def get_alignments(mode,
                    silent=False,
                    stats_filename=None):
 
-    program_mode = mode
+    program_mode = "lift"
     query_genes_filename = query_genes
     query_genome_filename = query_genome
     query_anchors_filename = query_anchors
@@ -863,7 +862,6 @@ def run_pipeline(query_genes,
                  subject_name_regex=None,
                  sample_size=200,
                  observations=1000,
-                 mode='lift',
                  min_ratio=0.01,
                  neighbour_dist=0,
                  merge_dist=0,
@@ -913,8 +911,7 @@ def run_pipeline(query_genes,
                         seed=seed,
                         silent=silent,
                         stats_filename=stats_filename)
-    get_alignments(mode=mode,
-                   query_genes=query_genes,
+    get_alignments(query_genes=query_genes,
                    query_genome=query_genome,
                    subject_genome=subject_genome,
                    outdir=align_outdir,
