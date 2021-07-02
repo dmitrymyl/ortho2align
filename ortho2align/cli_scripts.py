@@ -9,7 +9,8 @@ ortho2align_parser = argparse.ArgumentParser(prog='ortho2align',
                                              formatter_class=argparse.ArgumentDefaultsHelpFormatter,
                                              fromfile_prefix_chars='@')
 ortho2align_subparsers = ortho2align_parser.add_subparsers(title='Subcommands',
-                                                           metavar='SUBCOMMAND')
+                                                           metavar='SUBCOMMAND',
+                                                           required=True)
 
 bg_from_inter_ranges_parser = ortho2align_subparsers.add_parser('bg_from_inter_ranges',
                                                                 help='Generate background set of genomic ranges from intergenic ranges.',

@@ -1,5 +1,6 @@
 from setuptools import setup
 
+
 setup(name='ortho2align',
       version='0.9',
       description='Sequence alignment tool based on syntenic protein neighbourhood.',
@@ -13,7 +14,7 @@ setup(name='ortho2align',
                         'scipy',
                         'sortedcontainers',
                         'tqdm'],
-      python_requires='~=3.6',
+      python_requires='>=3.7',
       entry_points={'console_scripts':
                     ['ortho2align=ortho2align.cli_scripts:ortho2align']},
       zip_safe=False)
