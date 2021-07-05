@@ -12,7 +12,7 @@ setup(name='ortho2align',
       install_requires=['numpy',
                         'pebble',
                         'scipy',
-                        'sortedcontainers',
+                        'sortedcontainers~=2.1.0',
                         'tqdm'],
       python_requires='>=3.7',
       entry_points={'console_scripts':
