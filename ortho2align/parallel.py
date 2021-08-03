@@ -6,18 +6,29 @@ from pebble import ProcessPool
 
 
 def apply(func, arg):
-    """Applies one arg to the func."""
+    """Applies one arg to the func.
+
+    Args:
+        func (function): a function to apply an arg to.
+        arg (any): the argument to apply to the function.
+
+    Returns:
+        Result of the function with the applied arg.
+    """
     return func(arg)
 
 
 def starapply(func, args):
-    """Applies starred args to the func."""
+    """Applies starred args to the func.
+
+    Args:
+        func (function): a function to apply args to.
+        args (collection): a collection of args.
+
+    Returns:
+        Result of the function with args applied.
+    """
     return func(*args)
-
-
-def starstarapply(func, arg_container):
-    return func(*arg_container.get('args', []),
-                **arg_container.get('kwargs', {}))
 
 
 class NonExceptionalProcessPool:
@@ -76,7 +87,7 @@ class NonExceptionalProcessPool:
                 (default: None, i.e. os.cpu_count()).
             verbose (bool): if True will show progress via tqdm
                 (default: True).
-            suppress_exceptions: if True, exceptions won't be
+            suppress_exceptions (bool): if True, exceptions won't be
                 recordered (default: False).
         """
         self.executor = ProcessPoolExecutor(max_workers=max_workers)
@@ -87,6 +98,7 @@ class NonExceptionalProcessPool:
 
     @property
     def pbar(self):
+        """a tqdm progress bar."""
         if self._pbar is None:
             self._pbar = tqdm(desc=f'Running in parallel with {self.max_workers} workers',
                               unit='task',
@@ -94,7 +106,13 @@ class NonExceptionalProcessPool:
         return self._pbar
 
     def __enter__(self):
-        """Context manager enter."""
+        """Context manager enter.
+
+        Notes:
+            Progress bar is initialized via the context
+            manager mechanism in order to correctly close
+            pbar in case of exiting with an error.
+        """
         pbar = self.pbar
         return self
 
@@ -130,12 +148,12 @@ class NonExceptionalProcessPool:
                 (default: `apply`).
 
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False.
 
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         futures = deque()
         exec_func = partial(applier, func)
@@ -185,14 +203,14 @@ class NonExceptionalProcessPool:
                 generators and similar objects.
 
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False. Results
-            and exceptions are returned in the same order as
-            corresponding arguments were passed via iterable.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False. Results
+                and exceptions are returned in the same order as
+                corresponding arguments were passed via iterable.
 
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         return self._map_async(func, iterable,
                                asynchronous=False, applier=apply)
@@ -210,21 +228,17 @@ class NonExceptionalProcessPool:
                 generators and similar objects.
 
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False. Results
-            and exceptions are returned in the same order as
-            corresponding arguments were passed via iterable.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False. Results
+                and exceptions are returned in the same order as
+                corresponding arguments were passed via iterable.
 
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         return self._map_async(func, iterable,
                                asynchronous=False, applier=starapply)
-
-    # def starstarmap(self, func, iterable):
-    #     return self._map_async(func, iterable,
-    #                            asynchronous=False, applier=starstarapply)
 
     def map_async(self, func, iterable):
         """Maps one-argument function to an iterable in asynchronous way.
@@ -239,15 +253,15 @@ class NonExceptionalProcessPool:
                 generators and similar objects.
 
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False. Results
-            and exceptions are not guaranteed to be returned
-            in the same order as corresponding arguments were
-            passed via iterable.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False. Results
+                and exceptions are not guaranteed to be returned
+                in the same order as corresponding arguments were
+                passed via iterable.
 
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         return self._map_async(func, iterable,
                                asynchronous=True, applier=apply)
@@ -265,15 +279,15 @@ class NonExceptionalProcessPool:
                 generators and similar objects.
 
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False. Results
-            and exceptions are not guaranteed to be returned
-            in the same order as corresponding arguments were
-            passed via iterable.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False. Results
+                and exceptions are not guaranteed to be returned
+                in the same order as corresponding arguments were
+                passed via iterable.
 
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         return self._map_async(func, iterable,
                                asynchronous=True, applier=starapply)
@@ -285,6 +299,7 @@ class TimeoutProcessPool:
     Based on pebble.ProcessPool mimics multiprocessing.Pool API
     for mapping function to an iterable containing arguments.
     It also mimics pebble API in terms of timeout supply.
+
     Attributes:
         executor (ProcessPoolExecutor): multiprocessing instance.
         max_workers (int): number of max_workers for executor
@@ -293,6 +308,7 @@ class TimeoutProcessPool:
             (default: True).
         suppress_exceptions: if True, exceptions won't be
             recordered (default: False).
+
     Notes:
         There are 2 methods for multiprocessing: `map`, `starmap`.
         `map` allows multiprocessing of one-argument function execution.
@@ -302,6 +318,7 @@ class TimeoutProcessPool:
         generator and coroutine as well. `map` and `starmap`
         return results and exceptions in the same order as arguments
         were passed by an iterable.
+
     Usage:
         def foo(x):
             for _ in range(2000000):
@@ -311,6 +328,7 @@ class TimeoutProcessPool:
             return x
         with TimeoutProcessPool(max_workers=5) as p:
             results, exceptions = p.map(foo, range(100), timeout=None)
+
     Explanation of usage:
         All results returned by the functions are stored in
         the results list. All the exceptions are stored in
@@ -346,7 +364,13 @@ class TimeoutProcessPool:
         return self._pbar
 
     def __enter__(self):
-        """Context manager enter."""
+        """Context manager enter.
+
+        Notes:
+            Progress bar is initialized via the context
+            manager mechanism in order to correctly close
+            pbar in case of exiting with an error.
+        """
         pbar = self.pbar
         return self
 
@@ -411,6 +435,7 @@ class TimeoutProcessPool:
 
     def map(self, func, iterable, timeout=None):
         """Maps one-argument function to an iterable.
+
         Args:
             func (function): function object to multiprocess.
                 Can't accept lambdas.
@@ -422,19 +447,22 @@ class TimeoutProcessPool:
             timeout (int): time in seconds to allow for process to
                 execute, then kill if not completed. If None,
                 waits until complete (default: None).
+
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False. Results
-            and exceptions are returned in the same order as
-            corresponding arguments were passed via iterable.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False. Results
+                and exceptions are returned in the same order as
+                corresponding arguments were passed via iterable.
+
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         return self._map(func, iterable, timeout=timeout, applier=apply)
 
     def starmap(self, func, iterable, timeout=None):
         """Maps many-argument function to an iterable.
+
         Args:
             func (function): function object to multiprocess.
                 Can't accept lambdas.
@@ -446,21 +474,43 @@ class TimeoutProcessPool:
             timeout (int): time in seconds to allow for process to
                 execute, then kill if not completed. If None,
                 waits until complete (default: None).
+
         Returns:
-            (list, list) two lists. The first contains results
-            of successful call, the second contains exceptions
-            if `self.suppress_exceptions` is False. Results
-            and exceptions are returned in the same order as
-            corresponding arguments were passed via iterable.
+            tuple: two lists. The first contains results
+                of successful call, the second contains exceptions
+                if `self.suppress_exceptions` is False. Results
+                and exceptions are returned in the same order as
+                corresponding arguments were passed via iterable.
+
         Raises:
-            ValueError in case provided iterable is not iterable.
+            ValueError: in case provided iterable is not iterable.
         """
         return self._map(func, iterable, timeout=timeout, applier=starapply)
 
 
 class ExceptionLogger(Exception):
+    """
+    Logs exception in a human-readable way.
+
+    Attributes:
+        exception (Exception): raised exception.
+        variable (any type): any important variable
+            to log with the exception.
+        message (str): some explanatory message (default: "").
+    """
 
     def __init__(self, exception, variable, message=""):
+        """Initializes an ExceptionLogger isntance.
+
+        Args:
+            exception (Exception): raised exception.
+            variable (any type): any important variable
+                to log with the exception.
+            message (str): some explanatory message (default: "").
+
+        Returns:
+            None
+        """
         self.exception = exception
         self.variable = variable
         self.message = message

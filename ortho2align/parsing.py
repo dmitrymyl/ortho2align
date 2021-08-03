@@ -4,11 +4,18 @@ from .genomicranges import GenomicRange, GenomicRangesList
 
 
 class ParserException(Exception):
+    """Base parser exception class."""
     pass
 
 
 class IncorrectStrand(ParserException):
+    """Exception for incorrect strand value."""
     def __init__(self, strand):
+        """Initializes an IncorrectStrand instance.
+
+        Args:
+            strand (str): an incorrect strand value.
+        """
         self.strand = strand
 
     def __str__(self):
@@ -16,7 +23,13 @@ class IncorrectStrand(ParserException):
 
 
 class IncorrectItemRgb(ParserException):
+    """Exception for incorrect itemRgb value in a bed12 file."""
     def __init__(self, itemRgb):
+        """Initializes an IncorrectItemRgb instance.
+
+        Args:
+            itemRgb (str): an incorrect itemRgb value.
+        """
         self.itemRgb = itemRgb
 
     def __str__(self):
@@ -24,7 +37,13 @@ class IncorrectItemRgb(ParserException):
 
 
 class IncorrectBlockSizes(ParserException):
+    """Exception for incorrect blockSizes value in a bed12 file."""
     def __init__(self, blockSizes):
+        """Initializes an IncorrectBlockSizes instance.
+
+        Args:
+            blockSizes (str): an incorrect blockSizes value.
+        """
         self.blockSizes = blockSizes
 
     def __str__(self):
@@ -32,7 +51,18 @@ class IncorrectBlockSizes(ParserException):
 
 
 class InconsistentBlockSizes(IncorrectBlockSizes):
+    """Exception for inconsistent blockSizes value in a bed12 file.
+
+    The exception is raised in case the amount of block sizes is not
+    equal to the blockCount value.
+    """
     def __init__(self, blockSizes, blockCount):
+        """Initializes an InconsistentBlockSizes instance.
+
+        Args:
+            blockSizes (str): blockSizes value.
+            blockCount (str): blockCount value.
+        """
         self.blockSizes = blockSizes
         self.blockCount = blockCount
 
@@ -41,7 +71,13 @@ class InconsistentBlockSizes(IncorrectBlockSizes):
 
 
 class IncorrectBlockStarts(ParserException):
+    """Exception for incorrect blockStarts value in a bed12 file."""
     def __init__(self, blockStarts):
+        """Initializes an IncorrectBlockStarts instance.
+        
+        Args:
+            blockStarts (str): blockStarts value.
+        """
         self.blockStarts = blockStarts
 
     def __str__(self):
@@ -49,7 +85,18 @@ class IncorrectBlockStarts(ParserException):
 
 
 class InconsistentBlockStarts(IncorrectBlockStarts):
+    """Exception for inconsistent blockStarts value in a bed12 file.
+
+    The exception is raised in case the amount of block starts is not
+    equal to the blockCount value.
+    """
     def __init__(self, blockStarts, blockCount):
+        """Initializes an InconsistentBlockStarts instance.
+
+        Args:
+            blockStarts (str): blockStarts value.
+            blockCount (str): blockCount value.
+        """
         self.blockStarts = blockStarts
         self.blockCount = blockCount
 
@@ -58,7 +105,13 @@ class InconsistentBlockStarts(IncorrectBlockStarts):
 
 
 class IncorrectPhase(ParserException):
+    """Exception for incorrect phase value in a gtf/gff file."""
     def __init__(self, phase):
+        """Initializes an IncorrectPhase instance.
+
+        Args:
+            phase (str): phase value.s
+        """
         self.phase = phase
 
     def __str__(self):
@@ -66,7 +119,13 @@ class IncorrectPhase(ParserException):
 
 
 class IncorrectGTFAttrs(ParserException):
+    """Exception for incorrect attributes value in a gtf file."""
     def __init__(self, attrs):
+        """Initializes an IncorrectGTFAttrs instance.
+
+        Args:
+            attrs (str): attributes value.
+        """
         self.attrs = attrs
 
     def __str__(self):
@@ -74,7 +133,13 @@ class IncorrectGTFAttrs(ParserException):
 
 
 class IncorrectGFFAttrs(ParserException):
+    """Exception for incorrect attributes value in a gtf file."""
     def __init__(self, attrs):
+        """Initializes an IncorrectGFFAttrs instance.
+
+        Args:
+            attrs (str): attributes value.
+        """
         self.attrs = attrs
 
     def __str__(self):
@@ -82,7 +147,17 @@ class IncorrectGFFAttrs(ParserException):
 
 
 class InconsistentBED3(ParserException):
+    """Exception for an inconsistent line in a bed3 file.
+
+    Raised when a number of fields is not equal to 3 in a
+    particular line.
+    """
     def __init__(self, line):
+        """Initializes InconsistentBED3 instance.
+
+        Args:
+            line (str): inconsistent line.
+        """
         self.line = line
 
     def __str__(self):
@@ -90,7 +165,17 @@ class InconsistentBED3(ParserException):
 
 
 class InconsistentBED6(ParserException):
+    """Exception for an inconsistent line in a bed6 file.
+
+    Raised when a number of fields is not equal to 5 in a
+    particular line.
+    """
     def __init__(self, line):
+        """Initializes InconsistentBED6 instance.
+
+        Args:
+            line (str): inconsistent line.
+        """
         self.line = line
 
     def __str__(self):
@@ -98,7 +183,17 @@ class InconsistentBED6(ParserException):
 
 
 class InconsistentBED12(ParserException):
+    """Exception for an inconsistent line in a bed12 file.
+
+    Raised when a number of fields is not equal to 12 in a
+    particular line.
+    """
     def __init__(self, line):
+        """Initializes InconsistentBED12 instance.
+
+        Args:
+            line (str): inconsistent line.
+        """
         self.line = line
 
     def __str__(self):
@@ -106,7 +201,17 @@ class InconsistentBED12(ParserException):
 
 
 class InconsistentGTF(ParserException):
+    """Exception for an inconsistent line in a gtf file.
+
+    Raised when a number of fields is not equal to 9 in a
+    particular line.
+    """
     def __init__(self, line):
+        """Initializes InconsistentGTF instance.
+
+        Args:
+            line (str): inconsistent line.
+        """
         self.line = line
 
     def __str__(self):
@@ -114,7 +219,17 @@ class InconsistentGTF(ParserException):
 
 
 class InconsistentGFF(ParserException):
+    """Exception for an inconsistent line in a GFF file.
+
+    Raised when a number of fields is not equal to 9 in a
+    particular line.
+    """
     def __init__(self, line):
+        """Initializes InconsistentGFF instance.
+
+        Args:
+            line (str): inconsistent line.
+        """
         self.line = line
 
     def __str__(self):
@@ -122,7 +237,14 @@ class InconsistentGFF(ParserException):
 
 
 class IncorrectLine(ParserException):
+    """An exception for a line that cannot be parsed for selected file format."""
     def __init__(self, line, line_no):
+        """Initializes an IncorrectLine instance.
+
+        Args:
+            line (str): an incorrect line.
+            line_no (int): a number of incorrect line (starts with 1).
+        """
         self.line = line
         self.line_no = line_no
 
@@ -131,11 +253,13 @@ class IncorrectLine(ParserException):
 
 
 class EmptyAnnotation(ParserException):
+    """An exception for a file that empty or consists of only the comments."""
     def __str__(self):
         return "Provided annotation file is empty or consist only of comment lines."
 
 
 class UnrecognizedFormat(ParserException):
+    """An exception for an unrecognized file format."""
     def __init__(self, fields):
         self.fields = fields
 
@@ -144,14 +268,42 @@ class UnrecognizedFormat(ParserException):
 
 
 def parse_bed_start(field):
+    """Parses bed start filed.
+
+    Args:
+        field (str): bed start field.
+
+    Returns:
+        int: integer start value.
+    """
     return int(field)
 
 
 def parse_bed_end(field):
+    """Parses bed end filed.
+
+    Args:
+        field (str): bed end field.
+
+    Returns:
+        int: integer end value.
+    """
     return int(field)
 
 
 def parse_score(field):
+    """Parses bed score filed.
+
+    In case score is an integer, returns integer,
+    same goes for a float. If score value is not
+    a number, returns string.
+
+    Args:
+        field (str): bed score field.
+
+    Returns:
+        int, float or str: parsed score value.
+    """
     try:
         a = float(field)
         if a.is_integer():
@@ -163,12 +315,37 @@ def parse_score(field):
 
 
 def parse_strand(field):
+    """Parses strand field.
+
+    Args:
+        field (str): strand field.
+
+    Returns:
+        str: parsed strand value.
+
+    Raises:
+        IncorrectStrand: in case strand is not
+            one of '.', '+', '-'.
+    """
     if field in ('.', '+', '-'):
         return field
     raise IncorrectStrand(field)
 
 
 def parse_itemRgb(field):
+    """Parses bed itemRgb field..
+
+    Args:
+        field (str): itemRgb field.
+
+    Returns:
+        str or tuple: str if field is '0' or '.',
+            tuple of 3 ints if field is not empty.
+
+    Raises:
+        IncorrectItemRgb: in case itemRgb field
+            is not a 3-int csv or cannot be parsed.
+    """
     try:
         if field in ('0', '.'):
             return field
@@ -181,6 +358,18 @@ def parse_itemRgb(field):
 
 
 def parse_blockSizes(field):
+    """Parses bed blockSizes field.
+
+    Args:
+        field (str): blockSizes field.
+
+    Returns:
+        tuple: of ints of block sizes.
+
+    Raises:
+        IncorrectBlockSizes: in case field
+            cannot be parsed.
+    """    
     try:
         record = tuple(int(i) for i in field.split(',') if i != '')
         return record
@@ -189,6 +378,18 @@ def parse_blockSizes(field):
 
 
 def parse_blockStarts(field):
+    """Parses bed blockStarts field.
+
+    Args:
+        field (str): blockStarts field.
+
+    Returns:
+        tuple: of ints of block stars.
+
+    Raises:
+        IncorrectBlockStars: in case field
+            cannot be parsed.
+    """  
     try:
         record = tuple(int(i) for i in field.split(',') if i != '')
         return record
@@ -212,6 +413,21 @@ bed_comment = '#'
 
 
 def bed3_parser(fileobj, verbose=False, sequence_file_path=None):
+    """Parses bed3 file into GenomicRangesList instance.
+
+    Args:
+        fileobj (file): an opend file stream.
+        verbose (bool): if True, reports parsing progress (default: False).
+        sequence_file_path (str): path to the corresponding genome file (default: None).
+
+    Returns:
+        GenomicRangesList: a list of genomic ranges.
+
+    Raises:
+        InconsistentBED3: in case a line contains a number of fields
+            other than 3.
+        IncorrectLine: in case a line cannot be parsed.
+    """
     granges = list()
     colnames = tuple(bed_fields.keys())[:3]
     dtypes = tuple(bed_fields.values())[:3]
@@ -234,6 +450,21 @@ def bed3_parser(fileobj, verbose=False, sequence_file_path=None):
 
 
 def bed6_parser(fileobj, verbose=False, sequence_file_path=None):
+    """Parses bed6 file into GenomicRangesList instance.
+
+    Args:
+        fileobj (file): an opend file stream.
+        verbose (bool): if True, reports parsing progress (default: False).
+        sequence_file_path (str): path to the corresponding genome file (default: None).
+
+    Returns:
+        GenomicRangesList: a list of genomic ranges.
+
+    Raises:
+        InconsistentBED6: in case a line contains a number of fields
+            other than 6.
+        IncorrectLine: in case a line cannot be parsed.
+    """
     granges = list()
     colnames = tuple(bed_fields.keys())[:6]
     dtypes = tuple(bed_fields.values())[:6]
@@ -256,6 +487,23 @@ def bed6_parser(fileobj, verbose=False, sequence_file_path=None):
 
 
 def bed12_parser(fileobj, verbose=False, sequence_file_path=None):
+    """Parses bed12 file into GenomicRangesList instance.
+
+    Args:
+        fileobj (file): an opend file stream.
+        verbose (bool): if True, reports parsing progress (default: False).
+        sequence_file_path (str): path to the corresponding genome file (default: None).
+
+    Returns:
+        GenomicRangesList: a list of genomic ranges.
+
+    Raises:
+        InconsistentBED12: in case a line contains a number of fields
+            other than 12.
+        InconsistentBlockSizes: in case of inconsistent blockSizes field.
+        InconsistentBlockStarts: in case of inconsistent blockStarts field.
+        IncorrectLine: in case a line cannot be parsed.
+    """
     granges = list()
     colnames = bed_fields.keys()
     dtypes = bed_fields.values()
@@ -274,7 +522,7 @@ def bed12_parser(fileobj, verbose=False, sequence_file_path=None):
             if len(record['blockSizes']) != record['blockCount']:
                 raise InconsistentBlockSizes(record['blockSizes'], record['blockCount'])
             if len(record['blockStarts']) != record['blockCount']:
-                raise IncorrectBlockStarts(record['blockStarts'], record['blockCount'])
+                raise InconsistentBlockStarts(record['blockStarts'], record['blockCount'])
             granges.append(GenomicRange(**record))
         except Exception:
             raise IncorrectLine(line, line_no + 1)
@@ -283,6 +531,16 @@ def bed12_parser(fileobj, verbose=False, sequence_file_path=None):
 
 
 def search_name(pattern, data):
+    """Searches pattern in the data.
+
+    Args:
+        pattern (str): a regex pattern, r'string.
+        data (str): a data to search pattern in.
+
+    Returns:
+        str or None: search result or None
+            (if data is None or no entry was found).
+    """
     if data is None:
         return None
     result = pattern.search(data)
@@ -295,14 +553,42 @@ check_name_regex = re.compile(".*\(.*\).*")
 
 
 def parse_gtf_start(field):
+    """Parses GTF start field.
+
+    Args:
+        field (str): gtf start field.
+
+    Returns:
+        int: start value.
+    """
     return int(field) - 1
 
 
 def parse_gtf_end(field):
+    """Parses GTF end field.
+
+    Args:
+        field (str): gtf end field.
+
+    Returns:
+        int: end value.
+    """
     return int(field)
 
 
 def parse_phase(field):
+    """Parses GTF/GFF phase field.
+
+    Args:
+        field (str): phase field.
+
+    Returns:
+        str or int: '.' or 0, 1, 2.
+
+    Raises:
+        IncorrectPhase: in case phase is not
+            one of '.', 0, 1, 2.
+    """
     if field == '.':
         return field
     elif field in ('0', '1', '2'):
@@ -311,6 +597,19 @@ def parse_phase(field):
 
 
 def parse_gtf_attributes(field):
+    """Parses GTF attributes field.
+
+    Args:
+        field (str): attributes field.
+
+    Returns:
+        dict: parse attributes field in a
+            key-value format.
+
+    Raises:
+        IncorrectGTFAttrs: in case of empty field or
+            the field cannot be parsed due to incorrect format.
+    """
     try:
         data = {tag: value.strip('"')
                 for tag, value in (item.strip().split(' ', 1)

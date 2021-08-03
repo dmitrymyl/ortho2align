@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(name='ortho2align',
       version='0.9',
-      description='Sequence alignment tool based on syntenic protein neighbourhood.',
+      description='A lncRNA ortholog discovery tool based on syntenic regions and statistical assessment of alignment nonrandomness.',
       url='http://github.com/dmitrymyl/ortho2align',
       author='Dmitry Mylarshchikov',
       author_email='dmitrymyl@gmail.com',

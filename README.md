@@ -1,14 +1,16 @@
 # ortho2align
-ortho2align is a lncRNA orthology discovery CLI tool based on syntenic regions and statistical assessment of alignment nonrandomness.
+```ortho2align``` is a lncRNA ortholog discovery CLI tool based on syntenic regions and statistical assessment of alignment nonrandomness.
 
 ## What can it be used for?
-ortho2align can be used to find orthologs of de novo discovered lncRNAs of one species in another species and additionally anotate found orthologs with given genes of the other species. ortho2align allows one to control sensitivity and specificity of the procedure.
+```ortho2align``` can be used to find orthologs of de novo discovered lncRNAs of one species in another species and additionally anotate found orthologs with given genes of the other species. ```ortho2align``` allows one to control sensitivity and specificity of the procedure.
 
 ## How does it work?
-The ortho2align pipeline consists of several steps.
+The ortho2align pipeline consists of several steps. A graphical description of the algorithm for a single lncRNA is shown below.
+
+![ortho2align algorithm for a single lncRNA](./ortho2align_algorithm_block_scheme.png)
 
 ### 1. Getting alignments.
-First, lncRNAs coordinates are lifted from the query species to the subject species with liftOver (duplications are allowed, minMatch=0.05 by default).
+First, lncRNAs' coordinates are lifted from the query species to the subject species with liftOver (duplications are allowed, minMatch=0.05 by default).
 
 Next, syntenic regions are constructed from those lifted coordinates. Duplications are merged if they are closer than the specified distance. Constructed syntenies are flanked with a specified number of nts.
 
@@ -20,30 +22,19 @@ To remove spurious HSPs a background distribution of raw HSP scores is construct
 ### 3. Filtering HSPs and building orthologs.
 Every HSP is assigned with a p-value based on a right-sided test that HSP’s score is so large only for random reasons. P-values are adjusted with FDR Benjamini-Hochberg procedure. Only those HSPs with a q-value less than a specified α value are retained to control the false discovery rate at α% (5% by default). Then retained HSPs are linked via dynamic programming to form alignment chains, one per every syntenic region of every lncRNA. Those chains are deemed as candidate orthologs.
 
-### 4. Selecting the best ortholog for every lncRNA
+### 4. Selecting the best ortholog for every lncRNA.
 Only one ortholog for every lncRNA is selected based on the maximal sum of HSPs lengths that comprise an ortholog in question.
 
-### 5. Annotating orthologs (optional)
+### 5. Annotating orthologs (optional).
 Found orthologs can be annotated with a provided annotation of the subject genome.
 
-## Input and output files
-ortho2align takes these files as input:
-1. lncRNA annotation of the query species in ```bed/gtf/gff``` formats;
-2. Query species genome in ```.fasta``` format;
-3. Subject species genome in ```.fasta``` format;
-4. liftOver ```.chain``` file from query to subject species;
-5. Subject species gene annotation in ```bed/gtf/gff``` formats.
-
-ortho2align produces a directory with intermediate and output files. The main outputs are:
-1. ```best.query_orthologs.bed```: coordinates of alignment blocks of lncRNAs in query species with found orthologs in subject species in ```bed12``` format.
-2. ```best.subject_orthologs.bed```: coordinates of alignment blocks of found orthologs in subject species in ```bed12``` format.
-3. ```stats.txt```: plain text file with statistics describing every pipeline step.
-4. ```best.ortholog_annotation.tsv``` (optional): plain table with a header and two columns that matches query lncRNAs names with subject species gene names that overlap lncRNAs orthologs.
+### Parallelization
+The algorithm is highly parallelizable so it will benefit from running on multi-core systems.
 
 # Installation
-ortho2align was tested under 64-bit linux. Also, it might work under 64-bit OS-X.
+```ortho2align``` was tested under 64-bit linux. Also, it might work under 64-bit OS-X.
 ## Dependencies
-ortho2align is written in python and needs some python packages and standalone programs to work.
+```ortho2align``` is written in python and needs several python packages and standalone programs to work.
 
 Programs:
 - python >=3.7
@@ -89,17 +80,18 @@ cd ortho2align
     ```{bash}
     pip install .
     ```
-    - or with ```setup.py```:
+    - or with ```setuptools```:
     ```{bash}
     python setup.py install
     ```
     All required python packages will be installed automatically.
+
 # Usage
 If you installed the package with ```conda```, activate the dedicated environment first:
 ```{bash}
 conda activate orthoenv
 ```
-The package is organised into the set of subcommands. Run ```ortho2ailgn -h``` to see the description of subcommands.
+The package is organised into the set of subcommands. Run ```ortho2ailgn -h``` to see the description of subcommands:
 
 ```{bash}
 usage: ortho2align [-h] SUBCOMMAND ...
@@ -218,10 +210,52 @@ Getting best orthologs:
                         orthologs with which value to select in case of
                         multiple orthologs (default: max).
 ```
+### Input and output files
+```ortho2align``` takes these files as input:
+1. lncRNA annotation of the query species in ```bed/gtf/gff``` formats;
+2. Query species genome in ```fasta``` format;
+3. Subject species genome in ```fasta``` format;
+4. liftOver ```chain``` file from query to subject species;
+5. Subject species gene annotation in ```bed/gtf/gff``` formats.
+
+```ortho2align``` produces a directory with intermediate and output files. The main outputs are:
+1. ```best.query_orthologs.bed```: coordinates of alignment blocks of lncRNAs in query species with found orthologs in subject species in ```bed12``` format.
+2. ```best.subject_orthologs.bed```: coordinates of alignment blocks of found orthologs in subject species in ```bed12``` format.
+3. ```stats.txt```: plain text file with statistics describing every pipeline step.
+4. ```best.ortholog_annotation.tsv``` (optional): plain table with a header and two columns that matches query lncRNAs names with subject species gene names that overlap lncRNAs orthologs.
+
+The principal structure of the output directory is shown below:
+```
+outdir/
+├─ best.ortholog_annotation.tsv
+├─ best.query_orthologs.bed
+├─ best.subject_orthologs.bed
+├─ shuffle_bg.bed
+├─ stats.txt
+├─ the_map.json
+├─ align_files/
+│  ├─ exceptions.bed
+│  ├─ unalignable.bed
+│  ├─ rna1.json
+│  ├─ rna2.json
+│  ├─ ...
+├─ bg_files/
+│  ├─ exceptions.bed
+│  ├─ rna1.json
+│  ├─ rna2.json
+│  ├─ ...
+├─ build_files/
+   ├─ subject_exceptions.bed
+   ├─ query_exceptions.bed
+   ├─ subject_orthologs.bed
+   ├─ query_orthologs.bed
+```
 ## Run every step separately
-Alternatively you can run each step separately in case you want to try different parameter values for each step.
+Alternatively you can run each step separately in case you want to try different parameter values for each step. The pipeline above is combined from these step as shown in the scheme below:
+![ortho2align pipeline scheme](./ortho2align_pipeline_scheme.png)
+
 ### Constructing background ranges
-Background genomic ranges of the subject genome are constructed as shuffled genes from the annotation of the subject genome with ```ortho2align bg_from_shuffled_ranges```.
+Background genomic ranges of the subject genome are constructed as a sample of shuffled genes from the annotation of the subject genome with ```ortho2align bg_from_shuffled_ranges```.
 ```{bash}
 usage: ortho2align bg_from_shuffled_ranges [-h] -genes [str] -genome [str]
                                            [-name_regex [str]] -sample_size
@@ -446,3 +480,12 @@ Output:
 ```
 ## ```config``` files for CLI arguments
 Instead of entering each CLI argument for every subcommand, a ```.config``` file with CLI arguments can be supplied via ```ortho2align SUBCOMMAND @subcommand.config```. The first line of the file is the name of the subcommand, next lines contain argument names and their values one by one. Check ```config``` directory for sample ```.config``` files.
+# Testing
+You can test the installed package, whether it works or not. After the package is installed (and the environment activated, if needed), run the commands below:
+```{bash}
+wget https://github.com/dmitrymyl/ortho2align/releases/download/v0.9/test.tar.gz
+tar -xzvf test.tar.gz
+cd test
+bash test.sh
+```
+This will download an archive with test files (see [test](./test)). The main script ```test.sh``` will download genome and annotation files (2 Gb), which will take some time. You will need nearly 7 Gb of free space for unpacked files. After that, ```ortho2align``` will be run on the test data. If installation was correct, you won't encounter any problems and get a full output in the ```result``` directory.

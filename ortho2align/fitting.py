@@ -19,10 +19,10 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         """Returns probability density function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 pdf with fitted empirical distribution.
         Returns:
-            (number or np.array) pdf values of the items in data.
+            float, int or np.array: pdf values of the items in data.
         """
         pass
 
@@ -31,10 +31,10 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         """Returns cumulative density function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 cdf with fitted empirical distribution.
         Returns:
-            (number or np.array) cdf values of the items in data.
+            float, int or np.array: cdf values of the items in data.
         """
         pass
 
@@ -43,10 +43,10 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         """Returns survival function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 sf with fitted empirical distribution.
         Returns:
-            (number or np.array) sf values of the items in data.
+            float, int or np.array: sf values of the items in data.
         """
         pass
 
@@ -55,10 +55,10 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         """Returns percent point function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 ppf with fitted empirical distribution.
         Returns:
-            (number or np.array) ppf values of the items in data.
+            float, int or np.array: ppf values of the items in data.
         """
         pass
 
@@ -67,10 +67,10 @@ class AbstractFitter(metaclass=abc.ABCMeta):
         """Returns inverse survival function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 isf with fitted empirical distribution.
         Returns:
-            (number or np.array) isf values of the items in data.
+            float, int or np.array: isf values of the items in data.
         """
         pass
 
@@ -107,7 +107,7 @@ def inverse_approximator(value, function, left, right, epsilon, increasing=True,
             until halt (default: 100).
 
     Returns:
-        (int, float) the best argument found.
+        int, float: the best argument found.
 
     """
     if right <= left:
@@ -163,10 +163,10 @@ class HistogramFitter(AbstractFitter):
         """Returns probability density function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 pdf with fitted empirical distribution.
         Returns:
-            (number or np.array) pdf values of the items in data.
+            float, int or np.array: pdf values of the items in data.
         """
         return self.estimator.pdf(data)
 
@@ -174,10 +174,10 @@ class HistogramFitter(AbstractFitter):
         """Returns cumulative density function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 cdf with fitted empirical distribution.
         Returns:
-            (number or np.array) cdf values of the items in data.
+            float, int or np.array: cdf values of the items in data.
         """
         return self.estimator.cdf(data)
 
@@ -185,10 +185,10 @@ class HistogramFitter(AbstractFitter):
         """Returns survival function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 sf with fitted empirical distribution.
         Returns:
-            (number or np.array) sf values of the items in data.
+            float, int or np.array: sf values of the items in data.
         """
         return self.estimator.sf(data)
 
@@ -196,10 +196,10 @@ class HistogramFitter(AbstractFitter):
         """Returns percent point function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 ppf with fitted empirical distribution.
         Returns:
-            (number or np.array) ppf values of the items in data.
+            float, int or np.array: ppf values of the items in data.
         """
         return self.estimator.ppf(data)
 
@@ -207,10 +207,10 @@ class HistogramFitter(AbstractFitter):
         """Returns inverse survival function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 isf with fitted empirical distribution.
         Returns:
-            (number or np.array) isf values of the items in data.
+            float, int or np.array: isf values of the items in data.
         """
         return self.estimator.isf(data)
 
@@ -231,7 +231,7 @@ def inverse_approximate_collection(function, collection, a, b):
             arguments.
 
     Returns:
-        (list) A list of found approximated arguments.
+        list: A list of found approximated arguments.
     """
     results = list()
     for value in collection:
@@ -247,7 +247,7 @@ class KernelFitter(AbstractFitter):
 
     Attributes:
         data (collection): numerical data used to fit distribution.
-        estimator (scipy.gaussian_kde) KDE instance used to calculate
+        estimator (scipy.gaussian_kde): KDE instance used to calculate
             statistics.
     """
 
@@ -272,10 +272,10 @@ class KernelFitter(AbstractFitter):
         """Returns probability density function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 pdf with fitted empirical distribution.
         Returns:
-            (number or np.array) pdf values of the items in data.
+            float, int or np.array: pdf values of the items in data.
         """
         return self.estimator.pdf(data)
 
@@ -283,10 +283,10 @@ class KernelFitter(AbstractFitter):
         """Returns cumulative density function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 cdf with fitted empirical distribution.
         Returns:
-            (number or np.array) cdf values of the items in data.
+            float, int or np.array: cdf values of the items in data.
         """
         single_value = False
         if isinstance(data, int) or isinstance(data, float):
@@ -302,20 +302,11 @@ class KernelFitter(AbstractFitter):
         """Returns survival function of the items in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 sf with fitted empirical distribution.
         Returns:
-            (number or np.array) sf values of the items in data.
+            float, int or np.array: sf values of the items in data.
         """
-        # single_value = False
-        # if isinstance(data, int) or isinstance(data, float):
-        #     data = (data, )
-        #     single_value = True
-        # cdf = tuple(self.estimator.integrate_box_1d(item, np.inf)
-        #             for item in data)
-        # if single_value:
-        #     return cdf[0]
-        # return np.array(cdf)
         return 1 - self.cdf(data)
 
     def ppf(self, data):
@@ -324,10 +315,10 @@ class KernelFitter(AbstractFitter):
         Utilizes brentq method to find ppf of values in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 ppf with fitted empirical distribution.
         Returns:
-            (number or np.array) ppf values of the items in data.
+            float, int or np.array: ppf values of the items in data.
         """
         single_value = False
         if isinstance(data, int) or isinstance(data, float):
@@ -347,10 +338,10 @@ class KernelFitter(AbstractFitter):
         Utilizes brentq method to find isf of values in data.
 
         Args:
-            data (number or iterable): data to estiamate
+            data (float, int or iterable): data to estiamate
                 isf with fitted empirical distribution.
         Returns:
-            (number or np.array) isf values of the items in data.
+            float, int or np.array: isf values of the items in data.
         """
         single_value = False
         if isinstance(data, int) or isinstance(data, float):

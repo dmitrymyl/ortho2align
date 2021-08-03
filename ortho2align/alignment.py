@@ -19,10 +19,10 @@ def compare(a, b, side='g'):
             'geq': greater or equal, a >= b
             'leq': less or equal, a <= b
     Returns:
-        (bool) True or False, result of comparison
-        of a and b with side function.
+        bool: True or False, result of comparison
+            of a and b with side function.
     Raises:
-        ValueError in case side is not one of 'g',
+        ValueError: in case side is not one of 'g',
             'l', 'eq', 'neq', 'geq', 'leq'.
     """
     if side == 'g':
@@ -50,7 +50,7 @@ def nxor_strands(hsp_strand, alignment_strand):
             One of "+", "-", ".".
 
     Returns:
-        (str): "+" if both strands are concordant, "-" otherwise.
+        str: "+" if both strands are concordant, "-" otherwise.
             "." is equal to "+".
     """
     _alignment_strand = alignment_strand in ['+', '.']
@@ -61,9 +61,21 @@ def nxor_strands(hsp_strand, alignment_strand):
 
 
 class HSP:
-    """
-    High-scoring pair from BLAST alignment representing
-    an alignment block.
+    """High-scoring pair from BLAST alignment representing an alignment block.
+
+    Attributes:
+        qstart (int): start of HSP in query sequence.
+        qend (int): end of HSP in query sequence.
+        sstart (int): start of HSP in subject sequence.
+        send (int): end of HSP in subject sequence.
+        score (int, float): alignment score of HSP.
+        kwargs (dict): kwargs from ``init`` method.
+        qstrand (bool): True if query strand is "+", False otherwise.
+        sstrand (bool): True if subject strand is "+", False otherwise.
+        orientation (str): 'direct' if both strands are "+" and 'reverse' otherwise.
+
+    Class attributes:
+        orientation_dict (dict): holds information for HSP orientation.
     """
     orientation_dict = {(True, True): 'direct',
                         (True, False): 'reverse'}
@@ -79,10 +91,7 @@ class HSP:
             sstart (int): start of HSP in subject sequence.
             send (int): end of HSP in subject sequence.
             score (int, float): alignment score of HSP.
-            qchrom (int, str): chromosome of query sequence
-                (default: None).
-            schrom (int, str): chromosome of subject sequence
-                (default: None).
+            kwargs (dict): any other keyword arguments.
         """
         self.qstart = qstart
         self.qend = qend
@@ -96,6 +105,7 @@ class HSP:
                                                       self.sstrand))
 
     def __repr__(self):
+        """Representation of HSP instance."""
         kwargs_repr = self.kwargs.__repr__()
         params_list = [str(i)
                        for i in (self.qstart,
@@ -106,6 +116,7 @@ class HSP:
         return f"HSP({', '.join(params_list)})"
 
     def __str__(self):
+        """String representation of HSP instance."""
         return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} " \
                f"score {self.score} {self.orientation}"
 
@@ -123,13 +134,17 @@ class HSP:
         Infers whether self HSP precedes other HSP
         in both query and subject sequence.
 
+        Args:
+            other (HSP): another instance of HSP class to
+                infer precedence.
+
         Returns:
-            True if self precedes other, False otherwise.
+            bool: True if self precedes other, False otherwise.
 
         Raises:
-            ValueError in case of inconsistent orientations.
-            Precedence is defined only for HSPs of same
-            orientation (except for None orientation).
+            ValueError: in case of inconsistent orientations.
+                Precedence is defined only for HSPs of same
+                orientation (except for None orientation).
         """
         if self.orientation != other.orientation \
            and (self.orientation is not None) \
@@ -159,19 +174,18 @@ class HSP:
         distance is set to infinity.
 
         Args:
-            self: HSP instance;
-            other: HSP instance;
-            gapopen (int): penalty for gap opening;
+            other: HSP instance.
+            gapopen (int): penalty for gap opening.
             gapextend (int): penalty for gap extension.
 
         Returns:
-            An int/float or Inf in case none HSP precedes
-            the other one.
+            int, float: An int/float distance or Inf in case none HSP precedes
+                the other one.
 
         Raises:
-            ValueError in case of inconsistent orientations.
-            Distance is defined only for HSPs of same
-            orientation (except for None orientation).
+            ValueError: in case of inconsistent orientations.
+                Distance is defined only for HSPs of same
+                orientation (except for None orientation).
         """
         if self.orientation != other.orientation \
            and (self.orientation is not None) \
@@ -197,7 +211,11 @@ class HSP:
             return float("Inf")
 
     def to_dict(self):
-        """Returns a dict representation."""
+        """Returns a dict representation.
+
+        Returns:
+            dict: a dict representation of the instance.
+        """
         return {'qstart': self.qstart,
                 'qend': self.qend,
                 'sstart': self.sstart,
@@ -207,15 +225,29 @@ class HSP:
 
     @classmethod
     def from_dict(cls, dict_):
-        """Recovers from a dict representation."""
+        """Recovers from a dict representation.
+
+        Dict must contain the following keys:
+        'qstart', 'qend', 'sstart', 'send', 'score'.
+
+        Args:
+            dict_ (dict): a dictionary representation of
+                HSP instance generated with `HSP.to_dict` method.
+
+        Returns:
+            HSP: HSP instance.
+        """
         keys = ['qstart', 'qend', 'sstart', 'send', 'score']
         return cls(*[dict_.get(key, None) for key in keys],
                    **dict_.get('kwargs', dict()))
 
     def copy(self):
-        """Returns a copy of an instance.
+        """Returns a shallow copy of the instance.
 
         All dynamic data in HSPVertex will be lost!
+
+        Returns:
+            HSP: a shallow copy of the instance.
         """
         return self.__class__(self.qstart,
                               self.qend,
@@ -242,7 +274,7 @@ class HSP:
                 or return a modified copy (default: True)
 
         Returns:
-            None if inplace, modified copy of hsp otherwise.
+            HSP, None: None if inplace, modified copy of hsp otherwise.
         """
         if not inplace:
             hsp = hsp.copy()
@@ -294,8 +326,20 @@ class HSP:
 
 
 class HSPVertex(HSP):
-    """An extension of HSP class for handling graph
-    operations (contains a list of neighbours).
+    """An extension of HSP class for handling graph operations.
+
+    Contains a list of next vertices needed for dynamic programming.
+
+    Attributes:
+        qstart (int): start of HSP in query sequence.
+        qend (int): end of HSP in query sequence.
+        sstart (int): start of HSP in subject sequence.
+        send (int): end of HSP in subject sequence.
+        score (int, float): alignment score of HSP.
+        kwargs (dict): any other keyword arguments.
+        next_vertices (list): a list of the following vertices.
+        total_score (float): a total score of chain ending on this HSP.
+        best_prev (HSPVertex): the best preceding HSP in terms of score.
     """
     __slots__ = ('next_vertices', 'total_score', 'best_prev')
 
@@ -307,10 +351,8 @@ class HSPVertex(HSP):
             qend (int): end of HSP in query sequence.
             sstart (int): start of HSP in subject sequence.
             send (int): end of HSP in subject sequence.
-            qchrom (int, str): chromosome of query sequence
-                (default: None).
-            schrom (int, str): chromosome of subject sequence
-                (default: None).
+            score (int, float): alignment score of HSP.
+            kwargs (dict): any other keyword arguments.
         """
         super().__init__(qstart, qend, sstart, send, score, **kwargs)
         self.next_vertices = []
@@ -318,6 +360,7 @@ class HSPVertex(HSP):
         self.best_prev = None
 
     def __repr__(self):
+        """Representation of ``HSPVertex`` instance."""
         kwargs_repr = self.kwargs.__repr__()
         params_list = [str(_)
                        for _ in (self.qstart,
@@ -328,6 +371,7 @@ class HSPVertex(HSP):
         return f"HSPVertex({', '.join(params_list)})"
 
     def __str__(self):
+        """String epresentation of ``HSPVertex`` instance."""
         next_vertices_str = "\t" + "\n\t".join(" ".join(str(i).split(" ")[:-1]) for i in self.next_vertices)
         return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} score " \
                f"{self.score} {self.orientation}\n" + next_vertices_str
@@ -378,6 +422,10 @@ class Alignment:
         slen (int): length of subject sequence.
         replace_dict (dict): field names to replace
             for convenience.
+
+    Class attributes:
+        replace_dict (dict): keys are BLAST+ table headers,
+            values are corresponding ``HSP`` attributes.
 
     """
     replace_dict = {'q. start': 'qstart',
@@ -447,24 +495,12 @@ class Alignment:
 
     @property
     def chain_class(self):
+        """Corresponding alignment chain class.
+
+        Returns:
+            type: `AlignmentChain`.
+        """
         return AlignmentChain
-
-    # def plot_alignment(self, qleft=None, qright=None, sleft=None, sright=None, main_color='black', all_color='grey'):
-    #     """Plots alignment map."""
-    #     if self.filtered:
-    #         hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
-    #                       for hsp in self._all_HSPs)
-    #         qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
-    #         plt.plot([qstarts, qends], [sstarts, sends], color=all_color)
-
-    #     hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
-    #                   for hsp in self.HSPs)
-    #     qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
-    #     plt.plot([qstarts, qends], [sstarts, sends], color=main_color)
-    #     plt.xlim(qleft, qright)
-    #     plt.ylim(sleft, sright)
-    #     plt.xlabel("Query")
-    #     plt.ylabel("Subject")
 
     @classmethod
     def from_file_blast(cls,
@@ -495,10 +531,10 @@ class Alignment:
                 One of 'inclusive', 'exclusive' (default: 'inclusive').
 
         Returns:
-            An Alignment instance.
+            Alignment: An `Alignment` instance.
 
         Raises:
-            ValueError in case field 'score'
+            ValueError: in case field 'score'
                 is not found in alignment fields.
         """
         line = file_object.readline()
@@ -707,7 +743,7 @@ class Alignment:
                 (default: None);
 
         Returns:
-            list of cut hsps.
+            list: list of cut hsps.
         """
         hsps = [hsp.copy() for hsp in self._all_HSPs]
         if qleft is not None:
@@ -758,6 +794,28 @@ class Alignment:
         return hsps
 
     def cut_coordinates(self, qleft=None, qright=None, sleft=None, sright=None):
+        """Creates a new ``Alignment`` instance with HSPs restricted by given coordinates.
+
+        Given query and subject sequence boundaries only
+        those HSPs are kept that lay within those boundaries.
+        If an HSP intersects a boundary, it is cut and its
+        score is reduced proportionally to the share of the cut.
+        If a boundary is left None than it is equal to +Inf
+        or -Inf for left and right boundaries, respectively.
+
+        Args:
+            qleft (int, float): query sequence left boundary
+                (default: None);
+            qright (int, float): query sequence right boundary
+                (default: None);
+            sleft (int, float): subject sequence left boundary
+                (default: None);
+            sright (int, float): subjecct sequence right boundary
+                (default: None);
+
+        Returns:
+            Alignment: a new alignment instance with cut HSPs.
+        """
         hsps = self._cut_hsps(qleft=qleft, qright=qright, sleft=sleft, sright=sright)
         return Alignment(hsps, self.qlen, self.slen)
 
@@ -777,7 +835,7 @@ class Alignment:
                 sequence beginning in the new coordinates.
 
         Returns:
-            Alignment instance with new HSP coordinates
+            Alignment: `Alignment` instance with new HSP coordinates
             and new qlen and slen.
         """
         # Not dealing with reversed sequences, but ok.
@@ -820,7 +878,7 @@ class Alignment:
                 of one direction sorted by qstart.
 
         Returns:
-            a new list of HSPVertex instances.
+            list: a new list of HSPVertex instances.
         """
         # Add begin and end nodes.
         if orientation == 'direct':
@@ -869,7 +927,7 @@ class Alignment:
                 sorted by query start and query end.
 
         Returns:
-            list of all possible alignment chains.
+            list: list of all possible alignment chains.
         """
         if len(vertices) == 0:
             return []
@@ -927,7 +985,7 @@ class Alignment:
             orientation (str): one of 'direct', 'reverse'.
 
         Returns:
-            A AlignmentChain instance with the best score.
+            An AlignmentChain instance with the best score.
         """
         if len(vertices) == 0:
             return self.chain_class([], self)
@@ -952,9 +1010,9 @@ class Alignment:
         minimizing gap penalties between HSPs.)
 
         Returns:
-            dict with best direct and reverse
-            AlignmentChain instance under 'direct'
-            and 'reverse' keys, respectively.
+            dict: dict with best direct and reverse
+                ``AlignmentChain`` instance under 'direct'
+                and 'reverse' keys, respectively.
         """
         oriented_groups = self._split_orientations()
         return {key: self._find_best_chain(group, key)
@@ -1016,7 +1074,7 @@ class AlignmentChain:
         function.
 
         Returns:
-            AlignmentChain score.
+            float: AlignmentChain score.
         """
         if self._score is None:
             if self.HSPs:
@@ -1065,34 +1123,3 @@ class AlignmentChain:
         alignment = Alignment.from_dict(dict_.get('alignment'))
         score = dict_.get('score')
         return cls(HSPs, alignment, score)
-
-    # def plot_chain(self, color='red', link_color='blue'):
-    #     """Plots alignment chain with corresponding alignment.
-
-    #     First plots corresponding alignment in black, then
-    #     alignment chains's HSPs with solid lines and connections
-    #     between them with dashed lines.
-
-    #     Args:
-    #         color (str): a color name to plot alignment chain's
-    #             HSPs;
-    #         link_color (str): a color name to plot connections
-    #             between alignment chain's HSPs.
-
-    #     Returns:
-    #         None
-    #     """
-    #     self.alignment.plot_alignment()
-    #     hsp_coords = ((hsp.qstart, hsp.qend, hsp.sstart, hsp.send)
-    #                   for hsp in self.HSPs)
-    #     qstarts, qends, sstarts, sends = list(zip(*hsp_coords))
-    #     plt.plot([qstarts, qends], [sstarts, sends], color=color)
-    #     link_coords = ((self.HSPs[i].qend,
-    #                     self.HSPs[i + 1].qstart,
-    #                     self.HSPs[i].send,
-    #                     self.HSPs[i + 1].sstart)
-    #                    for i in range(len(self.HSPs) - 1))
-    #     lqstarts, lqends, lsstarts, lsends = list(zip(*link_coords))
-    #     plt.plot([lqstarts, lqends], [lsstarts, lsends],
-    #              color=link_color,
-    #              linestyle='dashed')

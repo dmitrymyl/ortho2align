@@ -3,7 +3,14 @@ from collections import Counter
 
 
 def is_float(string):
-    """Checks whether a string represent a float number."""
+    """Checks whether a string represent a float number.
+
+    Args:
+        string (str): a string to check.
+
+    Returns:
+        bool: True of the string is a float, False otherwise.
+    """
     try:
         _ = float(string)
         return True
@@ -17,8 +24,12 @@ def numberize(string):
     Transforms string to float or to
     integer if possible.
 
+    Args:
+        string (str): a string to convert to number.
+
     Returns:
-        int, float or str instance.
+        int, float or str: int if string is an integer,
+            float if string is a float, str if neither.
     """
     if is_float(string):
         a = float(string)
@@ -44,7 +55,7 @@ def str_int_to_split(str_int):
         str_int (str of int): str representation of an int.
 
     Returns:
-        (tuple) 3 values: length of str_int, first digits and
+        tuple: 3 values: length of str_int, first digits and
             remaining digits.
     """
     if len(str_int) == 1:
@@ -63,7 +74,7 @@ def slplot(data):
             plot stem-and-leaf plot for.
 
     Returns:
-        (str) stem-and-leaf plot of given data.
+        str: stem-and-leaf plot of given data.
     """
     str_split_data = (str_int_to_split(str_int)
                       for str_int in (str(int(item))
@@ -76,7 +87,12 @@ def slplot(data):
 
 
 def simple_hist(data):
-    """Returns a simple histogram for the data."""
+    """Returns a simple histogram for the data.
+    Args:
+        data (iterable): a collection of any number data.
+    Returns:
+        str: a string histogram.
+    """
     counts = Counter(data)
     result = {key: value
               for key, value in sorted(counts.items(),
