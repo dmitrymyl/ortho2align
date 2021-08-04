@@ -479,7 +479,7 @@ Output:
   -output [str]         output filename.
 ```
 ## ```config``` files for CLI arguments
-Instead of entering each CLI argument for every subcommand, a ```.config``` file with CLI arguments can be supplied via ```ortho2align @subcommand.config```. The first line of the file is the name of the subcommand, next lines contain argument names and their values one by one. Check [configs](./configs) directory for sample ```.config``` files.
+Instead of entering each CLI argument for every subcommand, a ```.config``` file with CLI arguments can be supplied via ```ortho2align @subcommand.config```. The first line of the file is the name of the subcommand, next lines contain argument names and their values one by one. Check [configs/](./configs) directory for sample ```.config``` files.
 # Testing
 You can test the installed package, whether it works or not. After the package is installed (and the environment activated, if needed), run the commands below:
 ```{bash}
@@ -488,4 +488,4 @@ tar -xzvf test.tar.gz
 cd test
 bash test.sh
 ```
-This will download an archive with test files (see [test](./test)). The test set of RNAs are 96 strRNAs from [here](https://www.sciencedirect.com/science/article/pii/S1097276518307019). The main script [test.sh](./test/test.sh) will download genome and annotation files (2 Gb), which will take some time. You will need nearly 7 Gb of free space for unpacked files. After that, ```ortho2align``` will be run on the test data. If installation was correct, you won't encounter any problems and get a full output in the ```result``` directory.
+This will download an archive with test files (see [test/](./test)). The test set of RNAs are 96 strRNAs from [here](https://www.sciencedirect.com/science/article/pii/S1097276518307019). The main script [test.sh](./test/test.sh) will download genome and annotation files (2 Gb), which will take some time. You will need nearly 7 Gb of free space for unpacked files. After that, ```ortho2align``` will be run on the test data. If installation was correct, you won't encounter any problems and get a full output in the ```result``` directory.
