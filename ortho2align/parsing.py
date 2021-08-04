@@ -647,6 +647,27 @@ gtf_comment = '#'
 
 def gtf_parser(fileobj, verbose=False, sequence_file_path=None,
                name_regex=None, name_tag=None, parse_attributes=False):
+    """Parses GTF file.
+
+    Args:
+        fileobj (file): a file-like object or a stream.
+        verbose (bool): if True, will report a progress bar (default: False).
+        sequence_file_path (str, Path): a path to the corresponding genome file
+            (default: None).
+        name_regex (r-str): a regex to extract a name of each genomic feature
+            (default: None).
+        name_tag (str): a name tag in the attributes field (default: None).
+        parse_attributes (bool): if True, will parse attributes field at
+            the expense of performance (default: False).
+
+    Returns:
+        GenomicRangesList: a parsed gtf annotation.
+
+    Raises:
+        ValueError: in case name_regex doesn't match anything in the
+            attributes field.
+        IncorrectLine: in case one of the lines is incorrect gtf line.
+    """
     granges = list()
     if parse_attributes:
         colnames = gtf_fields.keys()
@@ -688,14 +709,42 @@ def gtf_parser(fileobj, verbose=False, sequence_file_path=None,
 
 
 def parse_gff_start(field):
+    """Parses GFF3 start field.
+
+    Args:
+        field (str): GFF3 start field.
+
+    Returns:
+        int: parsed GFF3 start field.
+    """
     return int(field) - 1
 
 
 def parse_gff_end(field):
+    """Parses GFF3 end field.
+
+    Args:
+        field (str): GFF3 end field.
+
+    Returns:
+        int: parsed GFF3 end field.
+    """
     return int(field)
 
 
 def parse_gff_attributes(field):
+    """Parses GFF3 attributes field.
+
+    Args:
+        field (str): GFF3 attributes field.
+
+    Returns:
+        dict: of GFF3 attributes tags and corresponding values.
+
+    Raises:
+        IncorrectGFFAttrs: in case there are no GFF3 attributes
+            in the field or the field cannot be parsed correctly.
+    """
     try:
         data = {tag: value
                 for tag, value in (item.split('=')
@@ -732,6 +781,27 @@ gff_comment = "#"
 
 def gff_parser(fileobj, verbose=False, sequence_file_path=None,
                name_regex=None, name_tag=None, parse_attributes=False):
+    """Parses GFF3 annotation file.
+
+    Args:
+        fileobj (file): a file-like object or a stream.
+        verbose (bool): if True, will report a progress bar (default: False).
+        sequence_file_path (str, Path): a path to the corresponding genome file
+            (default: None).
+        name_regex (r-str): a regex to extract a name of each genomic feature
+            (default: None).
+        name_tag (str): a name tag in the attributes field (default: None).
+        parse_attributes (bool): if True, will parse attributes field at
+            the expense of performance (default: False).
+
+    Returns:
+        GenomicRangesList: a parsed GFF3 annotation.
+
+    Raises:
+        ValueError: in case name_regex doesn't match anything in the
+            attributes field.
+        IncorrectLine: in case one of the lines is incorrect GFF3 line.
+    """
     granges = list()
     if parse_attributes:
         colnames = gff_fields.keys()
@@ -772,6 +842,14 @@ def gff_parser(fileobj, verbose=False, sequence_file_path=None,
 
 
 def check_bed3(line):
+    """Checks whether a line can be parsed as a BED3 line.
+
+    Args:
+        line (str): a line to be checked.
+
+    Returns:
+        bool: a result of the check.
+    """
     try:
         record = line.strip().split('\t')
         if len(record) != 3:
@@ -784,6 +862,14 @@ def check_bed3(line):
 
 
 def check_bed6(line):
+    """Checks whether a line can be parsed as a BED6 line.
+
+    Args:
+        line (str): a line to be checked.
+
+    Returns:
+        bool: a result of the check.
+    """
     try:
         record = line.strip().split('\t')
         if len(record) != 6:
@@ -796,6 +882,14 @@ def check_bed6(line):
 
 
 def check_bed12(line):
+    """Checks whether a line can be parsed as a BED12 line.
+
+    Args:
+        line (str): a line to be checked.
+
+    Returns:
+        bool: a result of the check.
+    """
     try:
         record = line.strip().split('\t')
         if len(record) != 12:
@@ -808,6 +902,14 @@ def check_bed12(line):
 
 
 def check_gtf(line):
+    """Checks whether a line can be parsed as a GTF line.
+
+    Args:
+        line (str): a line to be checked.
+
+    Returns:
+        bool: a result of the check.
+    """
     try:
         record = line.strip().split('\t')
         if len(record) != 9:
@@ -820,6 +922,14 @@ def check_gtf(line):
 
 
 def check_gff(line):
+    """Checks whether a line can be parsed as a GFF3 line.
+
+    Args:
+        line (str): a line to be checked.
+
+    Returns:
+        bool: a result of the check.
+    """
     try:
         record = line.strip().split('\t')
         if len(record) != 9:
@@ -832,6 +942,32 @@ def check_gff(line):
 
 
 def annotation_sniffer(fileobj, comment='#', separator='\t'):
+    """Defines the type of the annotation file.
+
+    The function reads every line from the start until it finds
+    the first uncommented line. Then it defines a number of fields
+    and checks whether the line can be parsed as a BED3, BED6, GTF,
+    GFF3 or BED12 line. Finally it returns the file pointer to the
+    beginning of the file.
+
+    Args:
+        fileobj (file): a file-like object or a stream that
+            contains the annotation. Must support `seek` method.
+        comment (str): a character used to comment lines at
+            their beginnings (default: '#').
+        separator (str): a character used as a field separator
+            (default: '\t').
+
+    Returns:
+        str: a name of the annotation file type, one of
+            'bed3', 'bed6', 'gtf', 'gff', 'bed12'.
+
+    Raises:
+        EmptyAnnotation: in case there are no lines at all,
+            there are an empty line at the beginning of the file
+            or there are an empty line after the commented lines.
+        UnrecognizedFormat: in case file format can't be recognized.
+    """
     line = fileobj.readline()
 
     while line.startswith(comment):
@@ -873,6 +1009,25 @@ def annotation_sniffer(fileobj, comment='#', separator='\t'):
 
 def parse_annotation(fileobj, verbose=False, sequence_file_path=None,
                      name_regex=None, name_tag=None, parse_attributes=False):
+    """Parses an annotation file.
+
+    First, it checks an annotation type with `annotation_sniffer` and then
+    it parses the file according to that type.
+
+    Args:
+        fileobj (file): a file-like object or a stream.
+        verbose (bool): if True, will report a progress bar (default: False).
+        sequence_file_path (str, Path): a path to the corresponding genome file
+            (default: None).
+        name_regex (r-str): a regex to extract a name of each genomic feature
+            (default: None).
+        name_tag (str): a name tag in the attributes field (default: None).
+        parse_attributes (bool): if True, will parse attributes field at
+            the expense of performance (default: False).
+
+    Returns:
+        GenomicRangesList: a parsed annotation.
+    """
     annotation_type = annotation_sniffer(fileobj)
     if annotation_type == 'bed3':
         return bed3_parser(fileobj, verbose, sequence_file_path)

@@ -22,8 +22,14 @@ from .utils import simple_hist, slplot
 
 
 class CmdProgressBar(tqdm):
-    # A solution from https://github.com/tqdm/tqdm/issues/509#issuecomment-410537096 for correct nesting.
+    """
+    Custom progress bar based on tqdm.
+    """
     def __new__(cls, *args, **kwargs):
+        """Creates new instances of CMDProgessBar.
+
+        A solution from https://github.com/tqdm/tqdm/issues/509#issuecomment-410537096 for correct nesting.
+        """
         try:
             cls._instances = tqdm._instances
         except AttributeError:
@@ -35,6 +41,14 @@ class CmdProgressBar(tqdm):
         return instance
 
     def __init__(self, cmd_hints, desc, disable=False):
+        """Initializes CMDProgressBar instance.
+
+        Args:
+            cmd_hints (list of strs): descriptions of steps.
+            desc (str): description of the procedure.
+            disable (bool): if True, disables printing the progress bar
+                (default: False).
+        """
         super().__init__(cmd_hints,
                          bar_format="{desc}: {n_fmt}/{total_fmt}, {elapsed}{postfix}]",
                          desc=desc,
@@ -43,11 +57,33 @@ class CmdProgressBar(tqdm):
                          disable=disable)
 
     def update(self):
+        """Updates progress bar with the next command."""
         self.postfix = self.iterable[self.n]
         super().update()
 
 
-def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filename, seed, silent=False):
+def bg_from_inter_ranges(genes_filename,
+                         name_regex,
+                         sample_size,
+                         output_filename,
+                         seed=0,
+                         silent=False):
+    """Creates background ranges from intergenic regions.
+
+    First it merges all intersecting genomic ranges, next it
+    takes intergenic regions and finally it samples them.
+    Resulting background ranges are saved into the BED6 file.
+
+    Args:
+        gene_filename (str, Path): a path to the annotation file.
+        name_regex (r-str): a regex to extract a name from the attributes
+            field of the GTF or GFF3 file.
+        sample_size (int): amount of background ranges to generate.
+            Must be smaller than amount of the intergenic regions.
+        output_filename (str, Path): an output filename, must be BED6.
+        seed (int): a random seed (default: 0).
+        silent (bool): if True, will suppress a progress bar (default: False).
+    """
     random.seed(seed)
 
     cmd_hints = ['parsing the annotation...',
@@ -79,6 +115,22 @@ def bg_from_inter_ranges(genes_filename, name_regex, sample_size, output_filenam
 
 
 def bg_from_shuffled_ranges(genes_filename, genome_filename, name_regex, sample_size, output_filename, seed):
+    """Generates background regions from a sample of shuffled genes.
+
+    First it shuffles gene coordinates while preserving gene lengths, strands
+    and chromosomes. Next it samples them without replacement. Finally, it
+    saves sampled regions to the BED6 file.
+
+    Args:
+        genes_filename (str, Path): an annotation filename.
+        genome_filename (str, Path): a genome filename (needed to get chromosome sizes).
+        name_regex (r-str): a regex to extract a name from the attributes
+            field of the GTF or GFF3 file.
+        sample_size (int): amount of background ranges to generate.
+            Must be smaller than amount of the intergenic regions.
+        output_filename (str, Path): an output filename, must be BED6.
+        seed (int): a random seed (default: 0).
+    """
     with open(genes_filename, 'r') as infile:
         genes = parse_annotation(infile,
                                  name_regex=name_regex,
@@ -95,6 +147,23 @@ def bg_from_shuffled_ranges(genes_filename, genome_filename, name_regex, sample_
 
 
 def _align_two_ranges_blast(query, subject, **kwargs):
+    """A helper function to raise `GenomicRange.align_blast` to the module level.
+
+    Aligns query and subject genomic ranges.
+
+    Args:
+        query (GenomicRange): query genomic range.
+        subject (GenomicRange): subject genomic ranges.
+        kwargs (dict): kwargs sent to `GenomicRange.align_blast`.
+
+    Returns:
+        GenomicRangesAlignment: a result of the alignment.
+
+    Raises:
+        ExceptionLogger: in case of any exception being raised.
+            Saves a dict of query and subject genomic ranges as
+            important variables.
+    """
     try:
         return query.align_blast(subject, **kwargs)
     except Exception as e:
@@ -103,6 +172,24 @@ def _align_two_ranges_blast(query, subject, **kwargs):
 
 
 def _align_range_seqfile(query, seqfile, **kwargs):
+    """A helper function to raise `GenomicRange.align_blast_seqfile` to the module level.
+
+    Aligns query genomic range with sequences in the file.
+
+    Args:
+        query (GenomicRange): query genomic range.
+        seqfile (str, Path): a name of the file with sequences.
+        kwargs (dict): kwargs sent to `GenomicRange.align_blast_seqfile`.
+
+    Returns:
+        Alignment: Aligned range pair, which associates
+            query genomic range and its alignment.
+
+    Raises:
+        ExceptionLogger: in case of any exception being raised.
+            Saves a dict of query genomic range and a sequence file name as
+            important variables.
+    """
     try:
         return query.align_blast_seqfile(seqfile, **kwargs)
     except Exception as e:
@@ -111,6 +198,26 @@ def _align_range_seqfile(query, seqfile, **kwargs):
 
 
 def _estimate_bg_for_single_query_blast(query, bg_ranges, word_size, output_name, observations=1000, seed=0):
+    """A helper function to estimate background for a single query range.
+
+    Given a list of background ranges, it estimates the distribution of background scores,
+    which is saved to a json file.
+
+    Args:
+        query (GenomicRange): a query genomic range.
+        bg_ranges (GenomicRangesList): a collection of backgorund genomic ranges.
+        word_size (int): a word_size parameter to use in BLAST.
+        output_name (str, Path): an output filename (must be json).
+        observations (int): maximum number of scores to keep (default: 1000).
+        seed (int): random seed (default: 0).
+
+    Returns:
+        tuple: of two items, output filename and amount of found scores.
+
+    Raises:
+        ExceptionLogger: in case of any exception, saves query genomic range
+            as an important variable.
+    """
     scores = list()
     try:
         for bg_range in bg_ranges:
@@ -129,6 +236,26 @@ def _estimate_bg_for_single_query_blast(query, bg_ranges, word_size, output_name
 
 
 def _estimate_bg_for_single_query_seqfile(query, seqfile, word_size, output_name, observations=1000, seed=0):
+    """A helper function to estimate background for a single query range.
+
+    Given a file with background sequences, it estimates the distribution of background scores,
+    which is saved to a json file.
+
+    Args:
+        query (GenomicRange): a query genomic range.
+        seqfile (str, Path): a name of the file with sequences.
+        word_size (int): a word_size parameter to use in BLAST.
+        output_name (str, Path): an output filename (must be json).
+        observations (int): maximum number of scores to keep (default: 1000).
+        seed (int): random seed (default: 0).
+
+    Returns:
+        int: amount of found scores.
+
+    Raises:
+        ExceptionLogger: in case of any exception, saves query genomic range
+            as an important variable.
+    """
     try:
         alignment = _align_range_seqfile(query,
                                          seqfile,
@@ -159,6 +286,28 @@ def estimate_background(query_genes_filename,
                         bg_name_regex=None,
                         silent=False,
                         stats_filename=None):
+    """Estimates background score distribution for each query gene.
+
+    Args:
+        query_genes_filename (str, Path): query genes annotation filename.
+        bg_ranges_filename (str, Path): background ranges annotation filename.
+        query_genome_filename (str, Path): query genome filename.
+        subject_genome_filename (str, Path): subject genome filename.
+        outdir (str, Path): output directory name.
+        cores (int): how much cores to use (default: 1).
+        word_size (int): a word_size parameter for BLAST (default: 6).
+        observations (int): maximum number of background scores to keep
+            for each query gene (default: 1000).
+        seed (int): a random seed (default: 0).
+        query_name_regex (r-str): a regex to extract gene names from GTF/GFF3
+            attributes field in a query genes annotation (default: None).
+        bg_name_regex (r-str): a regex to extract gene names from GTF/GFF3
+            attributes field in a background ranges annotation (default: None).
+        silent (bool): if True, will suppress showing a progess bar (default: False).
+        stats_filename (str, Path): a filename to save stats about
+            background score distributions. If None, will print to the progress bar
+            (default: None).
+    """
     cmd_hints = ['reading annotations...',
                  'getting sample sequences...',
                  'aligning samples...',
@@ -228,7 +377,7 @@ def estimate_background(query_genes_filename,
                     f"Distribution of amount of found background HSPs:\n{slplot(results)}\n" \
                     f"Reported at most {observations} HSPs for each transcript.\n" \
                     "-----------------------"
-        if isinstance(stats_filename, str):
+        if isinstance(stats_filename, str) or isinstance(stats_filename, Path):
             with open(stats_filename, 'w') as stats_file:
                 pbar.write(stats_msg, file=stats_file)
         else:
@@ -238,6 +387,7 @@ def estimate_background(query_genes_filename,
 def _anchor(query_genes, query_anchors, query_genome_filename,
             subject_anchors, subject_genome_filename, query_chromsizes,
             subject_chromsizes, ortho_map, neighbour_dist, merge_dist, flank_dist):
+    """A helper function to make syntenies from anchoring genes."""
     query_anchors.relation_mapping(subject_anchors,
                                    ortho_map,
                                    'orthologs')
@@ -280,7 +430,13 @@ def _anchor(query_genes, query_anchors, query_genome_filename,
 def _lift(query_genes, query_genome_filename, subject_genome_filename, query_chromsizes,
           subject_chromsizes, liftover_chains,
           merge_dist, flank_dist, min_ratio=0.05):
+    """A helper function to make syntenies with liftOver.
 
+    Returns:
+        GenomicRangesList: query genes with corresponding syntenies
+            in 'syntenies' and 'neighbours' relations.
+        GenomicRangesList: a set of query genes with no syntenies.
+    """
     query_unalignable = list()
     query_prepared = list()
 
@@ -320,6 +476,23 @@ def _lift(query_genes, query_genome_filename, subject_genome_filename, query_chr
 
 
 def _align_syntenies(grange, word_size, outdir):
+    """A helper function to align genomic range's neighbourhood to the syntenic regions.
+
+    Alignments will be saved to the outdir/`grange.name`.json.
+
+    Args:
+        grange (GenomicRange): a genomic range with GenomicRangesList instances
+            in 'neighbours' and 'syntenies' relations.
+        word_size (int): a word_size to use with BLAST.
+        outdir (str): an output directory name.
+
+    Returns:
+        int: amount of saved alignments.
+
+    Raises:
+        ExceptionLogger: in case of any exception with grange as an
+            important variable.
+    """
     try:
         neighbourhood = grange.relations['neighbours'][0]
         alignments = list()
@@ -359,6 +532,7 @@ def get_alignments(query_genes,
                    word_size=6,
                    silent=False,
                    stats_filename=None):
+    """A get_alignments step of the pipeline."""
 
     program_mode = "lift"
     query_genes_filename = query_genes
@@ -493,6 +667,26 @@ def get_alignments(query_genes,
 
 
 def _build(query_gene_alignments_filename, query_bg_filename, fitter, fdr, pval_threshold):
+    """A helper function to build orthologs from significant HSPs.
+
+    Args:
+        query_gene_alignments_filename (str, Path): a query gene alignments filename.
+        query_bg_filename (str, Path): a query-specific background score distribution filename.
+        fitter (str): a fitter to use for fitting the background score distribution. One of
+            'kde', 'hist'.
+        fdr (bool): if True, will apply FDR-BH to p-values.
+        pval_threshold (float): a p-value threshold.
+
+    Returns:
+        list: of strs which represent bed12 records of query orthologs.
+        list: of strs which represent bed12 records of subject orthologs.
+        list: of a single query GenomicRange instance in case there are no
+            significant HSPs.
+
+    Raises:
+        ExceptionLogger: in case of any exception with a query range
+            as an important variable.
+    """
     with open(query_gene_alignments_filename, 'r') as infile:
         query_gene_alignments = [GenomicRangesAlignment.from_dict(dict_alignment)
                                  for dict_alignment in json.load(infile)]
@@ -549,7 +743,7 @@ def build_orthologs(alignments,
                     timeout=None,
                     silent=False,
                     stats_filename=None):
-
+    """A build_orthologs step of the pipeline."""
     alignments_dir = Path(alignments)
     background_dir = Path(background)
     fitting_type = fitting
@@ -666,7 +860,7 @@ def get_best_orthologs(query_orthologs,
                        outfile_query,
                        outfile_subject,
                        outfile_map):
-
+    """A get_best_orthologs step of the pipeline."""
     query_filename = Path(query_orthologs)
     subject_filename = Path(subject_orthologs)
     value_name = value
@@ -727,7 +921,7 @@ def annotate_orthologs(subject_orthologs,
                        output,
                        subject_name_regex=None,
                        stats_filename=None):
-
+    """A annotate_orthologs step of the pipeline."""
     subject_orthologs_filename = subject_orthologs
     subject_annotation_filename = subject_annotation
     output_filename = output
@@ -777,75 +971,6 @@ def annotate_orthologs(subject_orthologs,
         print(stats_msg)
 
 
-# def benchmark_orthologs(query_genes,
-#                         query_name_regex,
-#                         found_query,
-#                         found_query_name_regex,
-#                         found_subject,
-#                         found_subject_name_regex,
-#                         found_query_map,
-#                         found_subject_map,
-#                         found_query_subject_map,
-#                         real_subject,
-#                         real_subject_name_regex,
-#                         real_map,
-#                         outfile,
-#                         tp_mode):
-
-#     query_genes_filename = query_genes
-#     found_query_filename = found_query
-#     found_subject_filename = found_subject
-#     found_query_map_filename = found_query_map
-#     found_subject_map_filename = found_subject_map
-#     found_query_subject_map_filename = found_query_subject_map
-#     real_subject_filename = real_subject
-#     real_map_filename = real_map
-#     out_filename = outfile
-
-#     with open(query_genes_filename, 'r') as infile:
-#         query_genes = parse_annotation(infile,
-#                                        name_regex=query_name_regex)
-
-#     with open(found_query_filename, 'r') as infile:
-#         found_query_genes = parse_annotation(infile,
-#                                              name_regex=found_query_name_regex)
-
-#     with open(found_subject_filename, 'r') as infile:
-#         found_subject_genes = parse_annotation(infile,
-#                                                name_regex=found_subject_name_regex)
-
-#     with open(real_subject_filename, 'r') as infile:
-#         real_subject_genes = parse_annotation(infile,
-#                                               name_regex=real_subject_name_regex)
-
-#     with open(found_query_map_filename, 'r') as infile:
-#         found_query_map = json.load(infile)
-
-#     with open(found_subject_map_filename, 'r') as infile:
-#         found_subject_map = json.load(infile)
-
-#     with open(found_query_subject_map_filename, 'r') as infile:
-#         found_query_subject_map = json.load(infile)
-
-#     with open(real_map_filename, 'r') as infile:
-#         real_map = json.load(infile)
-
-#     query_genes.relation_mapping(found_query_genes, found_query_map, 'found_query')
-#     query_genes.relation_mapping(found_subject_genes, found_subject_map, 'found_subject')
-#     query_genes.relation_mapping(real_subject_genes, real_map, 'real')
-
-#     for query_gene in query_genes:
-#         query_gene.relations['found_query'].relation_mapping(query_gene.relations['found_subject'],
-#                                                              found_query_subject_map,
-#                                                              'ortho_link')
-
-#     trace_orthologs(query_genes)
-#     metrics = calc_ortholog_metrics(query_genes, tp_mode=tp_mode)
-
-#     with open(out_filename, 'w') as outfile:
-#         json.dump(metrics, outfile)
-
-
 def run_pipeline(query_genes,
                  query_genome,
                  subject_annotation,
@@ -876,7 +1001,7 @@ def run_pipeline(query_genes,
                  seed=0,
                  silent=False,
                  annotate=False):
-
+    """A method to run the whole pipeline."""
     start = time.time()
     if not os.path.exists(outdir):
         os.mkdir(outdir)
