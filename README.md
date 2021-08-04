@@ -483,7 +483,7 @@ Instead of entering each CLI argument for every subcommand, a ```.config``` file
 # Testing
 You can test the installed package, whether it works or not. After the package is installed (and the environment activated, if needed), run the commands below:
 ```{bash}
-wget https://github.com/dmitrymyl/ortho2align/releases/download/v0.9/test.tar.gz
+wget https://github.com/dmitrymyl/ortho2align/releases/download/v1.0.0-rc1/test.tar.gz
 tar -xzvf test.tar.gz
 cd test
 bash test.sh
