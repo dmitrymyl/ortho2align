@@ -123,6 +123,12 @@ estimate_background_input_group.add_argument('-subject_genome',
                                              required=True,
                                              dest='subject_genome_filename',
                                              help='Subject species genome filename (fasta format).')
+estimate_background_input_group.add_argument('-liftover_chains',
+                                             type=str,
+                                             nargs='?',
+                                             required=True,
+                                             dest='liftover_chains_filename',
+                                             help='liftOver chains filename.')
 estimate_background_input_group.add_argument('-query_name_regex',
                                              type=str,
                                              nargs='?',
@@ -146,6 +152,11 @@ estimate_background_parameters_group.add_argument('-observations',
                                                   nargs='?',
                                                   default=1000,
                                                   help='number of scores to retain for each query gene (default: %(default)s).')
+estimate_background_parameters_group.add_argument('-min_ratio',
+                                                  type=float,
+                                                  nargs='?',
+                                                  default=0.05,
+                                                  help='minimal ratio of gene overlapping liftover chain to consider it for liftover (default: %(default)s).')
 estimate_background_output_group = estimate_background_parser.add_argument_group('Output')
 estimate_background_output_group.add_argument('-outdir',
                                               type=str,

@@ -1823,10 +1823,6 @@ class BaseGenomicRangesList(SortedKeyList):
                                      '.',
                                      str(grange.strand)]) + '\n')
 
-    @classmethod
-    def basic_annotation_parser(cls, fileobj, **kwargs):
-        raise NotImplementedError
-
 
 class GenomicRangesList(BaseGenomicRangesList):
     """Represents a list of `GenomicRange` instances.
@@ -2059,8 +2055,8 @@ class GenomicRangesList(BaseGenomicRangesList):
                                                           distance=distance,
                                                           strandness=strandness)) == 0]
         used_args = {'collection', }
-        kwargs = {attr: getattr(other, attr)
-                  for attr in set(other.init_args) - used_args}
+        kwargs = {attr: getattr(self, attr)
+                  for attr in set(self.init_args) - used_args}
         return other.__class__(survived_granges, **kwargs)
 
     def flank(self, distance=0, check_boundaries=True, chromsizes=None, verbose=False):

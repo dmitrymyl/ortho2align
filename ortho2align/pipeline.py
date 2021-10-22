@@ -276,11 +276,28 @@ def _estimate_bg_for_single_query_seqfile(query, seqfile, word_size, output_name
         raise ExceptionLogger(e, query)
 
 
+def _lift_granges(query_ranges, liftover_chains, min_ratio=0.05):
+    with TemporaryDirectory() as tempdirname:
+        temp_query_filename = os.path.join(tempdirname, 'granges.bed')
+        temp_result_filename = os.path.join(tempdirname, 'result.bed')
+        temp_unmapped_filename = os.path.join(tempdirname, 'unmapped.bed')
+        with open(temp_query_filename, 'w') as outfile:
+            query_ranges.to_bed6(outfile)
+        run(f"liftOver -minMatch={min_ratio} -multiple -noSerial {temp_query_filename} {liftover_chains} {temp_result_filename} {temp_unmapped_filename}",
+            shell=True,
+            stderr=DEVNULL)
+        with open(temp_result_filename, 'r') as infile:
+            lifted = parse_annotation(infile)
+    return lifted
+
+
 def estimate_background(query_genes_filename,
                         bg_ranges_filename,
                         query_genome_filename,
                         subject_genome_filename,
+                        liftover_chains_filename,
                         outdir,
+                        min_ratio=0.05,
                         cores=1,
                         word_size=6,
                         observations=1000,
@@ -312,6 +329,7 @@ def estimate_background(query_genes_filename,
             (default: None).
     """
     cmd_hints = ['reading annotations...',
+                 'refining background...',
                  'getting sample sequences...',
                  'aligning samples...',
                  'finished.']
@@ -332,6 +350,17 @@ def estimate_background(query_genes_filename,
         pbar.update()
 
         total_query_genes = len(query_genes)
+        lifted_query_ranges = _lift_granges(query_genes,
+                                            liftover_chains_filename,
+                                            min_ratio=min_ratio)
+        refined_bg_ranges = bg_ranges.eliminate_neighbours(lifted_query_ranges)
+        total_bg_ranges = len(bg_ranges)
+        total_refined_bg_ranges = len(refined_bg_ranges)
+        if total_refined_bg_ranges == 0:
+            raise ValueError("There are no background ranges that do not intersect any of the lifted query genes. "
+                             "Consider increasing the amount of background ranges.")
+
+        pbar.update()
 
         query_chromsizes = FastaSeqFile(query_genome_filename).chromsizes
         subject_chromsizes = FastaSeqFile(subject_genome_filename).chromsizes
@@ -342,10 +371,10 @@ def estimate_background(query_genes_filename,
             query_genes.get_fasta(outfileprefix='query_',
                                   outdir=tempdir,
                                   chromsizes=query_chromsizes)
-            bg_seqfile = bg_ranges.get_fasta(outfileprefix='bg_seqfile',
-                                             outdir=tempdir,
-                                             chromsizes=subject_chromsizes,
-                                             mode='bulk')
+            bg_seqfile = refined_bg_ranges.get_fasta(outfileprefix='bg_seqfile',
+                                                     outdir=tempdir,
+                                                     chromsizes=subject_chromsizes,
+                                                     mode='bulk')
 
             pbar.update()
 
@@ -375,6 +404,8 @@ def estimate_background(query_genes_filename,
         stats_msg = "-----------------------\n" \
                     f"estimate_background stats:\n" \
                     f"Recieved {total_query_genes} transcripts.\n" \
+                    f"Eliminated {total_bg_ranges - total_refined_bg_ranges} background ranges " \
+                    f"due to intersections with lifted transcripts.\n" \
                     f"Estimated background for {total_query_genes - total_exceptions} of them.\n" \
                     f"Caught {total_exceptions} exceptions.\n" \
                     f"Distribution of amount of found background HSPs:\n{slplot(results)}\n" \
@@ -443,17 +474,7 @@ def _lift(query_genes, query_genome_filename, subject_genome_filename, query_chr
     query_unalignable = list()
     query_prepared = list()
 
-    with TemporaryDirectory() as tempdirname:
-        temp_query_filename = os.path.join(tempdirname, 'granges.bed')
-        temp_result_filename = os.path.join(tempdirname, 'result.bed')
-        temp_unmapped_filename = os.path.join(tempdirname, 'unmapped.bed')
-        with open(temp_query_filename, 'w') as outfile:
-            query_genes.to_bed6(outfile)
-        run(f"liftOver -minMatch={min_ratio} -multiple -noSerial {temp_query_filename} {liftover_chains} {temp_result_filename} {temp_unmapped_filename}",
-            shell=True,
-            stderr=DEVNULL)
-        with open(temp_result_filename, 'r') as infile:
-            lifted = parse_annotation(infile)
+    lifted = _lift_granges(query_genes, liftover_chains, min_ratio=min_ratio)
 
     for query_gene in query_genes:
         if lifted.name_mapping.get(query_gene.name) is None:
@@ -1041,7 +1062,9 @@ def run_pipeline(query_genes,
                         bg_ranges_filename=bg_filename,
                         query_genome_filename=query_genome,
                         subject_genome_filename=subject_genome,
+                        liftover_chains_filename=liftover_chains,
                         outdir=bg_outdir,
+                        min_ratio=min_ratio,
                         cores=cores,
                         query_name_regex=query_name_regex,
                         word_size=word_size,
