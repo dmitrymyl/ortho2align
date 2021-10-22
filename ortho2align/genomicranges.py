@@ -1762,6 +1762,8 @@ class BaseGenomicRangesList(SortedKeyList):
 
     def shuffle_inside_chrom(self, seed=0):
         shuffled_granges = []
+        local_random = random.Random()
+        local_random.seed(seed)
         for grange in self:
             chromsize = self.sequence_file.chromsizes.get(grange.chrom)
             if chromsize is None:
@@ -1769,7 +1771,7 @@ class BaseGenomicRangesList(SortedKeyList):
             else:
                 end = chromsize.size - len(grange)
             try:
-                shuffled_start = random.randint(0, end)
+                shuffled_start = local_random.randint(0, end)
             except ValueError:
                 shuffled_start = 0
             shuffled_end = shuffled_start + len(grange)
@@ -1786,7 +1788,9 @@ class BaseGenomicRangesList(SortedKeyList):
     def sample_granges(self, n, seed=0):
         if n > len(self):
             raise ValueError(f'Value of n={n} is greater than number of genomic ranges: {len(self)}.')
-        sample = random.sample(self, n)
+        local_random = random.Random()
+        local_random.seed(seed)
+        sample = local_random.sample(self, n)
         used_args = {'collection', }
         kwargs = {attr: getattr(self, attr)
                   for attr in set(self.init_args) - used_args}

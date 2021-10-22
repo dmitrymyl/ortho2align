@@ -38,7 +38,7 @@ bg_from_inter_ranges_processing_group.add_argument('-sample_size',
 bg_from_inter_ranges_processing_group.add_argument('-seed',
                                                    type=int,
                                                    nargs='?',
-                                                   default=123,
+                                                   default=0,
                                                    help='random seed number for sampling intergenic regions (default: %(default)s).')
 bg_from_inter_ranges_output_group = bg_from_inter_ranges_parser.add_argument_group('Output')
 bg_from_inter_ranges_output_group.add_argument('-output',
@@ -82,7 +82,7 @@ bg_from_shuffled_ranges_processing_group.add_argument('-sample_size',
 bg_from_shuffled_ranges_processing_group.add_argument('-seed',
                                                       type=int,
                                                       nargs='?',
-                                                      default=123,
+                                                      default=0,
                                                       help='random seed number for sampling intergenic regions (default: %(default)s).')
 bg_from_shuffled_ranges_output_group = bg_from_shuffled_ranges_parser.add_argument_group('Output')
 bg_from_shuffled_ranges_output_group.add_argument('-output',
@@ -161,7 +161,7 @@ estimate_background_processing_group.add_argument('-cores',
 estimate_background_processing_group.add_argument('-seed',
                                                   type=int,
                                                   nargs='?',
-                                                  default=123,
+                                                  default=0,
                                                   help='random seed for sampling scores (default: %(default)s).')
 estimate_background_processing_group.add_argument('--silent',
                                                   action='store_true',

@@ -84,7 +84,8 @@ def bg_from_inter_ranges(genes_filename,
         seed (int): a random seed (default: 0).
         silent (bool): if True, will suppress a progress bar (default: False).
     """
-    random.seed(seed)
+    local_random = random.Random()
+    local_random.seed(seed)
 
     cmd_hints = ['parsing the annotation...',
                  'sampling intergenic regions...',
@@ -103,8 +104,8 @@ def bg_from_inter_ranges(genes_filename,
         if len(inter_genes) < sample_size:
             raise ValueError(f'The number of observations ({sample_size}) '
                              'must be less than the number of intergenic '
-                             f'regions ({len(inter_genes)}) derived from genes')
-        samples = BaseGenomicRangesList(random.sample(inter_genes, k=sample_size))
+                             f'regions ({len(inter_genes)}) derived from genes.')
+        samples = BaseGenomicRangesList(local_random.sample(inter_genes, k=sample_size))
 
         pbar.update()
 
@@ -226,8 +227,9 @@ def _estimate_bg_for_single_query_blast(query, bg_ranges, word_size, output_name
             scores += alignment_scores
         score_size = len(scores)
         if score_size > observations:
-            random.seed(seed)
-            scores = random.sample(scores, observations)
+            local_random = random.Random()
+            local_random.seed(seed)
+            scores = local_random.sample(scores, observations)
         with open(output_name, 'w') as outfile:
             json.dump(scores, outfile)
         return output_name, score_size
@@ -264,8 +266,9 @@ def _estimate_bg_for_single_query_seqfile(query, seqfile, word_size, output_name
         scores = [hsp.score for hsp in alignment.HSPs]
         score_size = len(scores)
         if score_size > observations:
-            random.seed(seed)
-            scores = random.sample(scores, observations)
+            local_random = random.Random()
+            local_random.seed(seed)
+            scores = local_random.sample(scores, observations)
         with open(output_name, 'w') as outfile:
             json.dump(scores, outfile)
         return score_size
