@@ -923,7 +923,8 @@ def annotate_orthologs(subject_orthologs,
                        subject_annotation,
                        output,
                        subject_name_regex=None,
-                       stats_filename=None):
+                       stats_filename=None,
+                       float_precision=8):
     """A annotate_orthologs step of the pipeline."""
     subject_orthologs_filename = subject_orthologs
     subject_annotation_filename = subject_annotation
@@ -945,20 +946,29 @@ def annotate_orthologs(subject_orthologs,
                                                   name_regex=subject_name_regex)
 
         subject_orthologs.get_neighbours(subject_annotation,
-                                         relation='ortholog')
+                                         relation='ortholog',
+                                         strandness=True)
 
-        name_map = {subject_ortholog.name: [grange.name
-                                            for grange in subject_ortholog.relations['ortholog']]
+        name_map = {subject_ortholog.name: {'annotation_names': [grange.name
+                                                                 for grange in subject_ortholog.relations['ortholog']],
+                                            'Query_length': [str(len(subject_ortholog))],
+                                            'Orthologs_lengths': [str(len(grange))
+                                                                  for grange in subject_ortholog.relations['ortholog']],
+                                            'JI': [f"{subject_ortholog.calc_JI(grange):.{float_precision}g}"
+                                                   for grange in subject_ortholog.relations['ortholog']],
+                                            'OC': [f"{subject_ortholog.calc_OC(grange):.{float_precision}g}"
+                                                   for grange in subject_ortholog.relations['ortholog']]}
                     for subject_ortholog in subject_orthologs}
         with open(output_filename, 'w') as outfile:
-            outfile.write('Query\tOrtholog\n')
+            outfile.write('Query\tOrthologs\tQuery_length\tOrthologs_lengths\tJI\tOC\n')
             dist_annot_amounts = list()
-            for ortholog_name, annotation_names in name_map.items():
-                if annotation_names:
-                    outfile.write(f"{ortholog_name}\t{','.join(annotation_names)}\n")
-                    dist_annot_amounts.append(len(annotation_names))
+            for ortholog_name, ortholog_stats in name_map.items():
+                if ortholog_stats['annotation_names']:
+                    stats_line = "\t".join(";".join(value) for value in ortholog_stats.values())
+                    outfile.write(f"{ortholog_name}\t{stats_line}\n")
+                    dist_annot_amounts.append(len(ortholog_stats["annotation_names"]))
                 else:
-                    outfile.write(f"{ortholog_name}\tNotAnnotated\n")
+                    outfile.write(f"{ortholog_name}\tNotAnnotated\t{ortholog_stats['Query_length'][0]}\t0\t0\t0\n")
                     dist_annot_amounts.append(0)
 
         stats_msg = "-----------------------\n" \
@@ -1003,7 +1013,8 @@ def run_pipeline(query_genes,
                  word_size=6,
                  seed=0,
                  silent=False,
-                 annotate=False):
+                 annotate=False,
+                 float_precision=8):
     """A method to run the whole pipeline."""
     start = time.time()
     if not os.path.exists(outdir):
@@ -1079,7 +1090,8 @@ def run_pipeline(query_genes,
                            subject_annotation=subject_annotation,
                            output=annotation_output,
                            subject_name_regex=subject_name_regex,
-                           stats_filename=stats_filename)
+                           stats_filename=stats_filename,
+                           float_precision=float_precision)
     end = time.time()
     elapsed_time = time.strftime("%H:%M:%S", time.gmtime(end - start))
     used_ram_mb = getrusage(RUSAGE_SELF).ru_maxrss / 1024 + getrusage(RUSAGE_CHILDREN).ru_maxrss / 1024

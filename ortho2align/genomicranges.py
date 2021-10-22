@@ -632,7 +632,7 @@ class BaseGenomicRange:
                               strand=".",
                               **kwargs)
 
-    def find_neighbours(self, other_list, distance=0):
+    def find_neighbours(self, other_list, distance=0, strandness=False):
         """Finds neighbours of self in other list at given distance.
 
         Args:
@@ -640,6 +640,10 @@ class BaseGenomicRange:
                 to find neighbours in.
             distance (int, float, default 0): distance at which two
                 genomic ranges are considered neighbours.
+            strandness (bool): if True, find neighbours only of the same
+                strand. Strand "." is considered as both "+" and "-",
+                i.e. a result would be the same either strandness is True
+                or False (default: False).
 
         Returns:
             ``type(other_list)``: genomic ranges list with all
@@ -666,6 +670,15 @@ class BaseGenomicRange:
             pass
         except IndexError:
             pass
+        if strandness:
+            if self.strand == '.':
+                neighbours = neighbours
+            elif self.strand in ('+', '-'):
+                neighbours = [grange
+                              for grange in neighbours
+                              if grange.strand == self.strand or grange.strand == '.']
+            else:
+                raise ValueError("The strand of the genomic range is none of ['+', '-', '.'].")
         used_args = {'collection', }
         kwargs = {attr: getattr(other_list, attr)
                   for attr in set(other_list.init_args) - used_args}
@@ -1987,7 +2000,7 @@ class GenomicRangesList(BaseGenomicRangesList):
         """
         self._name_mapping = defaultdict(list)
 
-    def get_neighbours(self, other, distance=0, relation='neighbours', verbose=False):
+    def get_neighbours(self, other, distance=0, strandness=False, relation='neighbours', verbose=False):
         """Finds all neighbours of genomic ranges in *self* and assigns them to *relations*.
 
         For every genomic range in *self* finds neighbours in *other*
@@ -2009,7 +2022,8 @@ class GenomicRangesList(BaseGenomicRangesList):
                            unit='grange',
                            disable=not verbose):
             grange.relations[relation] = grange.find_neighbours(other,
-                                                                distance=distance)
+                                                                distance=distance,
+                                                                strandness=strandness)
 
     def flank(self, distance=0, check_boundaries=True, chromsizes=None, verbose=False):
         """Flanks genomic ranges concerning chromosome boundaries.

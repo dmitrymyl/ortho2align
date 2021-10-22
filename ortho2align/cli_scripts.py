@@ -362,6 +362,11 @@ annotate_orthologs_output_group.add_argument('-output',
                                              nargs='?',
                                              required=True,
                                              help='output filename.')
+annotate_orthologs_output_group.add_argument('-float_precision',
+                                             type=int,
+                                             nargs='?',
+                                             default=8,
+                                             help='float precision for JI and OC values (default: %(default)s).')
 
 run_pipeline_parser = ortho2align_subparsers.add_parser('run_pipeline',
                                                         description='Run the whole pipeline.',
@@ -435,6 +440,11 @@ run_pipeline_processing_group.add_argument('--silent',
 run_pipeline_processing_group.add_argument('--annotate',
                                            action='store_true',
                                            help='If included, will annotate found orthologs with subject annotation (default: %(default)s).')
+run_pipeline_processing_group.add_argument('-float_precision',
+                                           type=int,
+                                           nargs='?',
+                                           default=8,
+                                           help='float precision for JI and OC values (default: %(default)s).')
 run_pipeline_estimate_background_group = run_pipeline_parser.add_argument_group('Estimating background')
 run_pipeline_estimate_background_group.add_argument('-sample_size',
                                                     type=int,
@@ -445,7 +455,7 @@ run_pipeline_estimate_background_group.add_argument('-observations',
                                                     type=int,
                                                     nargs='?',
                                                     default=1000,
-                                                    help='maximum number of background scores to retain for each query gene.')
+                                                    help='maximum number of background scores to retain for each query gene (default: %(default)s).')
 run_pipeline_get_alignments_group = run_pipeline_parser.add_argument_group('Getting alignments')
 run_pipeline_get_alignments_group.add_argument('-min_ratio',
                                                type=float,
