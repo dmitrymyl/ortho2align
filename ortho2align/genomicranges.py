@@ -2012,6 +2012,10 @@ class GenomicRangesList(BaseGenomicRangesList):
             other (BaseGenomicRangesList and children):
                 The other genomic ranges list to find neighbours in.
             distance (int, default 0): Distance to find neighbours at.
+            strandness (bool): if True, find neighbours only of the same
+                strand. Strand "." is considered as both "+" and "-",
+                i.e. a result would be the same either strandness is True
+                or False (default: False).
             relation (str, default 'neighbours'): Name of the relation
                 to assign neighbours in.
             verbose (bool, default False): Whether to report progress
@@ -2024,6 +2028,40 @@ class GenomicRangesList(BaseGenomicRangesList):
             grange.relations[relation] = grange.find_neighbours(other,
                                                                 distance=distance,
                                                                 strandness=strandness)
+
+    def eliminate_neighbours(self, other, distance=0, strandness=False, verbose=False):
+        """Eliminate granges from self that intersect any of the granges in other.
+
+        Returns only those genomic ranges from self that intersect none
+        genomic ranges from other at given distance.
+
+        Args:
+            other (BaseGenomicRangesList and children):
+                The other genomic ranges list to find neighbours in.
+            distance (int, default 0): Distance to find neighbours at.
+            strandness (bool): if True, find neighbours only of the same
+                strand. Strand "." is considered as both "+" and "-",
+                i.e. a result would be the same either strandness is True
+                or False (default: False).
+            verbose (bool, default False): Whether to report progress
+                via tqdm progress bar or not.
+
+        Returns:
+            BaseGenomicRangesList and children: new genomic ranges list
+                without granges from *self* intersecting any granges from *other*.
+        """
+        survived_granges = [grange
+                            for grange in tqdm(self,
+                                               desc='Eliminating neighbours',
+                                               unit='grange',
+                                               disable=not verbose)
+                            if len(grange.find_neighbours(other,
+                                                          distance=distance,
+                                                          strandness=strandness)) == 0]
+        used_args = {'collection', }
+        kwargs = {attr: getattr(other, attr)
+                  for attr in set(other.init_args) - used_args}
+        return other.__class__(survived_granges, **kwargs)
 
     def flank(self, distance=0, check_boundaries=True, chromsizes=None, verbose=False):
         """Flanks genomic ranges concerning chromosome boundaries.
