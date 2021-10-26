@@ -275,6 +275,16 @@ build_orthologs_parameters_group.add_argument('-threshold',
                                               nargs='?',
                                               default=0.05,
                                               help='p-value threshold to filter HSPs by score (default: %(default)s).')
+build_orthologs_parameters_group.add_argument('-gapopen',
+                                              type=int,
+                                              nargs='?',
+                                              default=5,
+                                              help='Gap opening penalty when stitching HSPs together (default: %(default)s).')
+build_orthologs_parameters_group.add_argument('-gapextend',
+                                              type=int,
+                                              nargs='?',
+                                              default=2,
+                                              help='Gap extending penalty when stitching HSPs together (default: %(default)s).')
 build_orthologs_parameters_group.add_argument('--fdr',
                                               action='store_true',
                                               help='use FDR correction for HSP scores (default: %(default)s).')
@@ -310,11 +320,21 @@ get_best_orthologs_input_group.add_argument('-query_orthologs',
                                             nargs='?',
                                             required=True,
                                             help='query orthologs bed12 file.')
+get_best_orthologs_input_group.add_argument('-query_total',
+                                            type=str,
+                                            nargs='?',
+                                            required=True,
+                                            help='query orthologs tsv file.')
 get_best_orthologs_input_group.add_argument('-subject_orthologs',
                                             type=str,
                                             nargs='?',
                                             required=True,
                                             help='subject orthologs bed12 file.')
+get_best_orthologs_input_group.add_argument('-subject_total',
+                                            type=str,
+                                            nargs='?',
+                                            required=True,
+                                            help='subject orthologs tsv file.')
 get_best_orthologs_parameters_group = get_best_orthologs_parser.add_argument_group('Parameters')
 get_best_orthologs_parameters_group.add_argument('-value',
                                                  type=str,
@@ -334,16 +354,21 @@ get_best_orthologs_output_group.add_argument('-outfile_query',
                                              nargs='?',
                                              required=True,
                                              help='output filename for query orthologs.')
+get_best_orthologs_output_group.add_argument('-outfile_query_total',
+                                             type=str,
+                                             nargs='?',
+                                             required=True,
+                                             help='output filename for query orthologs total information.')
 get_best_orthologs_output_group.add_argument('-outfile_subject',
                                              type=str,
                                              nargs='?',
                                              required=True,
                                              help='output filename for subject orthologs.')
-get_best_orthologs_output_group.add_argument('-outfile_map',
+get_best_orthologs_output_group.add_argument('-outfile_subject_total',
                                              type=str,
                                              nargs='?',
                                              required=True,
-                                             help='output json filename for mapping of query and subject ortholog names.')
+                                             help='output filename for subject orthologs total information.')
 
 annotate_orthologs_parser = ortho2align_subparsers.add_parser('annotate_orthologs',
                                                               help='Annotate found orthologs with provided annotation of subject genome lncRNAs.',
@@ -495,6 +520,16 @@ run_pipeline_build_orthologs_group.add_argument('-threshold',
                                                 nargs='?',
                                                 default=0.05,
                                                 help='p-value threshold to filter HSPs by score (default: %(default)s).')
+run_pipeline_build_orthologs_group.add_argument('-gapopen',
+                                                type=int,
+                                                nargs='?',
+                                                default=5,
+                                                help='Gap opening penalty when stitching HSPs together (default: %(default)s).')
+run_pipeline_build_orthologs_group.add_argument('-gapextend',
+                                                type=int,
+                                                nargs='?',
+                                                default=2,
+                                                help='Gap extending penalty when stitching HSPs together (default: %(default)s).')
 run_pipeline_build_orthologs_group.add_argument('--fdr',
                                                 action='store_true',
                                                 help='use FDR correction for HSP scores if included (default: %(default)s).')

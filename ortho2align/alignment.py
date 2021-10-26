@@ -1,6 +1,10 @@
 from .utils import numberize
 
 
+DEFAULT_GAPOPEN = 5
+DEFAULT_GAPEXTEND = 2
+
+
 def compare(a, b, side='g'):
     """Calculates boolean function of two values.
 
@@ -79,10 +83,10 @@ class HSP:
     """
     orientation_dict = {(True, True): 'direct',
                         (True, False): 'reverse'}
-    __slots__ = ('qstart', 'qend', 'sstart', 'send', 'score',
+    __slots__ = ('qstart', 'qend', 'sstart', 'send', 'score', 'pval',
                  'kwargs', 'qstrand', 'sstrand', 'orientation')
 
-    def __init__(self, qstart, qend, sstart, send, score, **kwargs):
+    def __init__(self, qstart, qend, sstart, send, score, pval=None, **kwargs):
         """Initializes HSP class.
 
         Args:
@@ -98,6 +102,7 @@ class HSP:
         self.sstart = sstart
         self.send = send
         self.score = score
+        self.pval = pval
         self.kwargs = kwargs
         self.qstrand = self.qend - self.qstart > 0
         self.sstrand = self.send - self.sstart > 0
@@ -112,13 +117,14 @@ class HSP:
                                  self.qend,
                                  self.sstart,
                                  self.send,
-                                 self.score)] + ["**" + kwargs_repr]
+                                 self.score,
+                                 self.pval)] + ["**" + kwargs_repr]
         return f"HSP({', '.join(params_list)})"
 
     def __str__(self):
         """String representation of HSP instance."""
         return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} " \
-               f"score {self.score} {self.orientation}"
+               f"score {self.score} pval {self.pval} {self.orientation}"
 
     def __eq__(self, other):
         """Equality magic method."""
@@ -161,7 +167,7 @@ class HSP:
             return True
         return False
 
-    def distance(self, other, gapopen=5, gapextend=2):
+    def distance(self, other, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Calculates distance between two HSPs.
 
         Distance between two HSPs of same orientation
@@ -221,6 +227,7 @@ class HSP:
                 'sstart': self.sstart,
                 'send': self.send,
                 'score': self.score,
+                'pval': self.pval,
                 'kwargs': self.kwargs}
 
     @classmethod
@@ -237,7 +244,7 @@ class HSP:
         Returns:
             HSP: HSP instance.
         """
-        keys = ['qstart', 'qend', 'sstart', 'send', 'score']
+        keys = ['qstart', 'qend', 'sstart', 'send', 'score', 'pval']
         return cls(*[dict_.get(key, None) for key in keys],
                    **dict_.get('kwargs', dict()))
 
@@ -254,6 +261,7 @@ class HSP:
                               self.sstart,
                               self.send,
                               self.score,
+                              self.pval,
                               **self.kwargs)
 
     @staticmethod
@@ -343,7 +351,7 @@ class HSPVertex(HSP):
     """
     __slots__ = ('next_vertices', 'total_score', 'best_prev')
 
-    def __init__(self, qstart, qend, sstart, send, score, **kwargs):
+    def __init__(self, qstart, qend, sstart, send, score, pval=None, **kwargs):
         """Inits HSPVertex class.
 
         Args:
@@ -354,7 +362,7 @@ class HSPVertex(HSP):
             score (int, float): alignment score of HSP.
             kwargs (dict): any other keyword arguments.
         """
-        super().__init__(qstart, qend, sstart, send, score, **kwargs)
+        super().__init__(qstart, qend, sstart, send, score, pval=pval, **kwargs)
         self.next_vertices = []
         self.total_score = float("Inf")
         self.best_prev = None
@@ -367,14 +375,15 @@ class HSPVertex(HSP):
                                  self.qend,
                                  self.sstart,
                                  self.send,
-                                 self.score)] + ["**" + kwargs_repr]
+                                 self.score,
+                                 self.pval)] + ["**" + kwargs_repr]
         return f"HSPVertex({', '.join(params_list)})"
 
     def __str__(self):
         """String epresentation of ``HSPVertex`` instance."""
         next_vertices_str = "\t" + "\n\t".join(" ".join(str(i).split(" ")[:-1]) for i in self.next_vertices)
         return f"q {self.qstart}:{self.qend} s {self.sstart}:{self.send} score " \
-               f"{self.score} {self.orientation}\n" + next_vertices_str
+               f"{self.score} pval {self.pval} {self.orientation}\n" + next_vertices_str
 
     def _relax(self, other, weight):
         """A relax method for dynamic programming.
@@ -476,7 +485,7 @@ class Alignment:
                              key=lambda hsp: hsp.send,
                              default=HSPVertex(0, 0, 0, 0, 0)).send + 1)
                      if slen is None else slen)
-        self.filtered = False if filtered_HSPs is None else True
+        self.filtered = filtered if filtered is not None else False if filtered_HSPs is None else True
 
     def __repr__(self):
         return f"Alignment({self.HSPs.__repr__()}, {self.qlen}, {self.slen})"
@@ -558,7 +567,7 @@ class Alignment:
                   for item in fields] + ['qchrom', 'schrom']
         hit_number = int(file_object.readline().split(" ")[1])
         HSPs = list()
-        for i in range(hit_number):
+        for _ in range(hit_number):
             hsp = file_object.readline().strip().split("\t")
             hsp = [numberize(item) for item in hsp]
             hsp = HSPVertex(**dict(zip(fields, hsp)))
@@ -863,7 +872,7 @@ class Alignment:
             oriented_groups[hsp.orientation].append(hsp)
         return oriented_groups
 
-    def _build_hsp_graph(self, vertices, orientation):
+    def _build_hsp_graph(self, vertices, orientation, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Builds graph from HSP list.
 
         Taken sorted list of HSPVertex instances
@@ -901,7 +910,9 @@ class Alignment:
             for j in range(i + 1, len(vertices)):
                 if vertices[i].precede(vertices[j]):
                     vertices[i].next_vertices.append([vertices[j],
-                                                      vertices[i].distance(vertices[j])])
+                                                      vertices[i].distance(vertices[j],
+                                                                           gapopen=gapopen,
+                                                                           gapextend=gapextend)])
         # Leave only those edges that connect each vertex
         # with its direct preceder(s).
         for vertex in vertices:
@@ -915,7 +926,7 @@ class Alignment:
 
         return vertices
 
-    def _find_all_chains(self, vertices, orientation):
+    def _find_all_chains(self, vertices, orientation, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """
         Build all possible alignment chains from given list
         of HSPs so that HSPs follow each other on both
@@ -931,7 +942,7 @@ class Alignment:
         """
         if len(vertices) == 0:
             return []
-        vertices = self._build_hsp_graph(vertices, orientation)
+        vertices = self._build_hsp_graph(vertices, orientation, gapopen=gapopen, gapextend=gapextend)
         stack = list()
         chains = list()
         stack.append([vertices[0]])
@@ -944,7 +955,7 @@ class Alignment:
                 chains.append(self.chain_class(stack.pop()[1:-1], self))
         return chains
 
-    def get_all_chains(self):
+    def get_all_chains(self, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Finds all possible alignment chains from HSPs.
 
         Finds all possible alignment chains consisting of
@@ -965,10 +976,10 @@ class Alignment:
             in direct and reverse orientation.
         """
         oriented_groups = self._split_orientations()
-        return {key: self._find_all_chains(group, key)
+        return {key: self._find_all_chains(group, key, gapopen=gapopen, gapextend=gapextend)
                 for key, group in oriented_groups.items()}
 
-    def _find_best_chain(self, vertices, orientation):
+    def _find_best_chain(self, vertices, orientation, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Finds best alignment chain in given HSP list.
 
         Utilizes dynamic programming algorithm of finding
@@ -989,7 +1000,7 @@ class Alignment:
         """
         if len(vertices) == 0:
             return self.chain_class([], self)
-        vertices = self._build_hsp_graph(vertices, orientation)
+        vertices = self._build_hsp_graph(vertices, orientation, gapopen=gapopen, gapextend=gapextend)
         for vertex in vertices:
             for neighbour, weight in vertex.next_vertices:
                 neighbour._relax(vertex, weight)
@@ -1001,7 +1012,7 @@ class Alignment:
             current_vertex = current_vertex.best_prev
         return self.chain_class(best_hsps[1:][::-1], self, -score)
 
-    def get_best_chains(self):
+    def get_best_chains(self, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Finds best alignment chains.
 
         Finds best alignment chains in direct
@@ -1015,10 +1026,10 @@ class Alignment:
                 and 'reverse' keys, respectively.
         """
         oriented_groups = self._split_orientations()
-        return {key: self._find_best_chain(group, key)
+        return {key: self._find_best_chain(group, key, gapopen=gapopen, gapextend=gapextend)
                 for key, group in oriented_groups.items()}
 
-    def best_chain(self):
+    def best_chain(self, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Finds the best alignment chain based on its score.
 
         First, finds best alignment chains in direct and
@@ -1028,7 +1039,7 @@ class Alignment:
         Returns:
             AlignmentChain: alignment chain of the biggest score.
         """
-        chains = self.get_best_chains()
+        chains = self.get_best_chains(gapopen=gapopen, gapextend=gapextend)
         if chains['direct'].score > chains['reverse'].score:
             return chains['direct']
         else:
@@ -1066,7 +1077,7 @@ class AlignmentChain:
         self._score = score
 
     @property
-    def score(self):
+    def score(self, gapopen=DEFAULT_GAPOPEN, gapextend=DEFAULT_GAPEXTEND):
         """Calculates alignment chain score.
 
         The alignment chain score is based on alignment
@@ -1080,7 +1091,7 @@ class AlignmentChain:
             if self.HSPs:
                 score = self.HSPs[0].score
                 for i in range(len(self.HSPs) - 1):
-                    score -= self.HSPs[i].distance(self.HSPs[i + 1])
+                    score -= self.HSPs[i].distance(self.HSPs[i + 1], gapopen=gapopen, gapextend=gapextend)
                 self._score = score
             else:
                 self._score = -float('inf')

@@ -1201,12 +1201,7 @@ class GenomicRangesAlignmentChain(AlignmentChain):
                                   self.alignment.qrange.strand)
             blockSizes = [abs(hsp.qend - hsp.qstart) for hsp in self.HSPs]
             blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
-            # if strand == "+":
-            #     blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
-            # else:
-            #     blockStarts = [hsp.qstart - chromStart for hsp in self.HSPs]
-            #     blockSizes.reverse()
-            #     blockStarts.reverse()
+            blockPvals = [hsp.pval for hsp in self.HSPs]
         elif side == 's':
             chrom = self.alignment.srange.chrom
             chromStart = min(min(self.HSPs, key=lambda i: i.sstart).sstart,
@@ -1217,20 +1212,22 @@ class GenomicRangesAlignmentChain(AlignmentChain):
             strand = nxor_strands(self.HSPs[0].sstrand,
                                   self.alignment.srange.strand)
             blockSizes = [abs(hsp.send - hsp.sstart) for hsp in self.HSPs]
+            blockPvals = [hsp.pval for hsp in self.HSPs]
             if strand == "+":
                 blockStarts = [hsp.sstart - chromStart for hsp in self.HSPs]
             else:
                 blockStarts = [hsp.send - chromStart for hsp in self.HSPs]
                 blockSizes.reverse()
                 blockStarts.reverse()
+                blockPvals.reverse()
         else:
             raise ValueError(f'side argument {side} is not one of ["q", "s"]')
-        score = self.score
+        score = sum([hsp.score for hsp in self.HSPs])
         thickStart = chromStart
         thickEnd = chromEnd
         itemRgb = '0'
         blockCount = len(self.HSPs)
-        side = [chrom,
+        side = (chrom,
                 chromStart,
                 chromEnd,
                 name,
@@ -1241,37 +1238,67 @@ class GenomicRangesAlignmentChain(AlignmentChain):
                 itemRgb,
                 blockCount,
                 blockSizes,
-                blockStarts]
+                blockStarts,
+                blockPvals)
         return side
 
-    def to_bed12(self, mode='list'):
+    def to_record(self, mode='tuple', joinchar=','):
         """
-        Turns alignemnt chain into BED12 representation of both
+        Turns alignemnt chain into record representation of both
         query side and subject side.
 
         Args:
-            mode (str): how to return representation. If 'list' then
-            list of lists, if 'str' then complete BED12 record.
+            mode (str): how to return representation. If 'tuple' then
+            tuple of tuple, if 'str' then complete BED12 record.
 
         Returns:
-            (list of two lists or two strs): BED12 representation.
+            (tuple of two tuples or two strs): BED12 representation.
         """
         if len(self.HSPs) == 0:
             raise ValueError('No HSPs were found in the AlignmentChain.')
         if self.alignment.relative:
             raise ValueError('Alignment coordinates are not translated to genomic coordinates. '
                              'Use GenomicRangesAlignmentChain.alignment.to_genomic().')
+        if not isinstance(joinchar, str):
+            raise ValueError('joinchar is not an instance of str.')
+        if len(joinchar) != 1:
+            raise ValueError('joinchar is not a character.')
         q_side = self._prepare_side(side='q')
         s_side = self._prepare_side(side='s')
-        if mode == 'list':
-            return [q_side, s_side]
+        if mode == 'tuple':
+            return (q_side, s_side)
         elif mode == 'str':
-            return ["\t".join([','.join(str(value) for value in item) if isinstance(item, list) else str(item)
-                               for item in q_side]),
-                    "\t".join([','.join(str(value) for value in item) if isinstance(item, list) else str(item)
-                               for item in s_side])]
+            return ("\t".join((joinchar.join(str(value) for value in item) if isinstance(item, list) else str(item)
+                               for item in q_side)),
+                    "\t".join((joinchar.join(str(value) for value in item) if isinstance(item, list) else str(item)
+                               for item in s_side)))
         else:
-            raise ValueError('mode not one of ["list", "str"].')
+            raise ValueError('mode not one of ["tuple", "str"].')
+
+    def to_bed12(self, mode='tuple'):
+        """
+        Turns alignemnt chain into BED12 representation of both
+        query side and subject side.
+
+        Args:
+            mode (str): how to return representation. If 'tuple' then
+            tuple of tuple, if 'str' then complete BED12 record.
+
+        Returns:
+            (tuple of two tuples or two strs): BED12 representation.
+        """
+        q_side, s_side = self.to_record(mode='tuple')
+        q_side = q_side[:12]
+        s_side = s_side[:12]
+        if mode == 'tuple':
+            return (q_side, s_side)
+        elif mode == 'str':
+            return ("\t".join((','.join(str(value) for value in item) if isinstance(item, list) else str(item)
+                               for item in q_side)),
+                    "\t".join((','.join(str(value) for value in item) if isinstance(item, list) else str(item)
+                               for item in s_side)))
+        else:
+            raise ValueError('mode not one of ["tuple", "str"].')
 
 
 ChromosomeLocation = namedtuple('ChromosomeLocation', 'size start')
@@ -1894,7 +1921,7 @@ class GenomicRangesList(BaseGenomicRangesList):
         max_rows = len(self) if MAX_ROWS is None else MAX_ROWS
         granges = ", ".join([repr(grange) for grange in self][:max_rows])
         appendix = ", ..." if max_rows < len(self) else ""
-        return f"GenomicRangesList({granges}{appendix}, {self.sequence_file_path})"
+        return f"GenomicRangesList([{granges}{appendix}], '{self.sequence_file_path}')"
 
     def __str__(self):
         """Returns tab-separated table of containing genomic ranges.
@@ -2057,7 +2084,7 @@ class GenomicRangesList(BaseGenomicRangesList):
         used_args = {'collection', }
         kwargs = {attr: getattr(self, attr)
                   for attr in set(self.init_args) - used_args}
-        return other.__class__(survived_granges, **kwargs)
+        return self.__class__(survived_granges, **kwargs)
 
     def flank(self, distance=0, check_boundaries=True, chromsizes=None, verbose=False):
         """Flanks genomic ranges concerning chromosome boundaries.
