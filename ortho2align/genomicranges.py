@@ -1210,7 +1210,7 @@ class GenomicRangesAlignmentChain(AlignmentChain):
                            max(self.HSPs, key=lambda i: i.send).send)
             name = self.alignment.srange.name
             strand = nxor_strands(self.HSPs[0].sstrand,
-                                  self.alignment.srange.strand)
+                                  self.alignment.qrange.strand)
             blockSizes = [abs(hsp.send - hsp.sstart) for hsp in self.HSPs]
             blockPvals = [hsp.pval for hsp in self.HSPs]
             if strand == "+":
@@ -1849,6 +1849,20 @@ class BaseGenomicRangesList(SortedKeyList):
                                      str(grange.name),
                                      '.',
                                      str(grange.strand)]) + '\n')
+
+    def drop_duplicates(self):
+        if len(self) <= 1:
+            return self
+        new_ranges = list()
+        new_ranges.append(self[0])
+        for grange in self[1:]:
+            if grange == new_ranges[-1]:
+                continue
+            new_ranges.append(grange)
+        used_args = {'collection', }
+        kwargs = {attr: getattr(self, attr)
+                  for attr in set(self.init_args) - used_args}
+        return self.__class__(new_ranges, **kwargs)
 
 
 class GenomicRangesList(BaseGenomicRangesList):

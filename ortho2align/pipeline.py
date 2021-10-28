@@ -884,13 +884,30 @@ def build_orthologs(alignments,
                                    for group in subject_orthologs
                                    for ortholog in group
                                    if ortholog]
-        query_dropped = BaseGenomicRangesList([item[0]
-                                               for item in dropped_ranges
-                                               if item])
-        subject_dropped = BaseGenomicRangesList([srange
-                                                 for item in dropped_ranges
-                                                 if item
-                                                 for srange in item[1]])
+        query_dropped = list()
+        subject_dropped = list()
+        for item in dropped_ranges:
+            if len(item) != 2:
+                continue
+            query_dropped_range, subject_dropped_ranges = item
+            query_dropped.append(query_dropped_range)
+            print(query_dropped_range.name)
+            for grange in subject_dropped_ranges:
+                print(grange)
+                subject_lifts = grange.find_neighbours(query_dropped_range.relations['lifted'])
+                print(subject_lifts)
+                subject_dropped.append(subject_lifts)
+        query_dropped = BaseGenomicRangesList(query_dropped)
+        subject_dropped = BaseGenomicRangesList(srange
+                                                for group in subject_dropped
+                                                for srange in group).drop_duplicates()
+        # query_dropped = BaseGenomicRangesList([item[0]
+        #                                        for item in dropped_ranges
+        #                                        if item])
+        # subject_dropped = BaseGenomicRangesList([srange
+        #                                          for item in dropped_ranges
+        #                                          if item
+        #                                          for srange in item[1]])
         total_dropped = len(query_dropped)
         query_exception_list = BaseGenomicRangesList(query_exception_ranges)
 
