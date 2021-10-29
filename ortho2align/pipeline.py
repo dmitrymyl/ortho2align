@@ -884,6 +884,7 @@ def build_orthologs(alignments,
                                    for group in subject_orthologs
                                    for ortholog in group
                                    if ortholog]
+
         query_dropped = list()
         subject_dropped = list()
         for item in dropped_ranges:
@@ -891,34 +892,25 @@ def build_orthologs(alignments,
                 continue
             query_dropped_range, subject_dropped_ranges = item
             query_dropped.append(query_dropped_range)
-            print(query_dropped_range.name)
             for grange in subject_dropped_ranges:
-                print(grange)
                 subject_lifts = grange.find_neighbours(query_dropped_range.relations['lifted'])
-                print(subject_lifts)
                 subject_dropped.append(subject_lifts)
         query_dropped = BaseGenomicRangesList(query_dropped)
         subject_dropped = BaseGenomicRangesList(srange
                                                 for group in subject_dropped
                                                 for srange in group).drop_duplicates()
-        # query_dropped = BaseGenomicRangesList([item[0]
-        #                                        for item in dropped_ranges
-        #                                        if item])
-        # subject_dropped = BaseGenomicRangesList([srange
-        #                                          for item in dropped_ranges
-        #                                          if item
-        #                                          for srange in item[1]])
+
         total_dropped = len(query_dropped)
         query_exception_list = BaseGenomicRangesList(query_exception_ranges)
 
         if not os.path.exists(outdir):
             os.mkdir(outdir)
-        query_output_bed12_filename = os.path.join(outdir, 'query_orthologs.bed')
-        subject_output_bed12_filename = os.path.join(outdir, 'subject_orthologs.bed')
-        query_output_total_filename = os.path.join(outdir, 'query_orthologs.tsv')
-        subject_output_total_filename = os.path.join(outdir, 'subject_orthologs.tsv')
-        query_dropped_filename = os.path.join(outdir, 'query_dropped.bed')
-        subject_dropped_filename = os.path.join(outdir, 'subject_dropped.bed')
+        query_output_bed12_filename = os.path.join(outdir, 'significant.query_orthologs.bed')
+        subject_output_bed12_filename = os.path.join(outdir, 'significant.subject_orthologs.bed')
+        query_output_total_filename = os.path.join(outdir, 'significant.query_orthologs.tsv')
+        subject_output_total_filename = os.path.join(outdir, 'significant.subject_orthologs.tsv')
+        query_dropped_filename = os.path.join(outdir, 'insignificant.query_orthologs.bed')
+        subject_dropped_filename = os.path.join(outdir, 'insignificant.subject_orthologs.bed')
         query_exceptions_filename = os.path.join(outdir, 'query_exceptions.bed')
 
         with open(query_output_bed12_filename, 'w') as outfile:
@@ -1079,7 +1071,7 @@ def annotate_orthologs(subject_orthologs,
 
         stats_msg = "-----------------------\n" \
                     f"annotate_orthologs stats:\n" \
-                    f"Recieved {len(subject_orthologs)} orthologs.\n" \
+                    f"Recieved {len(subject_orthologs)} orthologs from {subject_orthologs_filename}.\n" \
                     f"Distribution of amount of annotations:\n{simple_hist(dist_annot_amounts)}\n" \
                     f"Reported all annotations for each ortholog.\n" \
                     "-----------------------"
@@ -1131,15 +1123,23 @@ def run_pipeline(query_genes,
     bg_outdir = os.path.join(outdir, 'bg_files')
     align_outdir = os.path.join(outdir, 'align_files')
     build_outdir = os.path.join(outdir, 'build_files')
-    query_orthologs = os.path.join(build_outdir, 'query_orthologs.bed')
-    query_total_orthologs = os.path.join(build_outdir, 'query_orthologs.tsv')
-    subject_orthologs = os.path.join(build_outdir, 'subject_orthologs.bed')
-    subject_total_orthologs = os.path.join(build_outdir, 'subject_orthologs.tsv')
-    best_query_orthologs = os.path.join(outdir, 'best.query_orthologs.bed')
-    best_query_total_orthologs = os.path.join(outdir, 'best.query_orthologs.tsv')
-    best_subject_orthologs = os.path.join(outdir, 'best.subject_orthologs.bed')
-    best_subject_total_orthologs = os.path.join(outdir, 'best.subject_orthologs.tsv')
-    annotation_output = os.path.join(outdir, 'best.ortholog_annotation.tsv')
+    annotation_outdir = os.path.join(outdir, 'annotation_files')
+    if not os.path.exists(annotation_outdir):
+        os.mkdir(annotation_outdir)
+    subject_unaligned_orthologs = os.path.join(align_outdir, 'subject_unaligned.bed')
+    query_orthologs = os.path.join(build_outdir, 'significant.query_orthologs.bed')
+    query_total_orthologs = os.path.join(build_outdir, 'significant.query_orthologs.tsv')
+    subject_orthologs = os.path.join(build_outdir, 'significant.subject_orthologs.bed')
+    subject_total_orthologs = os.path.join(build_outdir, 'significant.subject_orthologs.tsv')
+    subject_insignificant_orthologs = os.path.join(build_outdir, 'insignificant.subject_orthologs.bed')
+    best_query_orthologs = os.path.join(outdir, 'bestSignificant.query_orthologs.bed')
+    best_query_total_orthologs = os.path.join(outdir, 'bestSignificant.query_orthologs.tsv')
+    best_subject_orthologs = os.path.join(outdir, 'bestSignificant.subject_orthologs.bed')
+    best_subject_total_orthologs = os.path.join(outdir, 'bestSignificant.subject_orthologs.tsv')
+    unaligned_annotation_output = os.path.join(annotation_outdir, 'unaligned.annotation.tsv')
+    insignificant_annotation_output = os.path.join(annotation_outdir, 'insignificant.annotation.tsv')
+    significant_annotation_output = os.path.join(annotation_outdir, 'significant.annotation.tsv')
+    best_annotation_output = os.path.join(annotation_outdir, 'bestSignificant.annotation.tsv')
     stats_filename = os.path.join(outdir, 'stats.txt')
 
     bg_from_shuffled_ranges(genes_filename=subject_annotation,
@@ -1204,9 +1204,27 @@ def run_pipeline(query_genes,
                        outfile_subject=best_subject_orthologs,
                        outfile_subject_total=best_subject_total_orthologs)
     if annotate:
+        annotate_orthologs(subject_orthologs=subject_unaligned_orthologs,
+                           subject_annotation=subject_annotation,
+                           output=unaligned_annotation_output,
+                           subject_name_regex=subject_name_regex,
+                           stats_filename=stats_filename,
+                           float_precision=float_precision)
+        annotate_orthologs(subject_orthologs=subject_insignificant_orthologs,
+                           subject_annotation=subject_annotation,
+                           output=insignificant_annotation_output,
+                           subject_name_regex=subject_name_regex,
+                           stats_filename=stats_filename,
+                           float_precision=float_precision)
+        annotate_orthologs(subject_orthologs=subject_orthologs,
+                           subject_annotation=subject_annotation,
+                           output=significant_annotation_output,
+                           subject_name_regex=subject_name_regex,
+                           stats_filename=stats_filename,
+                           float_precision=float_precision)
         annotate_orthologs(subject_orthologs=best_subject_orthologs,
                            subject_annotation=subject_annotation,
-                           output=annotation_output,
+                           output=best_annotation_output,
                            subject_name_regex=subject_name_regex,
                            stats_filename=stats_filename,
                            float_precision=float_precision)
