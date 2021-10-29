@@ -2,7 +2,7 @@ from setuptools import setup
 
 
 setup(name='ortho2align',
-      version='1.0.3',
+      version='1.0.4',
       description='A lncRNA ortholog discovery tool based on syntenic regions and statistical assessment of alignment nonrandomness.',
       url='http://github.com/dmitrymyl/ortho2align',
       author='Dmitry Mylarshchikov',
