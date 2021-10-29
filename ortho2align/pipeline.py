@@ -2,6 +2,7 @@ import json
 import os
 import random
 import time
+from collections import defaultdict
 from functools import partial
 from pathlib import Path
 from resource import getrusage, RUSAGE_SELF, RUSAGE_CHILDREN
@@ -774,7 +775,7 @@ def _build(query_gene_alignments_filename, query_bg_filename, fitter, fdr, pval_
             alignment.srange.name = alignment.qrange.name
             result = alignment.best_chain(gapopen=gapopen, gapextend=gapextend)
             try:
-                total_record = result.to_record(mode='str', joinchar=';')
+                total_record = result.to_record(mode='str')
                 bed12_record = result.to_bed12(mode='str')
                 query_orthologs.append((total_record[0], bed12_record[0]))
                 subject_orthologs.append((total_record[1], bed12_record[1]))
@@ -1047,27 +1048,30 @@ def annotate_orthologs(subject_orthologs,
                                          relation='ortholog',
                                          strandness=True)
 
-        name_map = {subject_ortholog.name: {'annotation_names': [grange.name
-                                                                 for grange in subject_ortholog.relations['ortholog']],
-                                            'Query_length': [str(len(subject_ortholog))],
-                                            'Orthologs_lengths': [str(len(grange))
-                                                                  for grange in subject_ortholog.relations['ortholog']],
-                                            'JI': [f"{subject_ortholog.calc_JI(grange):.{float_precision}g}"
+        name_map = defaultdict(list)
+        for subject_ortholog in subject_orthologs:
+            ortholog_stat = {'annotation_names': [grange.name
+                                                  for grange in subject_ortholog.relations['ortholog']],
+                             'Query_length': [str(len(subject_ortholog))],
+                             'Orthologs_lengths': [str(len(grange))
                                                    for grange in subject_ortholog.relations['ortholog']],
-                                            'OC': [f"{subject_ortholog.calc_OC(grange):.{float_precision}g}"
-                                                   for grange in subject_ortholog.relations['ortholog']]}
-                    for subject_ortholog in subject_orthologs}
+                             'JI': [f"{subject_ortholog.calc_JI(grange):.{float_precision}g}"
+                                    for grange in subject_ortholog.relations['ortholog']],
+                             'OC': [f"{subject_ortholog.calc_OC(grange):.{float_precision}g}"
+                                    for grange in subject_ortholog.relations['ortholog']]}
+            name_map[subject_ortholog.name].append(ortholog_stat)
         with open(output_filename, 'w') as outfile:
             outfile.write('Query\tOrthologs\tQuery_length\tOrthologs_lengths\tJI\tOC\n')
             dist_annot_amounts = list()
             for ortholog_name, ortholog_stats in name_map.items():
-                if ortholog_stats['annotation_names']:
-                    stats_line = "\t".join(";".join(value) for value in ortholog_stats.values())
-                    outfile.write(f"{ortholog_name}\t{stats_line}\n")
-                    dist_annot_amounts.append(len(ortholog_stats["annotation_names"]))
-                else:
-                    outfile.write(f"{ortholog_name}\tNotAnnotated\t{ortholog_stats['Query_length'][0]}\t0\t0\t0\n")
-                    dist_annot_amounts.append(0)
+                for ortholog_stat in ortholog_stats:
+                    if ortholog_stat['annotation_names']:
+                        stats_line = "\t".join(",".join(value) for value in ortholog_stat.values())
+                        outfile.write(f"{ortholog_name}\t{stats_line}\n")
+                        dist_annot_amounts.append(len(ortholog_stat["annotation_names"]))
+                    else:
+                        outfile.write(f"{ortholog_name}\tNotAnnotated\t{ortholog_stat['Query_length'][0]}\t0\t0\t0\n")
+                        dist_annot_amounts.append(0)
 
         stats_msg = "-----------------------\n" \
                     f"annotate_orthologs stats:\n" \
