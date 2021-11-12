@@ -17,7 +17,7 @@ Next, syntenic regions are constructed from those lifted coordinates. Duplicatio
 Finally, lncRNAs (with flanking regions) are aligned to their syntenic regions with BLASTN with loose parameters (word_size is set to 6 by default) which results in a set of HSPs for every syntenic region for every lncRNA. 
 
 ### 2. Estimating background.
-To remove spurious HSPs a background distribution of raw HSP scores is constructed for every lncRNA by aligning its sequence to shuffled genomic ranges from the annotation of the subject genome. 
+To remove spurious HSPs a background distribution of raw HSP scores is constructed for every lncRNA by aligning its sequence to shuffled genomic ranges from the annotation of the subject genome. In case a genomic ranges intersects one or many lifted lncRNAs, it is removed from the background set for every lncRNA.
 
 ### 3. Filtering HSPs and building orthologs.
 Every HSP is assigned with a p-value based on a right-sided test that HSP’s score is so large only for random reasons. P-values are adjusted with FDR Benjamini-Hochberg procedure. Only those HSPs with a q-value less than a specified α value are retained to control the false discovery rate at α% (5% by default). Then retained HSPs are linked via dynamic programming to form alignment chains, one per every syntenic region of every lncRNA. Those chains are deemed as candidate orthologs.
@@ -131,11 +131,12 @@ usage: ortho2align run_pipeline [-h] -query_genes [str] -query_genome [str]
                                 [-subject_name_regex [str]] -liftover_chains
                                 [str] -outdir [str] [-cores [int]]
                                 [-word_size [int]] [-seed [int]] [--silent]
-                                [--annotate] [-sample_size [int]]
-                                [-observations [int]] [-min_ratio [float]]
-                                [-merge_dist [int]] [-flank_dist [int]]
-                                [-fitting [{kde,hist}]] [-threshold [float]]
-                                [--fdr] [-timeout [int]]
+                                [--annotate] [-float_precision [int]]
+                                [-sample_size [int]] [-observations [int]]
+                                [-min_ratio [float]] [-merge_dist [int]]
+                                [-flank_dist [int]] [-fitting [{kde,hist}]]
+                                [-threshold [float]] [-gapopen [int]]
+                                [-gapextend [int]] [--fdr] [-timeout [int]]
                                 [-value [{total_length,block_count,block_length,weight}]]
                                 [-function [{max,min}]]
 
@@ -175,12 +176,14 @@ Processing:
   --silent              silent CLI if included (default: False).
   --annotate            If included, will annotate found orthologs with
                         subject annotation (default: False).
+  -float_precision [int]
+                        float precision for JI and OC values (default: 8).
 
 Estimating background:
   -sample_size [int]    Number of background regions to generate (default:
                         200).
   -observations [int]   maximum number of background scores to retain for each
-                        query gene.
+                        query gene (default: 1000).
 
 Getting alignments:
   -min_ratio [float]    minimal ratio of gene overlapping liftover chain to
@@ -196,6 +199,10 @@ Building orthologs:
                         hist: Histogram) (default: kde).
   -threshold [float]    p-value threshold to filter HSPs by score (default:
                         0.05).
+  -gapopen [int]        Gap opening penalty when stitching HSPs together
+                        (default: 5).
+  -gapextend [int]      Gap extending penalty when stitching HSPs together
+                        (default: 2).
   --fdr                 use FDR correction for HSP scores if included
                         (default: False).
   -timeout [int]        Time in seconds to terminate a single process of
@@ -219,39 +226,59 @@ Getting best orthologs:
 5. Subject species gene annotation in ```bed/gtf/gff``` formats.
 
 ```ortho2align``` produces a directory with intermediate and output files. The main outputs are:
-1. ```best.query_orthologs.bed```: coordinates of alignment blocks of lncRNAs in query species with found orthologs in subject species in ```bed12``` format.
-2. ```best.subject_orthologs.bed```: coordinates of alignment blocks of found orthologs in subject species in ```bed12``` format.
-3. ```stats.txt```: plain text file with statistics describing every pipeline step.
-4. ```best.ortholog_annotation.tsv``` (optional): plain table with a header and two columns that matches query lncRNAs names with subject species gene names that overlap lncRNAs orthologs.
+1. ```bestSignificant.query_orthologs.bed```: coordinates of alignment blocks of lncRNAs in query species with found orthologs in subject species in ```bed12``` format. ```score``` field contains sum of HSPs raw scores.
+2. ```bestSignificant.subject_orthologs.bed```: coordinates of alignment blocks of found orthologs in subject species in ```bed12``` format. ```score``` field contains sum of HSPs raw scores.
+3. ```bestSignificant.query_orthologs.tsv```: ```bed12 + 1``` file, first 12 columns are the same as in ```bestSignificant.query_orthologs.bed```, column 13 contains q-values of the respective HSPs.
+4. ```bestSignificant.subject_orthologs.tsv```: ```bed12 + 1``` file, first 12 columns are the same as in ```bestSignificant.subject_orthologs.bed```, column 13 contains q-values of the respective HSPs.
+5. ```stats.txt```: plain text file with statistics describing every pipeline step.
+6. ```annotation_files/bestSignificant.annotation.tsv``` (optional): plain table with a header that matches query lncRNAs names with subject species gene names that overlap lncRNAs orthologs. Contains six columns:
+    1. ```Query``` (query lncRNA name);
+    2. ```Orthologs``` (overlapping genes names, if any; ```NotAnnotated``` otherwise);
+    3. ```Query_length```;
+    4. ```Orthologs_lengths``` (comma-separated, if any; ```0``` otherwise);
+    5. ```JI``` (overlap coefficient between the found ortholog and every found overlapping gene, comma-separated, if any; ```0``` otherwise);
+    6. ```OC``` (overlap coefficient between the found ortholog and every found overlapping gene, comma-separated, if any; ```0``` otherwise).
+
+    ```annotation_files/``` also contains annotations for all significant, insignificant and unaligned "orthologs".
 
 A principal structure of the output directory is shown below:
 ```
 outdir/
-├─ best.ortholog_annotation.tsv
-├─ best.query_orthologs.bed
-├─ best.subject_orthologs.bed
-├─ shuffle_bg.bed
-├─ stats.txt
-├─ the_map.json
-├─ align_files/
-│  ├─ exceptions.bed
-│  ├─ unalignable.bed
-│  ├─ rna1.json
-│  ├─ rna2.json
-│  ├─ ...
-├─ bg_files/
-│  ├─ exceptions.bed
-│  ├─ rna1.json
-│  ├─ rna2.json
-│  ├─ ...
-├─ build_files/
-   ├─ subject_exceptions.bed
-   ├─ query_exceptions.bed
-   ├─ subject_orthologs.bed
-   ├─ query_orthologs.bed
+├── bestSignificant.query_orthologs.bed
+├── bestSignificant.query_orthologs.tsv
+├── bestSignificant.subject_orthologs.bed
+├── bestSignificant.subject_orthologs.tsv
+├── shuffle_bg.bed
+├── stats.txt
+├── annotation_files/
+│   ├── bestSignificant.annotation.tsv
+│   ├── significant.annotation.tsv
+│   ├── insignificant.annotation.tsv
+│   └── unaligned.annotation.tsv
+├── align_files/
+│   ├── query_exceptions.bed
+│   ├── query_unlifted.bed
+│   ├── query_unaligned.bed
+│   ├── subject_unaligned.bed
+│   ├── rna1.json
+│   ├── rna2.json
+│   └── ...
+├── bg_files/
+│   ├── exceptions.bed
+│   ├── rna1.json
+│   ├── rna2.json
+│   └── ...
+└── build_files/
+    ├── significant.query_orthologs.bed
+    ├── significant.subject_orthologs.bed
+    ├── significant.query_orthologs.tsv
+    ├── significant.subject_orthologs.tsv
+    ├── insignificant.query_orthologs.bed
+    ├── insignificant.subject_orthologs.bed   
+    └── query_exceptions.bed
 ```
 ## Run every step separately
-Alternatively you can run each step separately in case you want to try different parameter values for each step. The pipeline above is combined from these step as shown in the scheme below:
+Alternatively you can run each step separately in case you want to try different parameter values for each step. The pipeline above is combined from these steps as shown in the scheme below:
 ![ortho2align pipeline scheme](./ortho2align_pipeline_scheme.png)
 
 ### Constructing background ranges
@@ -277,7 +304,7 @@ Input:
 Processing:
   -sample_size [int]  Number of background regions to generate.
   -seed [int]         random seed number for sampling intergenic regions
-                      (default: 123).
+                      (default: 0).
 
 Output:
   -output [str]       Output filename for background regions annotation in
@@ -288,11 +315,12 @@ Estimation of the background distribution of HSP scores for every lncRNA is done
 ```{bash}
 usage: ortho2align estimate_background [-h] -query_genes [str] -bg_ranges
                                        [str] -query_genome [str]
-                                       -subject_genome [str]
-                                       [-query_name_regex [str]]
+                                       -subject_genome [str] -liftover_chains
+                                       [str] [-query_name_regex [str]]
                                        [-bg_name_regex [str]]
                                        [-word_size [int]]
-                                       [-observations [int]] -outdir [str]
+                                       [-observations [int]]
+                                       [-min_ratio [float]] -outdir [str]
                                        [-cores [int]] [-seed [int]] [--silent]
 
 Estimate background alignment scores.
@@ -306,6 +334,8 @@ Input:
   -query_genome [str]   Query species genome filename (fasta format).
   -subject_genome [str]
                         Subject species genome filename (fasta format).
+  -liftover_chains [str]
+                        liftOver chains filename.
   -query_name_regex [str]
                         Regular expression for extracting gene names from the
                         query genes annotation (.gff and .gtf only). Must
@@ -319,6 +349,8 @@ Parameters:
                         6).
   -observations [int]   number of scores to retain for each query gene
                         (default: 1000).
+  -min_ratio [float]    minimal ratio of gene overlapping liftover chain to
+                        consider it for liftover (default: 0.05).
 
 Output:
   -outdir [str]         Output directory name for background files.
@@ -326,7 +358,7 @@ Output:
 Processing:
   -cores [int]          Number of cores to use for alignment multiprocessing
                         (default: 1).
-  -seed [int]           random seed for sampling scores (default: 123).
+  -seed [int]           random seed for sampling scores (default: 0).
   --silent              silent CLI if included (default: False).
 ```
 ### Getting alignments
@@ -380,7 +412,8 @@ Filtering of HSPs and construction of orthologs is done with ```ortho2align buil
 ```{bash}
 usage: ortho2align build_orthologs [-h] -alignments [str] -background [str]
                                    [-fitting [{kde,hist}]]
-                                   [-threshold [float]] [--fdr] -outdir [str]
+                                   [-threshold [float]] [-gapopen [int]]
+                                   [-gapextend [int]] [--fdr] -outdir [str]
                                    [-cores [int]] [-timeout [int]] [--silent]
 
 Asses orthologous alignments based on chosen statistical strategy and build
@@ -401,6 +434,10 @@ Parameters:
                         hist: Histogram) (default: kde).
   -threshold [float]    p-value threshold to filter HSPs by score (default:
                         0.05).
+  -gapopen [int]        Gap opening penalty when stitching HSPs together
+                        (default: 5).
+  -gapextend [int]      Gap extending penalty when stitching HSPs together
+                        (default: 2).
   --fdr                 use FDR correction for HSP scores (default: False).
 
 Output:
@@ -415,14 +452,16 @@ Processing:
   --silent              silent CLI if included (default: False).
 ```
 ### Getting best orthologs
-The best orthologs are selected with ```orhto2align get_best_orthologs```.
+The best orthologs are selected with ```ortho2align get_best_orthologs```.
 ```{bash}
-usage: ortho2align get_best_orthologs [-h] -query_orthologs [str]
-                                      -subject_orthologs [str]
+usage: ortho2align get_best_orthologs [-h] -query_orthologs [str] -query_total
+                                      [str] -subject_orthologs [str]
+                                      -subject_total [str]
                                       [-value [{total_length,block_count,block_length,weight}]]
                                       [-function [{max,min}]] -outfile_query
-                                      [str] -outfile_subject [str]
-                                      -outfile_map [str]
+                                      [str] -outfile_query_total [str]
+                                      -outfile_subject [str]
+                                      -outfile_subject_total [str]
 
 Select only one ortholog for each query gene based on provided variety of
 strategies.
@@ -433,8 +472,10 @@ optional arguments:
 Input:
   -query_orthologs [str]
                         query orthologs bed12 file.
+  -query_total [str]    query orthologs tsv file.
   -subject_orthologs [str]
                         subject orthologs bed12 file.
+  -subject_total [str]  subject orthologs tsv file.
 
 Parameters:
   -value [{total_length,block_count,block_length,weight}]
@@ -446,10 +487,13 @@ Parameters:
 
 Output:
   -outfile_query [str]  output filename for query orthologs.
+  -outfile_query_total [str]
+                        output filename for query orthologs total information.
   -outfile_subject [str]
                         output filename for subject orthologs.
-  -outfile_map [str]    output json filename for mapping of query and subject
-                        ortholog names.
+  -outfile_subject_total [str]
+                        output filename for subject orthologs total
+                        information.
 ```
 ### Annotating orthologs (optional)
 Ortholog annotation is done with ```ortho2align annotate_orthologs```.
@@ -457,7 +501,7 @@ Ortholog annotation is done with ```ortho2align annotate_orthologs```.
 usage: ortho2align annotate_orthologs [-h] -subject_orthologs [str]
                                       -subject_annotation [str]
                                       [-subject_name_regex [str]] -output
-                                      [str]
+                                      [str] [-float_precision [int]]
 
 Annotate found orthologs with provided annotation of subject genome lncRNAs.
 
@@ -477,13 +521,15 @@ Input:
 
 Output:
   -output [str]         output filename.
+  -float_precision [int]
+                        float precision for JI and OC values (default: 8).
 ```
 ## ```config``` files for CLI arguments
 Instead of entering each CLI argument for every subcommand, a ```.config``` file with CLI arguments can be supplied via ```ortho2align @subcommand.config```. The first line of the file is the name of the subcommand, next lines contain argument names and their values one by one. Check [configs/](./configs) directory for sample ```.config``` files.
 # Testing
-You can test the installed package, whether it works or not. After the package is installed (and the environment activated, if needed), run the commands below:
+You can test the installed package, whether it works or not. After the package is installed (and the environment activated, if needed), run commands below:
 ```{bash}
-wget https://github.com/dmitrymyl/ortho2align/releases/download/v1.0.0-rc1/test.tar.gz
+wget https://github.com/dmitrymyl/ortho2align/releases/download/v1.0.4/test.tar.gz
 tar -xzvf test.tar.gz
 cd test
 bash test.sh
