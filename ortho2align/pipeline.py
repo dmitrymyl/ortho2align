@@ -1034,7 +1034,7 @@ def annotate_orthologs(subject_orthologs,
             subject_orthologs = parse_annotation(infile)
     except ParserException:
         with open(output_filename, 'w') as outfile:
-            outfile.write('Query\tOrtholog\n')
+            outfile.write('Query\tOrthologs\n')
         stats_msg = "-----------------------\n" \
                     f"annotate_orthologs stats:\n" \
                     f"Recieved {len(subject_orthologs)} orthologs."\
