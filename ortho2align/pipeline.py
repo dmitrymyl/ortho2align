@@ -17,7 +17,7 @@ from .genomicranges import (BaseGenomicRangesList, FastaSeqFile,
                             SequencePath)
 from .parallel import (ExceptionLogger, NonExceptionalProcessPool,
                        TimeoutProcessPool)
-from .parsing import ParserException, parse_annotation
+from .parsing import EmptyAnnotation, ParserException, parse_annotation
 from .utils import simple_hist, slplot
 
 
@@ -287,7 +287,10 @@ def _lift_granges(query_ranges, liftover_chains, min_ratio=0.05):
             shell=True,
             stderr=DEVNULL)
         with open(temp_result_filename, 'r') as infile:
-            lifted = parse_annotation(infile)
+            try:
+                lifted = parse_annotation(infile)
+            except EmptyAnnotation:
+                lifted = GenomicRangesList([], None)
     return lifted
 
 
@@ -669,7 +672,10 @@ def get_alignments(query_genes,
                 pbar.write(str(exception))
                 query_exception_ranges.append(exception.variable)
 
-        alignment_counts = tuple(zip(*results))[0]
+        try:
+            alignment_counts = tuple(zip(*results))[0]
+        except IndexError:  # If there are no lifted genes, than results is an empty collection
+            alignment_counts = tuple([0] * total_unliftable_genes)
         unaligned_range_names = tuple(item[1] for item in results if item[0] == 0)
         query_unaligned_ranges = BaseGenomicRangesList([grange
                                                         for grange in query_prepared_genes
@@ -1035,9 +1041,10 @@ def annotate_orthologs(subject_orthologs,
     except ParserException:
         with open(output_filename, 'w') as outfile:
             outfile.write('Query\tOrthologs\n')
+
         stats_msg = "-----------------------\n" \
-                    f"annotate_orthologs stats:\n" \
-                    f"Recieved {len(subject_orthologs)} orthologs."\
+                    "annotate_orthologs stats:\n" \
+                    f"Recieved 0 orthologs from {subject_orthologs_filename}.\n"\
                     "-----------------------"
     else:
         with open(subject_annotation_filename, 'r') as infile:
@@ -1074,11 +1081,12 @@ def annotate_orthologs(subject_orthologs,
                         dist_annot_amounts.append(0)
 
         stats_msg = "-----------------------\n" \
-                    f"annotate_orthologs stats:\n" \
+                    "annotate_orthologs stats:\n" \
                     f"Recieved {len(subject_orthologs)} orthologs from {subject_orthologs_filename}.\n" \
                     f"Distribution of amount of annotations:\n{simple_hist(dist_annot_amounts)}\n" \
-                    f"Reported all annotations for each ortholog.\n" \
+                    "Reported all annotations for each ortholog.\n" \
                     "-----------------------"
+
     if isinstance(stats_filename, str):
         with open(stats_filename, 'a') as stats_file:
             stats_file.write(stats_msg + '\n')
