@@ -236,7 +236,7 @@ Getting best orthologs:
     2. ```Orthologs``` (overlapping genes names, if any; ```NotAnnotated``` otherwise);
     3. ```Query_length```;
     4. ```Orthologs_lengths``` (comma-separated, if any; ```0``` otherwise);
-    5. ```JI``` (overlap coefficient between the found ortholog and every found overlapping gene, comma-separated, if any; ```0``` otherwise);
+    5. ```JI``` (Jaccard index between the found ortholog and every found overlapping gene, comma-separated, if any; ```0``` otherwise);
     6. ```OC``` (overlap coefficient between the found ortholog and every found overlapping gene, comma-separated, if any; ```0``` otherwise).
 
     ```annotation_files/``` also contains annotations for all significant, insignificant and unaligned "orthologs".
