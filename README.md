@@ -535,3 +535,12 @@ cd test
 bash test.sh
 ```
 This will download an archive with test files (see [test/](./test)). The test set of RNAs are 96 strRNAs from [here](https://www.sciencedirect.com/science/article/pii/S1097276518307019). The main script [test.sh](./test/test.sh) will download genome and annotation files (2 Gb), which will take some time. You will need nearly 7 Gb of free space for unpacked files. After that, ```ortho2align``` will be run on the test data. If installation was correct, you won't encounter any problems and get a full output in the ```result``` directory.
+
+# Citation
+
+If you use ortho2align, please cite the corresponding article:
+
+```
+Mylarshchikov, D.E., Mironov, A.A. ortho2align: a sensitive approach for searching for orthologues of novel lncRNAs. BMC Bioinformatics 23, 384 (2022).
+https://doi.org/10.1186/s12859-022-04929-y
+```
